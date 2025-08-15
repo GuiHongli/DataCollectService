@@ -62,6 +62,7 @@
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/util/ZipProcessor.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/impl/LogicEnvironmentNetworkServiceImpl.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/controller/TestCaseSetController.java
+/Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/dto/CollectStrategyDTO.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/config/FileUploadConfig.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/ExecutorService.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/config/CorsConfig.java

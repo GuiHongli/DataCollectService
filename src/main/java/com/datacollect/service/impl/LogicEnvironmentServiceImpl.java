@@ -24,7 +24,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMapper, LogicEnvironment> implements LogicEnvironmentService {
     
@@ -165,6 +167,34 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
         }
         dto.setNetworkList(networkInfoList);
         
+        return dto;
+    }
+    
+    @Override
+    public List<LogicEnvironment> getByExecutorId(Long executorId) {
+        log.debug("获取执行机关联的逻辑环境 - 执行机ID: {}", executorId);
+        QueryWrapper<LogicEnvironment> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("executor_id", executorId);
+        queryWrapper.eq("status", 1);
+        queryWrapper.orderByAsc("name");
+        List<LogicEnvironment> environments = list(queryWrapper);
+        log.debug("执行机 {} 关联的逻辑环境数量: {}", executorId, environments.size());
+        for (LogicEnvironment env : environments) {
+            log.debug("执行机 {} 关联的逻辑环境: {} (ID: {})", executorId, env.getName(), env.getId());
+        }
+        return environments;
+    }
+    
+    @Override
+    public LogicEnvironmentDTO getLogicEnvironmentDTO(Long logicEnvironmentId) {
+        log.debug("获取逻辑环境详细信息 - 逻辑环境ID: {}", logicEnvironmentId);
+        LogicEnvironment logicEnvironment = getById(logicEnvironmentId);
+        if (logicEnvironment == null) {
+            log.warn("逻辑环境不存在 - 逻辑环境ID: {}", logicEnvironmentId);
+            return null;
+        }
+        LogicEnvironmentDTO dto = convertToDTO(logicEnvironment);
+        log.debug("获取到逻辑环境详细信息: {} (ID: {})", dto.getName(), dto.getId());
         return dto;
     }
 }
