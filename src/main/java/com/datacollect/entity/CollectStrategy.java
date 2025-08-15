@@ -24,9 +24,9 @@ public class CollectStrategy {
     @TableField("collect_count")
     private Integer collectCount;
 
-    @NotNull(message = "逻辑环境ID不能为空")
-    @TableField("logic_environment_id")
-    private Long logicEnvironmentId;
+    @NotNull(message = "用例集ID不能为空")
+    @TableField("test_case_set_id")
+    private Long testCaseSetId;
 
     @TableField("description")
     private String description;

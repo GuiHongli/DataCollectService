@@ -3,6 +3,7 @@ package com.datacollect.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
+import com.datacollect.dto.CollectStrategyDTO;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.service.CollectStrategyService;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -49,43 +51,47 @@ public class CollectStrategyController {
     }
 
     @GetMapping("/page")
-    public Result<Page<CollectStrategy>> page(
+    public Result<Page<CollectStrategyDTO>> page(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) Long logicEnvironmentId) {
+            @RequestParam(required = false) Long testCaseSetId) {
         
         Page<CollectStrategy> page = new Page<>(current, size);
-        QueryWrapper<CollectStrategy> queryWrapper = new QueryWrapper<>();
-        
-        if (name != null && !name.isEmpty()) {
-            queryWrapper.like("name", name);
-        }
-        if (logicEnvironmentId != null) {
-            queryWrapper.eq("logic_environment_id", logicEnvironmentId);
-        }
-        
-        queryWrapper.orderByDesc("create_time");
-        Page<CollectStrategy> result = collectStrategyService.page(page, queryWrapper);
+        Page<CollectStrategyDTO> result = collectStrategyService.pageWithTestCaseSet(page, name, testCaseSetId);
         return Result.success(result);
     }
 
     @GetMapping("/list")
-    public Result<List<CollectStrategy>> list() {
-        QueryWrapper<CollectStrategy> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("status", 1);
-        queryWrapper.orderByDesc("create_time");
-        List<CollectStrategy> list = collectStrategyService.list(queryWrapper);
+    public Result<List<CollectStrategyDTO>> list() {
+        List<CollectStrategyDTO> list = collectStrategyService.listWithTestCaseSet();
         return Result.success(list);
     }
 
-    @GetMapping("/logic-environment/{logicEnvironmentId}")
-    public Result<List<CollectStrategy>> getByLogicEnvironmentId(@PathVariable @NotNull Long logicEnvironmentId) {
+    @GetMapping("/test-case-set/{testCaseSetId}")
+    public Result<List<CollectStrategyDTO>> getByTestCaseSetId(@PathVariable @NotNull Long testCaseSetId) {
         QueryWrapper<CollectStrategy> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("logic_environment_id", logicEnvironmentId);
+        queryWrapper.eq("test_case_set_id", testCaseSetId);
         queryWrapper.eq("status", 1);
         queryWrapper.orderByAsc("name");
-        List<CollectStrategy> list = collectStrategyService.list(queryWrapper);
-        return Result.success(list);
+        List<CollectStrategy> strategies = collectStrategyService.list(queryWrapper);
+        List<CollectStrategyDTO> dtoList = strategies.stream()
+                .map(strategy -> {
+                    CollectStrategyDTO dto = new CollectStrategyDTO();
+                    dto.setId(strategy.getId());
+                    dto.setName(strategy.getName());
+                    dto.setCollectCount(strategy.getCollectCount());
+                    dto.setTestCaseSetId(strategy.getTestCaseSetId());
+                    dto.setDescription(strategy.getDescription());
+                    dto.setStatus(strategy.getStatus());
+                    dto.setCreateBy(strategy.getCreateBy());
+                    dto.setUpdateBy(strategy.getUpdateBy());
+                    dto.setCreateTime(strategy.getCreateTime());
+                    dto.setUpdateTime(strategy.getUpdateTime());
+                    dto.setDeleted(strategy.getDeleted());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+        return Result.success(dtoList);
     }
 }
