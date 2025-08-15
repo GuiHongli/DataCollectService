@@ -14,6 +14,24 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
+import com.datacollect.entity.dto.LogicEnvironmentDTO;
+import com.datacollect.service.LogicEnvironmentService;
+import com.datacollect.service.CollectStrategyService;
+import com.datacollect.service.TestCaseService;
+import com.datacollect.service.ExecutorService;
+import com.datacollect.entity.CollectStrategy;
+import com.datacollect.entity.TestCase;
+import com.datacollect.entity.Executor;
+import com.datacollect.entity.LogicEnvironment;
+import com.datacollect.entity.LogicEnvironmentNetwork;
+import com.datacollect.entity.LogicNetwork;
+import com.datacollect.service.LogicEnvironmentNetworkService;
+import com.datacollect.service.LogicNetworkService;
+
+import java.util.Set;
+import java.util.HashSet;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -23,6 +41,24 @@ public class CollectTaskController {
 
     @Autowired
     private CollectTaskService collectTaskService;
+
+    @Autowired
+    private CollectStrategyService collectStrategyService;
+
+    @Autowired
+    private TestCaseService testCaseService;
+
+    @Autowired
+    private ExecutorService executorService;
+
+    @Autowired
+    private LogicEnvironmentService logicEnvironmentService;
+
+    @Autowired
+    private LogicEnvironmentNetworkService logicEnvironmentNetworkService;
+
+    @Autowired
+    private LogicNetworkService logicNetworkService;
 
     @PostMapping
     public Result<CollectTask> create(@Valid @RequestBody CollectTask collectTask) {
@@ -133,5 +169,125 @@ public class CollectTaskController {
         queryWrapper.orderByDesc("create_time");
         List<CollectTask> list = collectTaskService.list(queryWrapper);
         return Result.success(list);
+    }
+
+    /**
+     * 根据采集策略和环境筛选条件获取可用的逻辑环境列表
+     */
+    @GetMapping("/available-logic-environments")
+    public Result<List<LogicEnvironmentDTO>> getAvailableLogicEnvironments(
+            @RequestParam @NotNull Long strategyId,
+            @RequestParam(required = false) Long regionId,
+            @RequestParam(required = false) Long countryId,
+            @RequestParam(required = false) Long provinceId,
+            @RequestParam(required = false) Long cityId) {
+        
+        log.info("开始获取可用逻辑环境列表 - 策略ID: {}, 地域筛选: regionId={}, countryId={}, provinceId={}, cityId={}", 
+                strategyId, regionId, countryId, provinceId, cityId);
+        
+        try {
+            // 1. 获取采集策略信息
+            log.info("步骤1: 获取采集策略信息 - 策略ID: {}", strategyId);
+            CollectStrategy strategy = collectStrategyService.getById(strategyId);
+            if (strategy == null) {
+                log.error("采集策略不存在 - 策略ID: {}", strategyId);
+                return Result.error("采集策略不存在");
+            }
+            log.info("获取到采集策略: {} (用例集ID: {})", strategy.getName(), strategy.getTestCaseSetId());
+            
+            // 2. 获取策略关联的用例集的所有测试用例
+            log.info("步骤2: 获取策略关联的测试用例 - 用例集ID: {}", strategy.getTestCaseSetId());
+            List<TestCase> testCases = testCaseService.getByTestCaseSetId(strategy.getTestCaseSetId());
+            log.info("获取到测试用例数量: {}", testCases.size());
+            
+            // 3. 提取测试用例中的环境组网列表A
+            log.info("步骤3: 提取测试用例中的环境组网需求");
+            Set<String> requiredNetworks = new HashSet<>();
+            for (TestCase testCase : testCases) {
+                log.debug("处理测试用例: {} (编号: {})", testCase.getName(), testCase.getCode());
+                if (testCase.getLogicNetwork() != null && !testCase.getLogicNetwork().trim().isEmpty()) {
+                    String[] networks = testCase.getLogicNetwork().split(";");
+                    log.debug("测试用例 {} 的环境组网需求: {}", testCase.getCode(), testCase.getLogicNetwork());
+                    for (String network : networks) {
+                        String trimmedNetwork = network.trim();
+                        requiredNetworks.add(trimmedNetwork);
+                        log.debug("添加环境组网需求: {}", trimmedNetwork);
+                    }
+                } else {
+                    log.debug("测试用例 {} 没有环境组网需求", testCase.getCode());
+                }
+            }
+            log.info("提取的环境组网需求列表A: {}", requiredNetworks);
+            
+            // 4. 根据环境筛选条件获取可用的执行机
+            log.info("步骤4: 根据地域筛选条件获取执行机 - regionId={}, countryId={}, provinceId={}, cityId={}", 
+                    regionId, countryId, provinceId, cityId);
+            List<Executor> availableExecutors = executorService.getExecutorsByRegion(
+                regionId, countryId, provinceId, cityId);
+            log.info("获取到符合条件的执行机数量: {}", availableExecutors.size());
+            for (Executor executor : availableExecutors) {
+                log.debug("匹配的执行机: {} (ID: {}, IP: {})", executor.getName(), executor.getId(), executor.getIpAddress());
+            }
+            
+            // 5. 获取执行机关联的逻辑环境列表B
+            log.info("步骤5: 获取执行机关联的逻辑环境");
+            List<LogicEnvironment> allLogicEnvironments = new ArrayList<>();
+            for (Executor executor : availableExecutors) {
+                log.debug("获取执行机 {} 关联的逻辑环境", executor.getName());
+                List<LogicEnvironment> environments = logicEnvironmentService.getByExecutorId(executor.getId());
+                log.debug("执行机 {} 关联的逻辑环境数量: {}", executor.getName(), environments.size());
+                for (LogicEnvironment env : environments) {
+                    log.debug("执行机 {} 关联的逻辑环境: {} (ID: {})", executor.getName(), env.getName(), env.getId());
+                }
+                allLogicEnvironments.addAll(environments);
+            }
+            log.info("获取到所有逻辑环境数量: {}", allLogicEnvironments.size());
+            
+            // 6. 筛选逻辑环境，检查其环境组网是否存在于环境组网列表A中
+            log.info("步骤6: 筛选匹配的逻辑环境");
+            List<LogicEnvironmentDTO> availableLogicEnvironments = new ArrayList<>();
+            for (LogicEnvironment logicEnvironment : allLogicEnvironments) {
+                log.debug("检查逻辑环境: {} (ID: {})", logicEnvironment.getName(), logicEnvironment.getId());
+                
+                // 获取逻辑环境关联的环境组网
+                List<LogicEnvironmentNetwork> environmentNetworks = logicEnvironmentNetworkService.getByLogicEnvironmentId(logicEnvironment.getId());
+                log.debug("逻辑环境 {} 关联的环境组网数量: {}", logicEnvironment.getName(), environmentNetworks.size());
+                
+                // 检查是否有匹配的环境组网
+                boolean hasMatchingNetwork = false;
+                List<String> logicEnvironmentNetworks = new ArrayList<>();
+                for (LogicEnvironmentNetwork envNetwork : environmentNetworks) {
+                    LogicNetwork network = logicNetworkService.getById(envNetwork.getLogicNetworkId());
+                    if (network != null) {
+                        logicEnvironmentNetworks.add(network.getName());
+                        if (requiredNetworks.contains(network.getName())) {
+                            hasMatchingNetwork = true;
+                            log.debug("找到匹配的环境组网: {} (逻辑环境: {})", network.getName(), logicEnvironment.getName());
+                        }
+                    }
+                }
+                log.debug("逻辑环境 {} 的环境组网: {}", logicEnvironment.getName(), logicEnvironmentNetworks);
+                
+                // 如果有匹配的环境组网，则添加到可用列表
+                if (hasMatchingNetwork) {
+                    log.info("逻辑环境 {} 匹配成功，添加到可用列表", logicEnvironment.getName());
+                    LogicEnvironmentDTO dto = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironment.getId());
+                    availableLogicEnvironments.add(dto);
+                } else {
+                    log.debug("逻辑环境 {} 不匹配，跳过", logicEnvironment.getName());
+                }
+            }
+            
+            log.info("匹配完成 - 可用逻辑环境数量: {}", availableLogicEnvironments.size());
+            for (LogicEnvironmentDTO dto : availableLogicEnvironments) {
+                log.debug("可用逻辑环境: {} (ID: {})", dto.getName(), dto.getId());
+            }
+            
+            return Result.success(availableLogicEnvironments);
+            
+        } catch (Exception e) {
+            log.error("获取可用逻辑环境列表失败", e);
+            return Result.error("获取可用逻辑环境列表失败: " + e.getMessage());
+        }
     }
 }

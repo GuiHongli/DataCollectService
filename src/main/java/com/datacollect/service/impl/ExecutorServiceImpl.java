@@ -9,6 +9,7 @@ import com.datacollect.entity.dto.ExecutorDTO;
 import com.datacollect.mapper.ExecutorMapper;
 import com.datacollect.service.ExecutorService;
 import com.datacollect.service.RegionService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +17,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> implements ExecutorService {
 
@@ -199,5 +202,84 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
         }
         
         return options;
+    }
+    
+    @Override
+    public List<Executor> getExecutorsByRegion(Long regionId, Long countryId, Long provinceId, Long cityId) {
+        log.info("开始根据地域条件获取执行机 - regionId={}, countryId={}, provinceId={}, cityId={}", 
+                regionId, countryId, provinceId, cityId);
+        
+        QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", 1); // 只获取在线的执行机
+        
+        // 根据筛选条件构建查询
+        if (cityId != null) {
+            // 如果指定了城市，直接查询该城市的执行机
+            log.info("按城市筛选执行机 - cityId: {}", cityId);
+            queryWrapper.eq("region_id", cityId);
+        } else if (provinceId != null) {
+            // 如果指定了省份，查询该省份下所有城市的执行机
+            log.info("按省份筛选执行机 - provinceId: {}", provinceId);
+            List<Region> cities = regionService.getRegionsByParentId(provinceId);
+            List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+            log.debug("省份 {} 下的城市数量: {}, 城市ID列表: {}", provinceId, cityIds.size(), cityIds);
+            if (!cityIds.isEmpty()) {
+                queryWrapper.in("region_id", cityIds);
+            }
+        } else if (countryId != null) {
+            // 如果指定了国家，查询该国家下所有省份的执行机
+            log.info("按国家筛选执行机 - countryId: {}", countryId);
+            List<Region> provinces = regionService.getRegionsByParentId(countryId);
+            List<Long> provinceIds = provinces.stream().map(Region::getId).collect(Collectors.toList());
+            log.debug("国家 {} 下的省份数量: {}, 省份ID列表: {}", countryId, provinceIds.size(), provinceIds);
+            if (!provinceIds.isEmpty()) {
+                List<Long> allCityIds = new ArrayList<>();
+                for (Long pid : provinceIds) {
+                    List<Region> cities = regionService.getRegionsByParentId(pid);
+                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                    log.debug("省份 {} 下的城市数量: {}, 城市ID列表: {}", pid, cityIds.size(), cityIds);
+                    allCityIds.addAll(cityIds);
+                }
+                log.debug("国家 {} 下所有城市数量: {}, 城市ID列表: {}", countryId, allCityIds.size(), allCityIds);
+                if (!allCityIds.isEmpty()) {
+                    queryWrapper.in("region_id", allCityIds);
+                }
+            }
+        } else if (regionId != null) {
+            // 如果指定了地域，查询该地域下所有国家的执行机
+            log.info("按地域筛选执行机 - regionId: {}", regionId);
+            List<Region> countries = regionService.getRegionsByParentId(regionId);
+            List<Long> countryIds = countries.stream().map(Region::getId).collect(Collectors.toList());
+            log.debug("地域 {} 下的国家数量: {}, 国家ID列表: {}", regionId, countryIds.size(), countryIds);
+            if (!countryIds.isEmpty()) {
+                List<Long> allCityIds = new ArrayList<>();
+                for (Long cid : countryIds) {
+                    List<Region> provinces = regionService.getRegionsByParentId(cid);
+                    log.debug("国家 {} 下的省份数量: {}", cid, provinces.size());
+                    for (Region province : provinces) {
+                        List<Region> cities = regionService.getRegionsByParentId(province.getId());
+                        List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                        log.debug("省份 {} 下的城市数量: {}, 城市ID列表: {}", province.getId(), cityIds.size(), cityIds);
+                        allCityIds.addAll(cityIds);
+                    }
+                }
+                log.debug("地域 {} 下所有城市数量: {}, 城市ID列表: {}", regionId, allCityIds.size(), allCityIds);
+                if (!allCityIds.isEmpty()) {
+                    queryWrapper.in("region_id", allCityIds);
+                }
+            }
+        } else {
+            log.info("未指定地域筛选条件，将查询所有执行机");
+        }
+        
+        queryWrapper.orderByAsc("name");
+        List<Executor> executors = list(queryWrapper);
+        log.info("根据地域条件获取到执行机数量: {}", executors.size());
+        for (Executor executor : executors) {
+            log.debug("匹配的执行机: {} (ID: {}, IP: {}, 地域ID: {})", 
+                    executor.getName(), executor.getId(), executor.getIpAddress(), executor.getRegionId());
+        }
+        
+        return executors;
     }
 }

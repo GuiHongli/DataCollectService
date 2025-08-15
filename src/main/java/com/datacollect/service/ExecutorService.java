@@ -24,4 +24,9 @@ public interface ExecutorService extends IService<Executor> {
      * 获取用于下拉选择的执行机选项（包含地域信息）
      */
     List<Map<String, Object>> getExecutorOptionsForSelect();
+    
+    /**
+     * 根据地域筛选条件获取执行机列表
+     */
+    List<Executor> getExecutorsByRegion(Long regionId, Long countryId, Long provinceId, Long cityId);
 }
