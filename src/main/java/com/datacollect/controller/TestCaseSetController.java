@@ -3,8 +3,14 @@ package com.datacollect.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
+import com.datacollect.entity.TestCase;
 import com.datacollect.entity.TestCaseSet;
+import com.datacollect.service.TestCaseService;
 import com.datacollect.service.TestCaseSetService;
+import com.datacollect.util.ExcelParser;
+import com.datacollect.util.ZipProcessor;
+import com.datacollect.util.GoHttpServerClient;
+import com.datacollect.config.FileUploadConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -18,8 +24,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +35,21 @@ public class TestCaseSetController {
 
     @Autowired
     private TestCaseSetService testCaseSetService;
+    
+    @Autowired
+    private TestCaseService testCaseService;
+    
+    @Autowired
+    private ZipProcessor zipProcessor;
+    
+    @Autowired
+    private ExcelParser excelParser;
+    
+    @Autowired
+    private GoHttpServerClient goHttpServerClient;
+    
+    @Autowired
+    private FileUploadConfig fileUploadConfig;
 
     @PostMapping
     public Result<TestCaseSet> create(@Valid @RequestBody TestCaseSet testCaseSet) {
@@ -41,6 +60,7 @@ public class TestCaseSetController {
     @PostMapping("/upload")
     public Result<TestCaseSet> upload(@RequestParam("file") MultipartFile file,
                                      @RequestParam("description") String description) {
+        String extractDir = null;
         try {
             // 检查文件类型
             String originalFilename = file.getOriginalFilename();
@@ -57,54 +77,100 @@ public class TestCaseSetController {
             String name = parts[0];
             String version = parts[1];
 
-            // 检查是否已存在相同名称和版本
+            // 检查是否已存在相同名称和版本（不包含软删除的记录）
             QueryWrapper<TestCaseSet> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("name", name);
             queryWrapper.eq("version", version);
+            queryWrapper.eq("deleted", 0); // 只查未被软删除的记录
             if (testCaseSetService.count(queryWrapper) > 0) {
                 return Result.error("已存在相同名称和版本的用例集");
             }
 
-            // 创建上传目录
-            String uploadDir = "uploads/testcase";
-            Path uploadPath = Paths.get(uploadDir);
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
+            // 使用配置的上传目录
+            Path uploadPath = fileUploadConfig.getTestcaseUploadPath();
+
+            // 保持原始文件名，但检查文件是否已存在
+            String originalFileName = originalFilename;
+            Path filePath = uploadPath.resolve(originalFileName);
+            
+            // 如果文件已存在，添加时间戳后缀
+            if (Files.exists(filePath)) {
+                String nameWithoutExt = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+                String extension = originalFileName.substring(originalFileName.lastIndexOf('.'));
+                String timestamp = String.valueOf(System.currentTimeMillis());
+                originalFileName = nameWithoutExt + "_" + timestamp + extension;
+                filePath = uploadPath.resolve(originalFileName);
             }
 
-            // 生成唯一文件名
-            String fileName = UUID.randomUUID().toString() + ".zip";
-            String filePath = uploadDir + "/" + fileName;
-
-            // 保存文件
-            File dest = new File(filePath);
+            // 保存ZIP文件到本地
+            File dest = filePath.toFile();
             file.transferTo(dest);
+            
+            // 上传到gohttpserver，使用原始文件名
+            String goHttpServerUrl = null;
+            try {
+                if (goHttpServerClient.isAvailable()) {
+                    goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), originalFileName);
+                    log.info("文件已上传到gohttpserver: {}", goHttpServerUrl);
+                } else {
+                    log.warn("gohttpserver不可用，跳过上传");
+                }
+            } catch (Exception e) {
+                log.error("上传到gohttpserver失败: {}", e.getMessage());
+                // 不影响主要流程，继续执行
+            }
 
             // 创建用例集记录
             TestCaseSet testCaseSet = new TestCaseSet();
             testCaseSet.setName(name);
             testCaseSet.setVersion(version);
-            testCaseSet.setFilePath(filePath);
+            testCaseSet.setFilePath(filePath.toString());
+            testCaseSet.setGohttpserverUrl(goHttpServerUrl);
             testCaseSet.setFileSize(file.getSize());
             testCaseSet.setDescription(description);
             testCaseSet.setStatus(1);
             testCaseSet.setCreateBy("admin"); // 这里应该从登录用户获取
 
             testCaseSetService.save(testCaseSet);
+
+            // 解压ZIP文件并解析Excel
+            Path extractPath = fileUploadConfig.createTempDir("extract");
+            extractDir = extractPath.toString();
+            String excelFilePath = zipProcessor.extractAndFindExcel(filePath.toString(), extractDir, "case.xlsx");
+            
+            if (excelFilePath == null) {
+                return Result.error("ZIP文件中未找到case.xlsx文件");
+            }
+
+            // 解析Excel文件
+            List<TestCase> testCases = excelParser.parseTestCaseExcel(excelFilePath, testCaseSet.getId());
+            
+            if (testCases.isEmpty()) {
+                return Result.error("Excel文件中未解析到有效的测试用例数据");
+            }
+
+            // 批量保存测试用例
+            testCaseService.saveBatch(testCases);
+            
+            log.info("成功上传用例集: {}, 版本: {}, 包含 {} 个测试用例", name, version, testCases.size());
+
             return Result.success(testCaseSet);
 
         } catch (IOException e) {
-            log.error("文件上传失败", e);
-            return Result.error("文件上传失败：" + e.getMessage());
+            log.error("文件上传或解析失败", e);
+            return Result.error("文件上传或解析失败：" + e.getMessage());
+        } catch (Exception e) {
+            log.error("处理用例集上传时发生错误", e);
+            return Result.error("处理用例集上传时发生错误：" + e.getMessage());
+        } finally {
+            // 清理临时文件
+            if (extractDir != null) {
+                zipProcessor.cleanupExtractedFiles(extractDir);
+            }
         }
     }
 
-    @PutMapping("/{id}")
-    public Result<TestCaseSet> update(@PathVariable @NotNull Long id, @Valid @RequestBody TestCaseSet testCaseSet) {
-        testCaseSet.setId(id);
-        testCaseSetService.updateById(testCaseSet);
-        return Result.success(testCaseSet);
-    }
+
 
     @DeleteMapping("/{id}")
     public Result<Boolean> delete(@PathVariable @NotNull Long id) {
@@ -117,6 +183,11 @@ public class TestCaseSetController {
                 log.error("删除文件失败", e);
             }
         }
+        
+        // 删除关联的测试用例
+        QueryWrapper<TestCase> testCaseQuery = new QueryWrapper<>();
+        testCaseQuery.eq("test_case_set_id", id);
+        testCaseService.remove(testCaseQuery);
         
         boolean result = testCaseSetService.removeById(id);
         return Result.success(result);
@@ -142,7 +213,7 @@ public class TestCaseSetController {
             queryWrapper.like("name", name);
         }
         if (version != null && !version.isEmpty()) {
-            queryWrapper.eq("version", version);
+            queryWrapper.like("version", version);
         }
         
         queryWrapper.orderByDesc("create_time");
@@ -163,9 +234,74 @@ public class TestCaseSetController {
     public Result<List<TestCaseSet>> getByName(@PathVariable @NotNull String name) {
         QueryWrapper<TestCaseSet> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("name", name);
-        queryWrapper.eq("status", 1);
-        queryWrapper.orderByDesc("version");
+        queryWrapper.orderByDesc("create_time");
         List<TestCaseSet> list = testCaseSetService.list(queryWrapper);
         return Result.success(list);
+    }
+    
+    /**
+     * 获取用例集的测试用例列表
+     */
+    @GetMapping("/{id}/test-cases")
+    public Result<List<TestCase>> getTestCases(@PathVariable @NotNull Long id) {
+        List<TestCase> testCases = testCaseService.getByTestCaseSetId(id);
+        return Result.success(testCases);
+    }
+    
+    /**
+     * 获取gohttpserver配置信息
+     */
+    @GetMapping("/gohttpserver/config")
+    public Result<String> getGoHttpServerConfig() {
+        String configInfo = goHttpServerClient.getConfigInfo();
+        boolean isAvailable = goHttpServerClient.isAvailable();
+        return Result.success(configInfo + ", 状态: " + (isAvailable ? "可用" : "不可用"));
+    }
+    
+    /**
+     * 手动上传文件到gohttpserver
+     */
+    @PostMapping("/gohttpserver/upload")
+    public Result<String> uploadToGoHttpServer(@RequestParam("file") MultipartFile file,
+                                              @RequestParam("targetFileName") String targetFileName) {
+        try {
+            String fileUrl = goHttpServerClient.uploadFile(file, targetFileName);
+            return Result.success(fileUrl);
+        } catch (IOException e) {
+            log.error("上传到gohttpserver失败", e);
+            return Result.error("上传失败：" + e.getMessage());
+        }
+    }
+    
+    /**
+     * 清理软删除的记录
+     */
+    @DeleteMapping("/cleanup-soft-deleted")
+    public Result<String> cleanupSoftDeleted() {
+        try {
+            // 查询软删除的记录
+            QueryWrapper<TestCaseSet> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("deleted", 1);
+            List<TestCaseSet> softDeletedRecords = testCaseSetService.list(queryWrapper);
+            
+            if (softDeletedRecords.isEmpty()) {
+                return Result.success("没有软删除的记录需要清理");
+            }
+            
+            // 删除相关的测试用例记录
+            for (TestCaseSet record : softDeletedRecords) {
+                QueryWrapper<TestCase> testCaseQuery = new QueryWrapper<>();
+                testCaseQuery.eq("test_case_set_id", record.getId());
+                testCaseService.remove(testCaseQuery);
+            }
+            
+            // 删除软删除的用例集记录
+            testCaseSetService.remove(queryWrapper);
+            
+            return Result.success("成功清理 " + softDeletedRecords.size() + " 条软删除记录");
+        } catch (Exception e) {
+            log.error("清理软删除记录失败", e);
+            return Result.error("清理失败：" + e.getMessage());
+        }
     }
 }

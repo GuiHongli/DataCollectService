@@ -48,3 +48,14 @@ logging:
   level:
     com.datacollect: debug
     org.springframework.web: debug
+
+# gohttpserver配置
+gohttpserver:
+  url: http://localhost:8000
+
+# 文件上传配置
+file:
+  upload:
+    base-dir: ./uploads
+    testcase-dir: testcase
+    temp-dir: temp
