@@ -16,6 +16,16 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.util.List;
+import com.datacollect.entity.dto.LogicEnvironmentDTO;
+import com.datacollect.entity.Ue;
+import com.datacollect.service.UeService;
+
+import java.util.ArrayList;
+import java.util.stream.Collectors;
+import com.datacollect.entity.LogicEnvironmentNetwork;
+import com.datacollect.entity.LogicNetwork;
+import com.datacollect.service.LogicEnvironmentNetworkService;
+import com.datacollect.service.LogicNetworkService;
 
 @Slf4j
 @RestController
@@ -29,6 +39,14 @@ public class LogicEnvironmentController {
     @Autowired
     private LogicEnvironmentUeService logicEnvironmentUeService;
 
+    @Autowired
+    private UeService ueService;
+
+    @Autowired
+    private LogicEnvironmentNetworkService logicEnvironmentNetworkService;
+
+    @Autowired
+    private LogicNetworkService logicNetworkService;
 
 
     @PostMapping
@@ -51,6 +69,37 @@ public class LogicEnvironmentController {
                 logicEnvironmentUe.setLogicEnvironmentId(logicEnvironment.getId());
                 logicEnvironmentUe.setUeId(ueId);
                 logicEnvironmentUeService.save(logicEnvironmentUe);
+            }
+        }
+        
+        return Result.success(logicEnvironment);
+    }
+
+    @PostMapping("/with-ue-and-network")
+    public Result<LogicEnvironment> createWithUeAndNetwork(@Valid @RequestBody CreateLogicEnvironmentRequest request) {
+        // 保存逻辑环境
+        LogicEnvironment logicEnvironment = request.getLogicEnvironment();
+        logicEnvironmentService.save(logicEnvironment);
+        
+        // 关联UE
+        List<Long> ueIds = request.getUeIds();
+        if (ueIds != null && !ueIds.isEmpty()) {
+            for (Long ueId : ueIds) {
+                LogicEnvironmentUe logicEnvironmentUe = new LogicEnvironmentUe();
+                logicEnvironmentUe.setLogicEnvironmentId(logicEnvironment.getId());
+                logicEnvironmentUe.setUeId(ueId);
+                logicEnvironmentUeService.save(logicEnvironmentUe);
+            }
+        }
+        
+        // 关联逻辑组网
+        List<Long> networkIds = request.getNetworkIds();
+        if (networkIds != null && !networkIds.isEmpty()) {
+            for (Long networkId : networkIds) {
+                LogicEnvironmentNetwork logicEnvironmentNetwork = new LogicEnvironmentNetwork();
+                logicEnvironmentNetwork.setLogicEnvironmentId(logicEnvironment.getId());
+                logicEnvironmentNetwork.setLogicNetworkId(networkId);
+                logicEnvironmentNetworkService.save(logicEnvironmentNetwork);
             }
         }
         
@@ -82,24 +131,13 @@ public class LogicEnvironmentController {
     }
 
     @GetMapping("/page")
-    public Result<Page<LogicEnvironment>> page(
+    public Result<Page<LogicEnvironmentDTO>> page(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) Long executorId) {
         
-        Page<LogicEnvironment> page = new Page<>(current, size);
-        QueryWrapper<LogicEnvironment> queryWrapper = new QueryWrapper<>();
-        
-        if (name != null && !name.isEmpty()) {
-            queryWrapper.like("name", name);
-        }
-        if (executorId != null) {
-            queryWrapper.eq("executor_id", executorId);
-        }
-        
-        queryWrapper.orderByDesc("create_time");
-        Page<LogicEnvironment> result = logicEnvironmentService.page(page, queryWrapper);
+        Page<LogicEnvironmentDTO> result = logicEnvironmentService.getLogicEnvironmentPageWithDetails(current, size, name, executorId);
         return Result.success(result);
     }
 
@@ -144,10 +182,95 @@ public class LogicEnvironmentController {
     }
 
     @GetMapping("/{logicEnvironmentId}/ue")
-    public Result<List<LogicEnvironmentUe>> getUes(@PathVariable @NotNull Long logicEnvironmentId) {
-        QueryWrapper<LogicEnvironmentUe> queryWrapper = new QueryWrapper<>();
+    public Result<List<LogicEnvironmentDTO.UeInfo>> getUes(@PathVariable @NotNull Long logicEnvironmentId) {
+        try {
+            // 获取逻辑环境关联的UE ID列表
+            QueryWrapper<LogicEnvironmentUe> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("logic_environment_id", logicEnvironmentId);
+            List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(queryWrapper);
+            
+            List<LogicEnvironmentDTO.UeInfo> ueInfoList = new ArrayList<>();
+            
+            if (!logicEnvironmentUes.isEmpty()) {
+                List<Long> ueIds = logicEnvironmentUes.stream()
+                    .map(LogicEnvironmentUe::getUeId)
+                    .collect(Collectors.toList());
+                
+                // 获取UE详细信息
+                QueryWrapper<Ue> ueQuery = new QueryWrapper<>();
+                ueQuery.in("id", ueIds);
+                List<Ue> ues = ueService.list(ueQuery);
+                
+                for (Ue ue : ues) {
+                    LogicEnvironmentDTO.UeInfo ueInfo = new LogicEnvironmentDTO.UeInfo();
+                    ueInfo.setId(ue.getId());
+                    ueInfo.setUeId(ue.getUeId());
+                    ueInfo.setName(ue.getName());
+                    ueInfo.setPurpose(ue.getPurpose());
+                    ueInfo.setNetworkTypeName("正常网络"); // 这里应该从网络类型表获取
+                    ueInfoList.add(ueInfo);
+                }
+            }
+            
+            return Result.success(ueInfoList);
+        } catch (Exception e) {
+            return Result.error("获取UE信息失败: " + e.getMessage());
+        }
+    }
+
+    // 逻辑环境组网关联管理
+    @PostMapping("/{logicEnvironmentId}/network")
+    public Result<Boolean> addNetwork(@PathVariable @NotNull Long logicEnvironmentId, @RequestBody List<Long> networkIds) {
+        for (Long networkId : networkIds) {
+            LogicEnvironmentNetwork logicEnvironmentNetwork = new LogicEnvironmentNetwork();
+            logicEnvironmentNetwork.setLogicEnvironmentId(logicEnvironmentId);
+            logicEnvironmentNetwork.setLogicNetworkId(networkId);
+            logicEnvironmentNetworkService.save(logicEnvironmentNetwork);
+        }
+        return Result.success(true);
+    }
+
+    @DeleteMapping("/{logicEnvironmentId}/network/{networkId}")
+    public Result<Boolean> removeNetwork(@PathVariable @NotNull Long logicEnvironmentId, @PathVariable @NotNull Long networkId) {
+        QueryWrapper<LogicEnvironmentNetwork> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("logic_environment_id", logicEnvironmentId);
-        List<LogicEnvironmentUe> list = logicEnvironmentUeService.list(queryWrapper);
-        return Result.success(list);
+        queryWrapper.eq("logic_network_id", networkId);
+        boolean result = logicEnvironmentNetworkService.remove(queryWrapper);
+        return Result.success(result);
+    }
+
+    @GetMapping("/{logicEnvironmentId}/network")
+    public Result<List<LogicEnvironmentDTO.NetworkInfo>> getNetworks(@PathVariable @NotNull Long logicEnvironmentId) {
+        try {
+            // 获取逻辑环境关联的组网ID列表
+            QueryWrapper<LogicEnvironmentNetwork> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("logic_environment_id", logicEnvironmentId);
+            List<LogicEnvironmentNetwork> logicEnvironmentNetworks = logicEnvironmentNetworkService.list(queryWrapper);
+            
+            List<LogicEnvironmentDTO.NetworkInfo> networkInfoList = new ArrayList<>();
+            
+            if (!logicEnvironmentNetworks.isEmpty()) {
+                List<Long> networkIds = logicEnvironmentNetworks.stream()
+                    .map(LogicEnvironmentNetwork::getLogicNetworkId)
+                    .collect(Collectors.toList());
+                
+                // 获取组网详细信息
+                QueryWrapper<LogicNetwork> networkQuery = new QueryWrapper<>();
+                networkQuery.in("id", networkIds);
+                List<LogicNetwork> networks = logicNetworkService.list(networkQuery);
+                
+                for (LogicNetwork network : networks) {
+                    LogicEnvironmentDTO.NetworkInfo networkInfo = new LogicEnvironmentDTO.NetworkInfo();
+                    networkInfo.setId(network.getId());
+                    networkInfo.setName(network.getName());
+                    networkInfo.setDescription(network.getDescription());
+                    networkInfoList.add(networkInfo);
+                }
+            }
+            
+            return Result.success(networkInfoList);
+        } catch (Exception e) {
+            return Result.error("获取组网信息失败: " + e.getMessage());
+        }
     }
 }

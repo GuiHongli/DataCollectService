@@ -15,4 +15,6 @@ public class CreateLogicEnvironmentRequest {
     
     @NotEmpty(message = "UE列表不能为空")
     private List<Long> ueIds;
+    
+    private List<Long> networkIds;
 }
