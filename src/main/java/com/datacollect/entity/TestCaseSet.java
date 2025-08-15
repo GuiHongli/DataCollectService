@@ -27,6 +27,9 @@ public class TestCaseSet {
     @TableField("file_path")
     private String filePath;
 
+    @TableField("gohttpserver_url")
+    private String gohttpserverUrl;
+
     @TableField("file_size")
     private Long fileSize;
 
