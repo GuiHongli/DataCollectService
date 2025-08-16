@@ -1,0 +1,11 @@
+{
+  "name": "网络测试采集任务_20240101",
+  "description": "执行网络连接和稳定性测试",
+  "collectStrategyId": 1,
+  "collectCount": 3,
+  "regionId": 1,
+  "countryId": 1,
+  "provinceId": 1,
+  "cityId": 1,
+  "logicEnvironmentIds": [1, 2, 3]
+}

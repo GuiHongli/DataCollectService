@@ -102,7 +102,7 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
                         CollectStrategyDTO.TestCaseInfo testCaseInfo = new CollectStrategyDTO.TestCaseInfo();
                         testCaseInfo.setId(testCase.getId());
                         testCaseInfo.setName(testCase.getName());
-                        testCaseInfo.setCode(testCase.getCode());
+                        testCaseInfo.setNumber(testCase.getNumber());
                         testCaseInfo.setLogicNetwork(testCase.getLogicNetwork());
                         testCaseInfo.setTestSteps(testCase.getTestSteps());
                         testCaseInfo.setExpectedResult(testCase.getExpectedResult());

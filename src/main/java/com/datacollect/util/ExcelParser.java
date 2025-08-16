@@ -64,7 +64,7 @@ public class ExcelParser {
             // 解析各列数据
             // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_测试步骤 用例_预期结果
             testCase.setName(getCellValue(row.getCell(0)));
-            testCase.setCode(getCellValue(row.getCell(1)));
+            testCase.setNumber(getCellValue(row.getCell(1)));
             testCase.setLogicNetwork(getCellValue(row.getCell(2)));
             testCase.setTestSteps(getCellValue(row.getCell(3)));
             testCase.setExpectedResult(getCellValue(row.getCell(4)));
@@ -75,7 +75,7 @@ public class ExcelParser {
                 return null;
             }
             
-            if (testCase.getCode() == null || testCase.getCode().trim().isEmpty()) {
+            if (testCase.getNumber() == null || testCase.getNumber().trim().isEmpty()) {
                 log.warn("第{}行用例编号为空，跳过该行", row.getRowNum() + 1);
                 return null;
             }

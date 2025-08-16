@@ -1,0 +1,50 @@
+-- 创建采集任务表
+CREATE TABLE IF NOT EXISTS `collect_task` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `name` varchar(100) NOT NULL COMMENT '任务名称',
+  `description` text COMMENT '任务描述',
+  `collect_strategy_id` bigint(20) NOT NULL COMMENT '采集策略ID',
+  `collect_strategy_name` varchar(100) COMMENT '采集策略名称',
+  `test_case_set_id` bigint(20) NOT NULL COMMENT '用例集ID',
+  `test_case_set_name` varchar(100) COMMENT '用例集名称',
+  `collect_count` int(11) NOT NULL COMMENT '采集次数',
+  `region_id` bigint(20) COMMENT '地域ID',
+  `country_id` bigint(20) COMMENT '国家ID',
+  `province_id` bigint(20) COMMENT '省份ID',
+  `city_id` bigint(20) COMMENT '城市ID',
+  `status` varchar(20) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态 (PENDING/RUNNING/COMPLETED/FAILED)',
+  `total_test_case_count` int(11) DEFAULT 0 COMMENT '总用例数',
+  `completed_test_case_count` int(11) DEFAULT 0 COMMENT '已完成用例数',
+  `success_test_case_count` int(11) DEFAULT 0 COMMENT '成功用例数',
+  `failed_test_case_count` int(11) DEFAULT 0 COMMENT '失败用例数',
+  `start_time` datetime COMMENT '开始时间',
+  `end_time` datetime COMMENT '结束时间',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_collect_strategy_id` (`collect_strategy_id`),
+  KEY `idx_test_case_set_id` (`test_case_set_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采集任务表';
+
+-- 创建用例执行例次表
+CREATE TABLE IF NOT EXISTS `test_case_execution_instance` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `collect_task_id` bigint(20) NOT NULL COMMENT '采集任务ID',
+  `test_case_id` bigint(20) NOT NULL COMMENT '用例ID',
+  `round` int(11) NOT NULL COMMENT '轮次',
+  `logic_environment_id` bigint(20) NOT NULL COMMENT '逻辑环境ID',
+  `executor_ip` varchar(50) NOT NULL COMMENT '执行机IP',
+  `status` varchar(20) NOT NULL DEFAULT 'PENDING' COMMENT '执行状态 (PENDING/RUNNING/COMPLETED/FAILED)',
+  `execution_task_id` varchar(100) COMMENT '执行任务ID（CaseExecuteService返回的任务ID）',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_collect_task_id` (`collect_task_id`),
+  KEY `idx_test_case_id` (`test_case_id`),
+  KEY `idx_logic_environment_id` (`logic_environment_id`),
+  KEY `idx_executor_ip` (`executor_ip`),
+  KEY `idx_status` (`status`),
+  KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用例执行例次表';

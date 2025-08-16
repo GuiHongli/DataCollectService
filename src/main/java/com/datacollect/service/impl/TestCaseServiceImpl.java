@@ -16,7 +16,7 @@ public class TestCaseServiceImpl extends ServiceImpl<TestCaseMapper, TestCase> i
     public List<TestCase> getByTestCaseSetId(Long testCaseSetId) {
         QueryWrapper<TestCase> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("test_case_set_id", testCaseSetId);
-        queryWrapper.orderByAsc("code");
+        queryWrapper.orderByAsc("number");
         return this.list(queryWrapper);
     }
     
