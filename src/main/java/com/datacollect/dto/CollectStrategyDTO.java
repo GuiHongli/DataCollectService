@@ -25,7 +25,7 @@ public class CollectStrategyDTO extends CollectStrategy {
     public static class TestCaseInfo {
         private Long id;
         private String name;
-        private String code;
+        private String number;
         private String logicNetwork;
         private String testSteps;
         private String expectedResult;

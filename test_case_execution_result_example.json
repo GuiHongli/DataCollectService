@@ -1,0 +1,13 @@
+{
+  "taskId": "TASK_20240101_001",
+  "testCaseId": 1,
+  "round": 1,
+  "status": "SUCCESS",
+  "result": "用例执行成功",
+  "executionTime": 15000,
+  "startTime": "2024-01-01T10:00:00",
+  "endTime": "2024-01-01T10:00:15",
+  "errorMessage": null,
+  "executorIp": "192.168.1.100",
+  "testCaseSetId": 1
+}

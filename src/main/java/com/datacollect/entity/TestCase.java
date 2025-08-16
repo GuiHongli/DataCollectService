@@ -25,8 +25,8 @@ public class TestCase {
     private String name;
 
     @NotBlank(message = "用例编号不能为空")
-    @TableField("code")
-    private String code;
+    @TableField("number")
+    private String number;
 
     @TableField("logic_network")
     private String logicNetwork;

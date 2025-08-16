@@ -28,10 +28,14 @@ import com.datacollect.entity.LogicEnvironmentNetwork;
 import com.datacollect.entity.LogicNetwork;
 import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.CollectTaskProcessService;
+import com.datacollect.dto.CollectTaskRequest;
 
 import java.util.Set;
 import java.util.HashSet;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
 
 @Slf4j
 @RestController
@@ -60,10 +64,41 @@ public class CollectTaskController {
     @Autowired
     private LogicNetworkService logicNetworkService;
 
+    @Autowired
+    private CollectTaskProcessService collectTaskProcessService;
+
     @PostMapping
     public Result<CollectTask> create(@Valid @RequestBody CollectTask collectTask) {
         collectTaskService.save(collectTask);
         return Result.success(collectTask);
+    }
+
+    /**
+     * 创建采集任务（新接口）
+     * 
+     * @param request 采集任务请求
+     * @return 采集任务ID
+     */
+    @PostMapping("/create")
+    public Result<Map<String, Object>> createCollectTask(@Valid @RequestBody CollectTaskRequest request) {
+        log.info("接收到创建采集任务请求 - 任务名称: {}, 采集策略ID: {}", request.getName(), request.getCollectStrategyId());
+        
+        try {
+            // 调用处理服务创建采集任务
+            Long collectTaskId = collectTaskProcessService.processCollectTaskCreation(request);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("collectTaskId", collectTaskId);
+            result.put("message", "采集任务创建成功");
+            result.put("timestamp", System.currentTimeMillis());
+            
+            log.info("采集任务创建成功 - 任务ID: {}", collectTaskId);
+            return Result.success(result);
+            
+        } catch (Exception e) {
+            log.error("创建采集任务失败 - 任务名称: {}, 错误: {}", request.getName(), e.getMessage(), e);
+            return Result.error("创建采集任务失败: " + e.getMessage());
+        }
     }
 
     @PutMapping("/{id}")
@@ -91,7 +126,7 @@ public class CollectTaskController {
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) Long strategyId,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(required = false) String status) {
         
         Page<CollectTask> page = new Page<>(current, size);
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
@@ -100,9 +135,9 @@ public class CollectTaskController {
             queryWrapper.like("name", name);
         }
         if (strategyId != null) {
-            queryWrapper.eq("strategy_id", strategyId);
+            queryWrapper.eq("collect_strategy_id", strategyId);
         }
-        if (status != null) {
+        if (status != null && !status.isEmpty()) {
             queryWrapper.eq("status", status);
         }
         
@@ -132,8 +167,8 @@ public class CollectTaskController {
     public Result<Boolean> startTask(@PathVariable @NotNull Long id) {
         CollectTask collectTask = collectTaskService.getById(id);
         if (collectTask != null) {
-            collectTask.setStatus(1); // 运行中
-            collectTask.setLastRunTime(LocalDateTime.now());
+            collectTask.setStatus("RUNNING"); // 运行中
+            collectTask.setStartTime(LocalDateTime.now());
             collectTaskService.updateById(collectTask);
             return Result.success(true);
         }
@@ -144,7 +179,7 @@ public class CollectTaskController {
     public Result<Boolean> stopTask(@PathVariable @NotNull Long id) {
         CollectTask collectTask = collectTaskService.getById(id);
         if (collectTask != null) {
-            collectTask.setStatus(0); // 停止
+            collectTask.setStatus("STOPPED"); // 停止
             collectTaskService.updateById(collectTask);
             return Result.success(true);
         }
@@ -155,7 +190,7 @@ public class CollectTaskController {
     public Result<Boolean> pauseTask(@PathVariable @NotNull Long id) {
         CollectTask collectTask = collectTaskService.getById(id);
         if (collectTask != null) {
-            collectTask.setStatus(2); // 暂停
+            collectTask.setStatus("PAUSED"); // 暂停
             collectTaskService.updateById(collectTask);
             return Result.success(true);
         }
@@ -163,7 +198,7 @@ public class CollectTaskController {
     }
 
     @GetMapping("/status/{status}")
-    public Result<List<CollectTask>> getByStatus(@PathVariable @NotNull Integer status) {
+    public Result<List<CollectTask>> getByStatus(@PathVariable @NotNull String status) {
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", status);
         queryWrapper.orderByDesc("create_time");
@@ -204,17 +239,17 @@ public class CollectTaskController {
             log.info("步骤3: 提取测试用例中的环境组网需求");
             Set<String> requiredNetworks = new HashSet<>();
             for (TestCase testCase : testCases) {
-                log.debug("处理测试用例: {} (编号: {})", testCase.getName(), testCase.getCode());
+                log.debug("处理测试用例: {} (编号: {})", testCase.getName(), testCase.getNumber());
                 if (testCase.getLogicNetwork() != null && !testCase.getLogicNetwork().trim().isEmpty()) {
                     String[] networks = testCase.getLogicNetwork().split(";");
-                    log.debug("测试用例 {} 的环境组网需求: {}", testCase.getCode(), testCase.getLogicNetwork());
+                    log.debug("测试用例 {} 的环境组网需求: {}", testCase.getNumber(), testCase.getLogicNetwork());
                     for (String network : networks) {
                         String trimmedNetwork = network.trim();
                         requiredNetworks.add(trimmedNetwork);
                         log.debug("添加环境组网需求: {}", trimmedNetwork);
                     }
                 } else {
-                    log.debug("测试用例 {} 没有环境组网需求", testCase.getCode());
+                    log.debug("测试用例 {} 没有环境组网需求", testCase.getNumber());
                 }
             }
             log.info("提取的环境组网需求列表A: {}", requiredNetworks);
