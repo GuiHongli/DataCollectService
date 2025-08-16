@@ -30,6 +30,8 @@ import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.LogicNetworkService;
 import com.datacollect.service.CollectTaskProcessService;
 import com.datacollect.dto.CollectTaskRequest;
+import com.datacollect.service.TestCaseExecutionInstanceService;
+import com.datacollect.entity.TestCaseExecutionInstance;
 
 import java.util.Set;
 import java.util.HashSet;
@@ -66,6 +68,9 @@ public class CollectTaskController {
 
     @Autowired
     private CollectTaskProcessService collectTaskProcessService;
+
+    @Autowired
+    private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
 
     @PostMapping
     public Result<CollectTask> create(@Valid @RequestBody CollectTask collectTask) {
@@ -323,6 +328,84 @@ public class CollectTaskController {
         } catch (Exception e) {
             log.error("获取可用逻辑环境列表失败", e);
             return Result.error("获取可用逻辑环境列表失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取任务执行进度
+     */
+    @GetMapping("/{id}/progress")
+    public Result<Map<String, Object>> getTaskProgress(@PathVariable @NotNull Long id) {
+        log.info("获取任务执行进度 - 任务ID: {}", id);
+        
+        try {
+            CollectTask task = collectTaskService.getById(id);
+            if (task == null) {
+                return Result.error("任务不存在");
+            }
+            
+            Map<String, Object> progress = new HashMap<>();
+            progress.put("totalCount", task.getTotalTestCaseCount());
+            progress.put("successCount", task.getSuccessTestCaseCount());
+            progress.put("failedCount", task.getFailedTestCaseCount());
+            progress.put("runningCount", task.getTotalTestCaseCount() - task.getSuccessTestCaseCount() - task.getFailedTestCaseCount());
+            
+            return Result.success(progress);
+        } catch (Exception e) {
+            log.error("获取任务执行进度失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
+            return Result.error("获取任务执行进度失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取任务执行例次列表
+     */
+    @GetMapping("/{id}/execution-instances")
+    public Result<List<Map<String, Object>>> getExecutionInstances(@PathVariable @NotNull Long id) {
+        log.info("获取任务执行例次列表 - 任务ID: {}", id);
+        
+        try {
+            CollectTask task = collectTaskService.getById(id);
+            if (task == null) {
+                return Result.error("任务不存在");
+            }
+            
+            // 获取执行例次列表
+            List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(id);
+            List<Map<String, Object>> result = new ArrayList<>();
+            
+            for (TestCaseExecutionInstance instance : instances) {
+                Map<String, Object> instanceMap = new HashMap<>();
+                instanceMap.put("id", instance.getId());
+                instanceMap.put("testCaseId", instance.getTestCaseId());
+                instanceMap.put("round", instance.getRound());
+                instanceMap.put("logicEnvironmentId", instance.getLogicEnvironmentId());
+                instanceMap.put("executorIp", instance.getExecutorIp());
+                instanceMap.put("status", instance.getStatus());
+                instanceMap.put("executionTaskId", instance.getExecutionTaskId());
+                instanceMap.put("createTime", instance.getCreateTime());
+                instanceMap.put("updateTime", instance.getUpdateTime());
+                
+                // 获取用例信息
+                TestCase testCase = testCaseService.getById(instance.getTestCaseId());
+                if (testCase != null) {
+                    instanceMap.put("testCaseNumber", testCase.getNumber());
+                    instanceMap.put("testCaseName", testCase.getName());
+                }
+                
+                // 获取逻辑环境信息
+                LogicEnvironment logicEnvironment = logicEnvironmentService.getById(instance.getLogicEnvironmentId());
+                if (logicEnvironment != null) {
+                    instanceMap.put("logicEnvironmentName", logicEnvironment.getName());
+                }
+                
+                result.add(instanceMap);
+            }
+            
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取任务执行例次列表失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
+            return Result.error("获取任务执行例次列表失败: " + e.getMessage());
         }
     }
 }
