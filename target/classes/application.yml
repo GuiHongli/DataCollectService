@@ -53,6 +53,13 @@ logging:
 gohttpserver:
   url: http://localhost:8000
 
+# DataCollectService配置
+datacollect:
+  service:
+    host: localhost
+    port: 8080
+    base-url: http://localhost:8080
+
 # 文件上传配置
 file:
   upload:

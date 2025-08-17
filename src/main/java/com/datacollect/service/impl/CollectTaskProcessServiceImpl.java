@@ -17,6 +17,7 @@ import com.datacollect.service.ExecutorService;
 import com.datacollect.util.HttpClientUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -55,6 +56,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private HttpClientUtil httpClientUtil;
+    
+    @Value("${datacollect.service.base-url:http://localhost:8080}")
+    private String dataCollectServiceBaseUrl;
 
     @Override
     public Long processCollectTaskCreation(CollectTaskRequest request) {
@@ -98,10 +102,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         log.info("执行机服务调用成功 - 任务ID: {}", collectTaskId);
                     } else {
                         collectTaskService.updateTaskStatus(collectTaskId, "FAILED");
+                        collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用失败");
                         log.error("执行机服务调用失败 - 任务ID: {}", collectTaskId);
                     }
                 } catch (Exception e) {
                     collectTaskService.updateTaskStatus(collectTaskId, "FAILED");
+                    collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用异常: " + e.getMessage());
                     log.error("执行机服务调用异常 - 任务ID: {}, 错误: {}", collectTaskId, e.getMessage(), e);
                 }
             });
@@ -293,8 +299,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             request.setTestCaseSetId(testCaseSetId);
             request.setTestCaseSetPath(testCaseSetPath);
             request.setTestCaseList(testCaseList);
-            request.setResultReportUrl("http://localhost:8080/api/test-result/report");
-            request.setLogReportUrl("http://localhost:8080/api/test-log/report");
+            request.setResultReportUrl(dataCollectServiceBaseUrl + "/api/test-result/report");
+            request.setLogReportUrl(dataCollectServiceBaseUrl + "/api/test-log/report");
             
             // 3. 发送HTTP请求到执行机
             String caseExecuteServiceUrl = "http://" + executorIp + ":8081/api/test-case-execution/receive";

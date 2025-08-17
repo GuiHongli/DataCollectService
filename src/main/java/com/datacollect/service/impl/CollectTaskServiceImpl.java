@@ -123,4 +123,23 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         return success;
     }
+    
+    @Override
+    public boolean updateTaskFailureReason(Long id, String failureReason) {
+        log.info("更新任务失败原因 - 任务ID: {}, 失败原因: {}", id, failureReason);
+        
+        UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", id);
+        updateWrapper.set("failure_reason", failureReason);
+        updateWrapper.set("update_time", LocalDateTime.now());
+        
+        boolean success = update(updateWrapper);
+        if (success) {
+            log.info("任务失败原因更新成功 - 任务ID: {}", id);
+        } else {
+            log.error("任务失败原因更新失败 - 任务ID: {}", id);
+        }
+        
+        return success;
+    }
 }

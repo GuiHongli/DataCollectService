@@ -131,6 +131,12 @@ public class CollectTask {
     private LocalDateTime endTime;
     
     /**
+     * 失败原因（当任务状态为FAILED时记录）
+     */
+    @TableField("failure_reason")
+    private String failureReason;
+    
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

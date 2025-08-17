@@ -38,4 +38,40 @@ public interface TestCaseExecutionInstanceService extends IService<TestCaseExecu
      * @return 是否更新成功
      */
     boolean updateExecutionStatus(Long id, String status, String executionTaskId);
+    
+    /**
+     * 根据用例ID和轮次更新执行状态
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param testCaseId 用例ID
+     * @param round 轮次
+     * @param status 状态
+     * @return 是否更新成功
+     */
+    boolean updateExecutionStatusByTestCaseAndRound(Long collectTaskId, Long testCaseId, Integer round, String status);
+    
+    /**
+     * 根据用例ID和轮次更新执行状态和结果
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param testCaseId 用例ID
+     * @param round 轮次
+     * @param status 执行状态
+     * @param result 执行结果
+     * @return 是否更新成功
+     */
+    boolean updateExecutionStatusAndResultByTestCaseAndRound(Long collectTaskId, Long testCaseId, Integer round, String status, String result);
+    
+    /**
+     * 根据用例ID和轮次更新执行状态、结果和失败原因
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param testCaseId 用例ID
+     * @param round 轮次
+     * @param status 执行状态
+     * @param result 执行结果
+     * @param failureReason 失败原因
+     * @return 是否更新成功
+     */
+    boolean updateExecutionStatusAndResultAndFailureReasonByTestCaseAndRound(Long collectTaskId, Long testCaseId, Integer round, String status, String result, String failureReason);
 }

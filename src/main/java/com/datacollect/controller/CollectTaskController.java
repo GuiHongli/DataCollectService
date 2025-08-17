@@ -382,6 +382,8 @@ public class CollectTaskController {
                 instanceMap.put("logicEnvironmentId", instance.getLogicEnvironmentId());
                 instanceMap.put("executorIp", instance.getExecutorIp());
                 instanceMap.put("status", instance.getStatus());
+                instanceMap.put("result", instance.getResult());
+                instanceMap.put("failureReason", instance.getFailureReason());
                 instanceMap.put("executionTaskId", instance.getExecutionTaskId());
                 instanceMap.put("createTime", instance.getCreateTime());
                 instanceMap.put("updateTime", instance.getUpdateTime());

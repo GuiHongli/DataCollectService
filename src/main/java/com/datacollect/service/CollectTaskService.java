@@ -47,4 +47,13 @@ public interface CollectTaskService extends IService<CollectTask> {
      * @return 是否更新成功
      */
     boolean updateTaskProgress(Long id, Integer totalCount, Integer successCount, Integer failedCount);
+    
+    /**
+     * 更新任务失败原因
+     * 
+     * @param id 任务ID
+     * @param failureReason 失败原因
+     * @return 是否更新成功
+     */
+    boolean updateTaskFailureReason(Long id, String failureReason);
 }

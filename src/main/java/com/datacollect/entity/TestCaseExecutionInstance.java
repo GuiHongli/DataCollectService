@@ -49,9 +49,19 @@ public class TestCaseExecutionInstance {
     private String executorIp;
     
     /**
-     * 执行状态 (PENDING/RUNNING/COMPLETED/FAILED)
+     * 执行状态 (PENDING/RUNNING/COMPLETED)
      */
     private String status;
+    
+    /**
+     * 执行结果 (SUCCESS/FAILED/BLOCKED)
+     */
+    private String result;
+    
+    /**
+     * 失败原因
+     */
+    private String failureReason;
     
     /**
      * 执行任务ID（CaseExecuteService返回的任务ID）
