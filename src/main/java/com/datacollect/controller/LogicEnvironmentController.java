@@ -113,6 +113,48 @@ public class LogicEnvironmentController {
         return Result.success(logicEnvironment);
     }
 
+    @PutMapping("/{id}/with-ue-and-network")
+    public Result<LogicEnvironment> updateWithUeAndNetwork(@PathVariable @NotNull Long id, @Valid @RequestBody CreateLogicEnvironmentRequest request) {
+        // 更新逻辑环境基本信息
+        LogicEnvironment logicEnvironment = request.getLogicEnvironment();
+        logicEnvironment.setId(id);
+        logicEnvironmentService.updateById(logicEnvironment);
+        
+        // 删除原有的UE关联，然后重新插入
+        QueryWrapper<LogicEnvironmentUe> ueQueryWrapper = new QueryWrapper<>();
+        ueQueryWrapper.eq("logic_environment_id", id);
+        logicEnvironmentUeService.remove(ueQueryWrapper);
+        
+        // 重新关联UE
+        List<Long> ueIds = request.getUeIds();
+        if (ueIds != null && !ueIds.isEmpty()) {
+            for (Long ueId : ueIds) {
+                LogicEnvironmentUe logicEnvironmentUe = new LogicEnvironmentUe();
+                logicEnvironmentUe.setLogicEnvironmentId(id);
+                logicEnvironmentUe.setUeId(ueId);
+                logicEnvironmentUeService.save(logicEnvironmentUe);
+            }
+        }
+        
+        // 删除原有的逻辑组网关联，然后重新插入
+        QueryWrapper<LogicEnvironmentNetwork> networkQueryWrapper = new QueryWrapper<>();
+        networkQueryWrapper.eq("logic_environment_id", id);
+        logicEnvironmentNetworkService.remove(networkQueryWrapper);
+        
+        // 重新关联逻辑组网
+        List<Long> networkIds = request.getNetworkIds();
+        if (networkIds != null && !networkIds.isEmpty()) {
+            for (Long networkId : networkIds) {
+                LogicEnvironmentNetwork logicEnvironmentNetwork = new LogicEnvironmentNetwork();
+                logicEnvironmentNetwork.setLogicEnvironmentId(id);
+                logicEnvironmentNetwork.setLogicNetworkId(networkId);
+                logicEnvironmentNetworkService.save(logicEnvironmentNetwork);
+            }
+        }
+        
+        return Result.success(logicEnvironment);
+    }
+
     @DeleteMapping("/{id}")
     public Result<Boolean> delete(@PathVariable @NotNull Long id) {
         // 删除逻辑环境时，同时删除关联的UE
