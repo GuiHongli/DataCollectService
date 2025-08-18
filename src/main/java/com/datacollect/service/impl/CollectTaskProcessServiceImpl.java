@@ -101,12 +101,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
                         log.info("执行机服务调用成功 - 任务ID: {}", collectTaskId);
                     } else {
-                        collectTaskService.updateTaskStatus(collectTaskId, "FAILED");
+                        collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
                         collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用失败");
                         log.error("执行机服务调用失败 - 任务ID: {}", collectTaskId);
                     }
                 } catch (Exception e) {
-                    collectTaskService.updateTaskStatus(collectTaskId, "FAILED");
+                    collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
                     collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用异常: " + e.getMessage());
                     log.error("执行机服务调用异常 - 任务ID: {}, 错误: {}", collectTaskId, e.getMessage(), e);
                 }
@@ -203,6 +203,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         log.info("开始调用执行机服务 - 例次数量: {}", instances.size());
         
         try {
+            // 检查任务状态，如果任务已停止则不再继续下发
+            if (!instances.isEmpty()) {
+                Long collectTaskId = instances.get(0).getCollectTaskId();
+                CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                if (collectTask != null && "STOPPED".equals(collectTask.getStatus())) {
+                    log.warn("任务已停止，不再继续下发用例执行 - 任务ID: {}, 状态: {}", collectTaskId, collectTask.getStatus());
+                    return false;
+                }
+            }
+            
             // 按执行机IP分组
             java.util.Map<String, List<TestCaseExecutionInstance>> instancesByExecutor = new java.util.HashMap<>();
             for (TestCaseExecutionInstance instance : instances) {
@@ -213,6 +223,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             for (java.util.Map.Entry<String, List<TestCaseExecutionInstance>> entry : instancesByExecutor.entrySet()) {
                 String executorIp = entry.getKey();
                 List<TestCaseExecutionInstance> executorInstances = entry.getValue();
+                
+                // 再次检查任务状态，确保在调用执行机前任务未被停止
+                if (!executorInstances.isEmpty()) {
+                    Long collectTaskId = executorInstances.get(0).getCollectTaskId();
+                    CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                    if (collectTask != null && "STOPPED".equals(collectTask.getStatus())) {
+                        log.warn("任务已停止，跳过执行机 {} 的用例下发 - 任务ID: {}, 状态: {}", executorIp, collectTaskId, collectTask.getStatus());
+                        continue;
+                    }
+                }
                 
                 boolean success = createExecutionTaskForExecutor(executorIp, executorInstances);
                 if (!success) {
@@ -236,6 +256,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private boolean createExecutionTaskForExecutor(String executorIp, List<TestCaseExecutionInstance> instances) {
         try {
             log.info("为执行机创建执行任务 - 执行机IP: {}, 例次数量: {}", executorIp, instances.size());
+            
+            // 检查任务状态，如果任务已停止则不再继续下发
+            if (!instances.isEmpty()) {
+                Long collectTaskId = instances.get(0).getCollectTaskId();
+                CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                if (collectTask != null && "STOPPED".equals(collectTask.getStatus())) {
+                    log.warn("任务已停止，不再为执行机创建执行任务 - 执行机IP: {}, 任务ID: {}, 状态: {}", executorIp, collectTaskId, collectTask.getStatus());
+                    return false;
+                }
+            }
             
             // 1. 构建请求参数
             String taskId = "TASK_" + System.currentTimeMillis() + "_" + executorIp.replace(".", "_");
@@ -300,7 +330,24 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             request.setTestCaseSetPath(testCaseSetPath);
             request.setTestCaseList(testCaseList);
             request.setResultReportUrl(dataCollectServiceBaseUrl + "/api/test-result/report");
-            request.setLogReportUrl(dataCollectServiceBaseUrl + "/api/test-log/report");
+            
+            // 使用gohttpserver地址作为日志上报URL，这样CaseExecuteService就可以上传日志文件到gohttpserver
+            String goHttpServerUrl = null;
+            if (testCaseSetPath != null && testCaseSetPath.startsWith("http")) {
+                // 从用例集路径中提取gohttpserver地址
+                int uploadIndex = testCaseSetPath.indexOf("/upload/");
+                if (uploadIndex > 0) {
+                    goHttpServerUrl = testCaseSetPath.substring(0, uploadIndex);
+                }
+            }
+            
+            if (goHttpServerUrl != null && !goHttpServerUrl.trim().isEmpty()) {
+                request.setLogReportUrl(goHttpServerUrl);
+                log.info("使用gohttpserver地址作为日志上报URL: {}", goHttpServerUrl);
+            } else {
+                request.setLogReportUrl(dataCollectServiceBaseUrl + "/api/test-result/log");
+                log.info("使用默认日志上报URL: {}", dataCollectServiceBaseUrl + "/api/test-result/log");
+            }
             
             // 3. 发送HTTP请求到执行机
             String caseExecuteServiceUrl = "http://" + executorIp + ":8081/api/test-case-execution/receive";

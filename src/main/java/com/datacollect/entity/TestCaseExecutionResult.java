@@ -39,7 +39,7 @@ public class TestCaseExecutionResult {
     private Integer round;
     
     /**
-     * 执行状态 (SUCCESS/FAILED/TIMEOUT)
+     * 执行状态 (SUCCESS/FAILED/BLOCKED)
      */
     private String status;
     
@@ -64,9 +64,14 @@ public class TestCaseExecutionResult {
     private LocalDateTime endTime;
     
     /**
-     * 错误信息（如果执行失败）
+     * 失败原因（详细分析）
      */
-    private String errorMessage;
+    private String failureReason;
+    
+    /**
+     * 日志文件路径或HTTP链接
+     */
+    private String logFilePath;
     
     /**
      * 执行机IP

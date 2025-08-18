@@ -81,14 +81,21 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     public boolean updateTaskStatus(Long id, String status) {
         log.info("更新任务状态 - 任务ID: {}, 状态: {}", id, status);
         
+        // 验证状态值
+        if (!isValidStatus(status)) {
+            log.error("无效的任务状态: {} - 任务ID: {}", status, id);
+            return false;
+        }
+        
         UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
         updateWrapper.eq("id", id);
         updateWrapper.set("status", status);
         updateWrapper.set("update_time", LocalDateTime.now());
         
+        // 根据状态设置相应的时间字段
         if ("RUNNING".equals(status)) {
             updateWrapper.set("start_time", LocalDateTime.now());
-        } else if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
+        } else if ("COMPLETED".equals(status) || "STOPPED".equals(status) || "PAUSED".equals(status)) {
             updateWrapper.set("end_time", LocalDateTime.now());
         }
         
@@ -100,6 +107,27 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         }
         
         return success;
+    }
+    
+    /**
+     * 验证任务状态是否有效
+     * 
+     * @param status 状态值
+     * @return 是否有效
+     */
+    private boolean isValidStatus(String status) {
+        if (status == null || status.trim().isEmpty()) {
+            return false;
+        }
+        
+        String[] validStatuses = {"PENDING", "RUNNING", "COMPLETED", "STOPPED", "PAUSED"};
+        for (String validStatus : validStatuses) {
+            if (validStatus.equals(status)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     @Override

@@ -15,6 +15,8 @@
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/mapper/TestCaseExecutionResultMapper.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/impl/TestCaseSetServiceImpl.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/impl/LogicEnvironmentServiceImpl.java
+/Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/CaseExecuteServiceClient.java
+/Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/config/JacksonConfig.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/controller/NetworkTypeController.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/entity/dto/RegionHierarchyDTO.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/impl/TestCaseServiceImpl.java
@@ -83,6 +85,7 @@
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/controller/RegionController.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/service/impl/CollectTaskProcessServiceImpl.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/entity/dto/CreateLogicEnvironmentRequest.java
+/Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/config/RestTemplateConfig.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/entity/dto/BatchRegionRequest.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/entity/dto/LogicEnvironmentDTO.java
 /Users/zhengtengsong/projects/ghl/cursor/DataCollectService/src/main/java/com/datacollect/dto/CollectTaskRequest.java

@@ -64,6 +64,11 @@ public class TestCaseExecutionInstance {
     private String failureReason;
     
     /**
+     * 日志文件路径或HTTP链接
+     */
+    private String logFilePath;
+    
+    /**
      * 执行任务ID（CaseExecuteService返回的任务ID）
      */
     private String executionTaskId;

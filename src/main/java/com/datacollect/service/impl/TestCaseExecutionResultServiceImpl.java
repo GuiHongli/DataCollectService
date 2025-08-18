@@ -120,12 +120,12 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             // 获取失败原因
             String failureReason = null;
             if ("FAILED".equals(result.getStatus()) || "BLOCKED".equals(result.getStatus())) {
-                failureReason = result.getErrorMessage() != null ? result.getErrorMessage() : result.getResult();
+                failureReason = result.getFailureReason() != null ? result.getFailureReason() : result.getResult();
             }
             
-            // 更新例次状态、结果和失败原因
-            boolean success = testCaseExecutionInstanceService.updateExecutionStatusAndResultAndFailureReasonByTestCaseAndRound(
-                    collectTaskId, result.getTestCaseId(), result.getRound(), instanceStatus, instanceResult, failureReason);
+            // 更新例次状态、结果、失败原因和日志文件路径
+            boolean success = testCaseExecutionInstanceService.updateExecutionStatusAndResultAndFailureReasonAndLogFilePathByTestCaseAndRound(
+                    collectTaskId, result.getTestCaseId(), result.getRound(), instanceStatus, instanceResult, failureReason, result.getLogFilePath());
             
             if (success) {
                 log.debug("例次状态和结果更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
@@ -211,8 +211,8 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 String status = instance.getStatus();
                 String result = instance.getResult();
                 
-                // 检查执行状态是否完成
-                if ("COMPLETED".equals(status)) {
+                // 只要不是执行中，都算作已完成
+                if (!"RUNNING".equals(status)) {
                     completedCount++;
                     
                     // 根据执行结果统计
@@ -233,18 +233,15 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             if (completedCount == totalCount) {
                 log.info("所有用例例次已完成，更新任务状态为完成 - 任务ID: {}", taskId);
                 
-                // 5. 更新任务状态和进度
+                // 5. 更新任务状态和进度 - 状态仅表示执行状态，不表示结果状态
                 String finalStatus = "COMPLETED";
-                if (failedCount > 0 || blockedCount > 0) {
-                    finalStatus = "FAILED";
-                }
                 
                 boolean statusUpdated = collectTaskService.updateTaskStatus(collectTaskId, finalStatus);
                 boolean progressUpdated = collectTaskService.updateTaskProgress(collectTaskId, totalCount, successCount, failedCount);
                 
                 if (statusUpdated && progressUpdated) {
-                    log.info("任务状态更新成功 - 任务ID: {}, 最终状态: {}, 总数: {}, 成功: {}, 失败: {}", 
-                            taskId, finalStatus, totalCount, successCount, failedCount);
+                    log.info("任务状态更新成功 - 任务ID: {}, 最终状态: {}, 总数: {}, 成功: {}, 失败: {}, 阻塞: {}", 
+                            taskId, finalStatus, totalCount, successCount, failedCount, blockedCount);
                 } else {
                     log.error("任务状态更新失败 - 任务ID: {}", taskId);
                 }

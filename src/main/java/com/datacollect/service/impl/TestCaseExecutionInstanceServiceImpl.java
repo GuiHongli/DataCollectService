@@ -156,4 +156,46 @@ public class TestCaseExecutionInstanceServiceImpl extends ServiceImpl<TestCaseEx
         
         return success;
     }
+    
+    @Override
+    public boolean updateExecutionStatusAndResultAndFailureReasonAndLogFilePathByTestCaseAndRound(Long collectTaskId, Long testCaseId, Integer round, String status, String result, String failureReason, String logFilePath) {
+        log.info("根据用例ID和轮次更新执行状态、结果、失败原因和日志文件路径 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}, 日志文件: {}", 
+                collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
+        
+        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("collect_task_id", collectTaskId);
+        updateWrapper.eq("test_case_id", testCaseId);
+        updateWrapper.eq("round", round);
+        updateWrapper.set("status", status);
+        updateWrapper.set("result", result);
+        updateWrapper.set("failure_reason", failureReason);
+        updateWrapper.set("log_file_path", logFilePath);
+        updateWrapper.set("update_time", LocalDateTime.now());
+        
+        boolean success = update(updateWrapper);
+        if (success) {
+            log.info("执行状态、结果、失败原因和日志文件路径更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}, 日志文件: {}", 
+                    collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
+        } else {
+            log.error("执行状态、结果、失败原因和日志文件路径更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}, 日志文件: {}", 
+                    collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
+        }
+        
+        return success;
+    }
+    
+    @Override
+    public List<TestCaseExecutionInstance> getByCollectTaskIdAndStatus(Long collectTaskId, String status) {
+        log.debug("根据采集任务ID和状态查询用例执行例次 - 任务ID: {}, 状态: {}", collectTaskId, status);
+        
+        QueryWrapper<TestCaseExecutionInstance> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("collect_task_id", collectTaskId);
+        queryWrapper.eq("status", status);
+        queryWrapper.orderByAsc("test_case_id", "round");
+        
+        List<TestCaseExecutionInstance> instances = list(queryWrapper);
+        log.debug("查询到用例执行例次数量: {} - 任务ID: {}, 状态: {}", instances.size(), collectTaskId, status);
+        
+        return instances;
+    }
 }
