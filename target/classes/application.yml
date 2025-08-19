@@ -1,68 +1,18 @@
 server:
-  port: 8080
+  port: 8081
   servlet:
     context-path: /api
 
 spring:
   application:
-    name: data-collect-service
-  
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/data_collect?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useLocalSessionState=true&rewriteBatchedStatements=true&cachePrepStmts=true&useServerPrepStmts=true&user=root&password=ghl12306Happy@
-    username: root
-    password: ghl12306Happy@
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-    
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQL5InnoDBDialect
-        format_sql: true
-        
-  jackson:
-    date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: GMT+8
+    name: case-execute-service
 
-mybatis-plus:
-  configuration:
-    map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-  global-config:
-    db-config:
-      id-type: auto
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
-  mapper-locations: classpath*:/mapper/**/*.xml
-
-logging:
-  level:
-    com.datacollect: debug
-    org.springframework.web: debug
+# 用例执行配置
+case:
+  execution:
+    # 单个用例执行超时时长（分钟），默认5分钟
+    timeout-minutes: 5
 
 # gohttpserver配置
 gohttpserver:
-  url: http://localhost:8000
-
-# DataCollectService配置
-datacollect:
-  service:
-    host: localhost
-    port: 8080
-    base-url: http://localhost:8080
-
-# 文件上传配置
-file:
-  upload:
-    base-dir: ./uploads
-    testcase-dir: testcase
-    temp-dir: temp
+  url: http://localhost:8081

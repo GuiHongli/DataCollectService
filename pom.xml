@@ -97,6 +97,20 @@
             <artifactId>commons-compress</artifactId>
             <version>1.21</version>
         </dependency>
+
+        <!-- Apache HttpClient for HTTP requests (Java 8 compatible) -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.14</version>
+        </dependency>
+        
+        <!-- Apache HttpClient MIME for multipart requests -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpmime</artifactId>
+            <version>4.5.14</version>
+        </dependency>
     </dependencies>
 
     <build>

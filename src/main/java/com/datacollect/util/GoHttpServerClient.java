@@ -1,20 +1,26 @@
 package com.datacollect.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
 
 @Slf4j
 @Component
@@ -23,11 +29,17 @@ public class GoHttpServerClient {
     @Value("${gohttpserver.url:http://localhost:8081}")
     private String goHttpServerUrl;
 
-    private final HttpClient httpClient;
+    private final CloseableHttpClient httpClient;
 
     public GoHttpServerClient() {
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
+        // 配置超时时间
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(30000) // 30秒连接超时
+                .setSocketTimeout(60000)  // 60秒读取超时
+                .build();
+        
+        this.httpClient = HttpClients.custom()
+                .setDefaultRequestConfig(requestConfig)
                 .build();
     }
 
@@ -44,29 +56,30 @@ public class GoHttpServerClient {
             // 构建上传URL，使用gohttpserver的标准上传接口
             String uploadUrl = goHttpServerUrl + "/upload";
             
-            // 构建multipart请求
-            String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
+            // 创建multipart请求
+            HttpPost httpPost = new HttpPost(uploadUrl);
             
-            // 构建multipart body，直接上传到根目录
-            byte[] fileBytes = file.getBytes();
-            byte[] multipartBody = buildMultipartBody(fileBytes, targetFileName, boundary);
+            // 构建multipart entity
+            MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+            builder.setMode(org.apache.http.entity.mime.HttpMultipartMode.BROWSER_COMPATIBLE);
+            builder.addBinaryBody("file", file.getBytes(), 
+                    ContentType.create("application/zip"), targetFileName);
             
-            // 发送HTTP请求
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(uploadUrl))
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipartBody))
-                    .timeout(Duration.ofSeconds(60))
-                    .build();
+            HttpEntity multipart = builder.build();
+            httpPost.setEntity(multipart);
             
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            if (response.statusCode() == 200 || response.statusCode() == 201) {
-                String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
-                log.info("文件上传成功: {}", fileUrl);
-                return fileUrl;
-            } else {
-                throw new IOException("上传失败，HTTP状态码: " + response.statusCode() + ", 响应: " + response.body());
+            // 发送请求
+            try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+                
+                if (statusCode == 200 || statusCode == 201) {
+                    String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
+                    log.info("文件上传成功: {}", fileUrl);
+                    return fileUrl;
+                } else {
+                    throw new IOException("上传失败，HTTP状态码: " + statusCode + ", 响应: " + responseBody);
+                }
             }
             
         } catch (Exception e) {
@@ -93,60 +106,36 @@ public class GoHttpServerClient {
             // 构建上传URL，使用gohttpserver的标准上传接口
             String uploadUrl = goHttpServerUrl + "/upload";
             
-            // 读取文件内容
-            byte[] fileBytes = Files.readAllBytes(sourcePath);
+            // 创建multipart请求
+            HttpPost httpPost = new HttpPost(uploadUrl);
             
-            // 构建multipart请求，直接上传到根目录
-            String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
-            byte[] multipartBody = buildMultipartBody(fileBytes, targetFileName, boundary);
+            // 构建multipart entity
+            MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+            builder.setMode(org.apache.http.entity.mime.HttpMultipartMode.BROWSER_COMPATIBLE);
+            builder.addBinaryBody("file", Files.readAllBytes(sourcePath), 
+                    ContentType.create("application/zip"), targetFileName);
             
-            // 发送HTTP请求
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(uploadUrl))
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipartBody))
-                    .timeout(Duration.ofSeconds(60))
-                    .build();
+            HttpEntity multipart = builder.build();
+            httpPost.setEntity(multipart);
             
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            if (response.statusCode() == 200 || response.statusCode() == 201) {
-                String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
-                log.info("本地文件上传成功: {}", fileUrl);
-                return fileUrl;
-            } else {
-                throw new IOException("上传失败，HTTP状态码: " + response.statusCode() + ", 响应: " + response.body());
+            // 发送请求
+            try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+                
+                if (statusCode == 200 || statusCode == 201) {
+                    String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
+                    log.info("本地文件上传成功: {}", fileUrl);
+                    return fileUrl;
+                } else {
+                    throw new IOException("上传失败，HTTP状态码: " + statusCode + ", 响应: " + responseBody);
+                }
             }
             
         } catch (Exception e) {
             log.error("上传本地文件到gohttpserver失败: {}", e.getMessage());
             throw new IOException("上传本地文件失败: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * 构建multipart body
-     */
-    private byte[] buildMultipartBody(byte[] fileBytes, String fileName, String boundary) throws IOException {
-        StringBuilder body = new StringBuilder();
-        
-        // 添加文件部分
-        body.append("--").append(boundary).append("\r\n");
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"").append(fileName).append("\"\r\n");
-        body.append("Content-Type: application/zip\r\n");
-        body.append("\r\n");
-        
-        // 转换为字节数组
-        byte[] headerBytes = body.toString().getBytes("UTF-8");
-        byte[] footerBytes = ("\r\n--" + boundary + "--\r\n").getBytes("UTF-8");
-        
-        // 组合完整的multipart body
-        byte[] multipartBody = new byte[headerBytes.length + fileBytes.length + footerBytes.length];
-        System.arraycopy(headerBytes, 0, multipartBody, 0, headerBytes.length);
-        System.arraycopy(fileBytes, 0, multipartBody, headerBytes.length, fileBytes.length);
-        System.arraycopy(footerBytes, 0, multipartBody, headerBytes.length + fileBytes.length, footerBytes.length);
-        
-        return multipartBody;
     }
 
     /**
@@ -158,20 +147,18 @@ public class GoHttpServerClient {
         try {
             String deleteUrl = goHttpServerUrl + "/test_case_set/" + fileName;
             
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(deleteUrl))
-                    .DELETE()
-                    .timeout(Duration.ofSeconds(30))
-                    .build();
+            HttpDelete httpDelete = new HttpDelete(deleteUrl);
             
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            if (response.statusCode() == 200 || response.statusCode() == 204) {
-                log.info("文件删除成功: {}", fileName);
-                return true;
-            } else {
-                log.warn("文件删除失败，HTTP状态码: {}", response.statusCode());
-                return false;
+            try (CloseableHttpResponse response = httpClient.execute(httpDelete)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                
+                if (statusCode == 200 || statusCode == 204) {
+                    log.info("文件删除成功: {}", fileName);
+                    return true;
+                } else {
+                    log.warn("文件删除失败，HTTP状态码: {}", statusCode);
+                    return false;
+                }
             }
         } catch (Exception e) {
             log.error("删除文件失败: {}", e.getMessage());
@@ -187,15 +174,12 @@ public class GoHttpServerClient {
         try {
             String healthUrl = goHttpServerUrl + "/";
             
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(healthUrl))
-                    .GET()
-                    .timeout(Duration.ofSeconds(10))
-                    .build();
+            HttpGet httpGet = new HttpGet(healthUrl);
             
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            return response.statusCode() == 200;
+            try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                return statusCode == 200;
+            }
         } catch (Exception e) {
             log.error("gohttpserver不可用: {}", e.getMessage());
             return false;
