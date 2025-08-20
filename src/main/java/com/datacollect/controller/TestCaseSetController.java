@@ -136,7 +136,7 @@ public class TestCaseSetController {
             // 解压ZIP文件并解析Excel
             Path extractPath = fileUploadConfig.createTempDir("extract");
             extractDir = extractPath.toString();
-            String excelFilePath = zipProcessor.extractAndFindExcel(filePath.toString(), extractDir, "case.xlsx");
+            String excelFilePath = zipProcessor.extractAndFindExcel(filePath.toString(), extractDir, "cases.xlsx");
             
             if (excelFilePath == null) {
                 return Result.error("ZIP文件中未找到case.xlsx文件");
