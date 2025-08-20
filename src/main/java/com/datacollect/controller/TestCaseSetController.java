@@ -68,6 +68,12 @@ public class TestCaseSetController {
                 return Result.error("只支持上传zip文件");
             }
 
+            // 检查文件大小（100MB限制）
+            long maxSize = 100 * 1024 * 1024; // 100MB
+            if (file.getSize() > maxSize) {
+                return Result.error("文件大小不能超过100MB");
+            }
+
             // 解析文件名获取用例集名称和版本
             String[] parts = originalFilename.replace(".zip", "").split("_");
             if (parts.length < 2) {
