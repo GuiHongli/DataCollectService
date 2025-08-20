@@ -51,7 +51,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         collectTask.setCountryId(request.getCountryId());
         collectTask.setProvinceId(request.getProvinceId());
         collectTask.setCityId(request.getCityId());
-        collectTask.setStatus("PENDING");
+        collectTask.setStatus("RUNNING");
         collectTask.setTotalTestCaseCount(0);
         collectTask.setCompletedTestCaseCount(0);
         collectTask.setSuccessTestCaseCount(0);

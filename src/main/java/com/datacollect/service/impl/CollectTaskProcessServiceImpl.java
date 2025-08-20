@@ -97,13 +97,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             CompletableFuture.runAsync(() -> {
                 try {
                     boolean callSuccess = callExecutorServices(distributedInstances);
-                    if (callSuccess) {
-                        collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
-                        log.info("执行机服务调用成功 - 任务ID: {}", collectTaskId);
-                    } else {
+                    if (!callSuccess) {
                         collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
                         collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用失败");
                         log.error("执行机服务调用失败 - 任务ID: {}", collectTaskId);
+                    } else {
+                        log.info("执行机服务调用成功 - 任务ID: {}", collectTaskId);
                     }
                 } catch (Exception e) {
                     collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
@@ -132,7 +131,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 instance.setCollectTaskId(collectTaskId);
                 instance.setTestCaseId(testCaseId);
                 instance.setRound(round);
-                instance.setStatus("PENDING");
+                instance.setStatus("RUNNING");
                 instances.add(instance);
             }
         }
