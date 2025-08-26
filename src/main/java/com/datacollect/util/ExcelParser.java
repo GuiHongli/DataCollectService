@@ -62,12 +62,14 @@ public class ExcelParser {
             testCase.setTestCaseSetId(testCaseSetId);
             
             // 解析各列数据
-            // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_测试步骤 用例_预期结果
+            // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_测试步骤 用例_预期结果
             testCase.setName(getCellValue(row.getCell(0)));
             testCase.setNumber(getCellValue(row.getCell(1)));
             testCase.setLogicNetwork(getCellValue(row.getCell(2)));
-            testCase.setTestSteps(getCellValue(row.getCell(3)));
-            testCase.setExpectedResult(getCellValue(row.getCell(4)));
+            testCase.setBusinessCategory(getCellValue(row.getCell(3)));
+            testCase.setApp(getCellValue(row.getCell(4)));
+            testCase.setTestSteps(getCellValue(row.getCell(5)));
+            testCase.setExpectedResult(getCellValue(row.getCell(6)));
             
             // 验证必填字段
             if (testCase.getName() == null || testCase.getName().trim().isEmpty()) {

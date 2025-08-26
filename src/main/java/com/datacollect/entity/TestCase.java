@@ -31,6 +31,12 @@ public class TestCase {
     @TableField("logic_network")
     private String logicNetwork;
 
+    @TableField("business_category")
+    private String businessCategory;
+
+    @TableField("app")
+    private String app;
+
     @TableField("test_steps")
     private String testSteps;
 
