@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
 import com.datacollect.entity.Ue;
 import com.datacollect.entity.dto.UeDTO;
+import com.datacollect.enums.UeBrandEnum;
 import com.datacollect.service.UeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -86,5 +89,17 @@ public class UeController {
     public Result<List<Map<String, Object>>> getUeOptions() {
         List<Map<String, Object>> options = ueService.getUeOptionsForSelect();
         return Result.success(options);
+    }
+
+    @GetMapping("/brands")
+    public Result<List<Map<String, String>>> getBrands() {
+        List<Map<String, String>> brands = new ArrayList<>();
+        for (UeBrandEnum brand : UeBrandEnum.values()) {
+            Map<String, String> brandMap = new HashMap<>();
+            brandMap.put("code", brand.getCode());
+            brandMap.put("name", brand.getName());
+            brands.add(brandMap);
+        }
+        return Result.success(brands);
     }
 }

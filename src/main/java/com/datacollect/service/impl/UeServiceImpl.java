@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.Ue;
 import com.datacollect.entity.dto.UeDTO;
+import com.datacollect.enums.UeBrandEnum;
 import com.datacollect.mapper.UeMapper;
 import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.UeService;
@@ -63,6 +64,11 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             // 处理网络类型名称，如果不存在则显示"未知网络类型"
             String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
             dto.setNetworkTypeName(networkTypeName != null ? networkTypeName : "未知网络类型");
+            dto.setBrand(ue.getBrand());
+            // 处理品牌名称
+            String brandName = ue.getBrand() != null ? UeBrandEnum.getNameByCode(ue.getBrand()) : null;
+            dto.setBrandName(brandName);
+            dto.setPort(ue.getPort());
             dto.setDescription(ue.getDescription());
             dto.setStatus(ue.getStatus());
             dto.setCreateBy(ue.getCreateBy());
@@ -107,6 +113,11 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             // 获取网络类型名称
             String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
             option.put("networkTypeName", networkTypeName != null ? networkTypeName : "未知网络类型");
+            
+            // 添加品牌和port信息
+            option.put("brand", ue.getBrand());
+            option.put("brandName", ue.getBrand() != null ? UeBrandEnum.getNameByCode(ue.getBrand()) : null);
+            option.put("port", ue.getPort());
             
             // 构建显示名称：UE名称 + UE ID + 用途
             String displayName = String.format("%s (%s) - %s", 
