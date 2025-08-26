@@ -28,6 +28,15 @@ public class CollectStrategy {
     @TableField("test_case_set_id")
     private Long testCaseSetId;
 
+    @TableField("business_category")
+    private String businessCategory;
+
+    @TableField("app")
+    private String app;
+
+    @TableField("intent")
+    private String intent;
+
     @TableField("description")
     private String description;
 

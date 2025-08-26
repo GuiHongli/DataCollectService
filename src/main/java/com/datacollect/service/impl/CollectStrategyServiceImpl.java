@@ -7,6 +7,7 @@ import com.datacollect.dto.CollectStrategyDTO;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.entity.TestCaseSet;
 import com.datacollect.entity.TestCase;
+import com.datacollect.enums.CollectIntentEnum;
 import com.datacollect.mapper.CollectStrategyMapper;
 import com.datacollect.service.CollectStrategyService;
 import com.datacollect.service.TestCaseSetService;
@@ -77,6 +78,14 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
         dto.setName(strategy.getName());
         dto.setCollectCount(strategy.getCollectCount());
         dto.setTestCaseSetId(strategy.getTestCaseSetId());
+        dto.setBusinessCategory(strategy.getBusinessCategory());
+        dto.setApp(strategy.getApp());
+        dto.setIntent(strategy.getIntent());
+        // 设置采集意图名称
+        if (strategy.getIntent() != null) {
+            CollectIntentEnum intentEnum = CollectIntentEnum.getByCode(strategy.getIntent());
+            dto.setIntentName(intentEnum != null ? intentEnum.getName() : strategy.getIntent());
+        }
         dto.setDescription(strategy.getDescription());
         dto.setStatus(strategy.getStatus());
         dto.setCreateBy(strategy.getCreateBy());

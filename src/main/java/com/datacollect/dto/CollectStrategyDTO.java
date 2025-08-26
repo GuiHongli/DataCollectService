@@ -18,6 +18,12 @@ public class CollectStrategyDTO extends CollectStrategy {
     private Long testCaseSetFileSize;
     private String testCaseSetGohttpserverUrl;
     
+    // 筛选条件信息
+    private String businessCategory;
+    private String app;
+    private String intent;
+    private String intentName; // 采集意图名称
+    
     // 测试用例信息列表
     private List<TestCaseInfo> testCaseList;
 

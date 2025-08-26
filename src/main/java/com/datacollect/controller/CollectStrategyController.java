@@ -6,6 +6,7 @@ import com.datacollect.common.Result;
 import com.datacollect.dto.CollectStrategyDTO;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.service.CollectStrategyService;
+import com.datacollect.enums.CollectIntentEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -14,6 +15,9 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -93,5 +97,17 @@ public class CollectStrategyController {
                 })
                 .collect(Collectors.toList());
         return Result.success(dtoList);
+    }
+
+    @GetMapping("/intents")
+    public Result<List<Map<String, String>>> getIntents() {
+        List<Map<String, String>> intents = new ArrayList<>();
+        for (CollectIntentEnum intent : CollectIntentEnum.values()) {
+            Map<String, String> intentMap = new HashMap<>();
+            intentMap.put("code", intent.getCode());
+            intentMap.put("name", intent.getName());
+            intents.add(intentMap);
+        }
+        return Result.success(intents);
     }
 }
