@@ -37,6 +37,9 @@ public class CollectStrategy {
     @TableField("intent")
     private String intent;
 
+    @TableField("custom_params")
+    private String customParams;
+
     @TableField("description")
     private String description;
 

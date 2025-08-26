@@ -2,6 +2,8 @@ package com.datacollect.dto;
 
 import com.datacollect.entity.CollectStrategy;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
@@ -23,6 +25,10 @@ public class CollectStrategyDTO extends CollectStrategy {
     private String app;
     private String intent;
     private String intentName; // 采集意图名称
+    
+    // 自定义参数信息
+    private String customParams; // JSON格式的自定义参数
+    private List<CustomParamDTO> customParamList; // 自定义参数列表
     
     // 测试用例信息列表
     private List<TestCaseInfo> testCaseList;

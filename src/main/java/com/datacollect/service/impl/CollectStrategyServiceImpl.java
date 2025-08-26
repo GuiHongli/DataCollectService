@@ -9,6 +9,10 @@ import com.datacollect.entity.TestCaseSet;
 import com.datacollect.entity.TestCase;
 import com.datacollect.enums.CollectIntentEnum;
 import com.datacollect.mapper.CollectStrategyMapper;
+import com.datacollect.dto.CustomParamDTO;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import com.datacollect.service.CollectStrategyService;
 import com.datacollect.service.TestCaseSetService;
 import com.datacollect.service.TestCaseService;
@@ -26,6 +30,8 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
 
     @Autowired
     private TestCaseService testCaseService;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public Page<CollectStrategyDTO> pageWithTestCaseSet(Page<CollectStrategy> page, String name, Long testCaseSetId) {
@@ -86,6 +92,24 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
             CollectIntentEnum intentEnum = CollectIntentEnum.getByCode(strategy.getIntent());
             dto.setIntentName(intentEnum != null ? intentEnum.getName() : strategy.getIntent());
         }
+        
+        // 设置自定义参数
+        dto.setCustomParams(strategy.getCustomParams());
+        if (strategy.getCustomParams() != null && !strategy.getCustomParams().isEmpty()) {
+            try {
+                List<CustomParamDTO> customParamList = objectMapper.readValue(
+                    strategy.getCustomParams(), 
+                    new TypeReference<List<CustomParamDTO>>() {}
+                );
+                dto.setCustomParamList(customParamList);
+            } catch (Exception e) {
+                // 如果解析失败，设置为空列表
+                dto.setCustomParamList(new ArrayList<>());
+            }
+        } else {
+            dto.setCustomParamList(new ArrayList<>());
+        }
+        
         dto.setDescription(strategy.getDescription());
         dto.setStatus(strategy.getStatus());
         dto.setCreateBy(strategy.getCreateBy());
