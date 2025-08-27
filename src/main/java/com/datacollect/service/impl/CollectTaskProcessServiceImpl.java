@@ -16,7 +16,18 @@ import com.datacollect.service.TestCaseService;
 import com.datacollect.service.TestCaseSetService;
 import com.datacollect.service.LogicEnvironmentService;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.LogicEnvironmentUeService;
+import com.datacollect.service.UeService;
+import com.datacollect.service.NetworkTypeService;
+import com.datacollect.entity.LogicEnvironmentUe;
+import com.datacollect.entity.Ue;
+import com.datacollect.entity.NetworkType;
+import com.datacollect.entity.Executor;
+import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.util.HttpClientUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import java.util.Set;
+import java.util.HashSet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -61,6 +72,15 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private HttpClientUtil httpClientUtil;
+    
+    @Autowired
+    private LogicEnvironmentUeService logicEnvironmentUeService;
+    
+    @Autowired
+    private UeService ueService;
+    
+    @Autowired
+    private NetworkTypeService networkTypeService;
     
     @Value("${datacollect.service.base-url:http://localhost:8080}")
     private String dataCollectServiceBaseUrl;
@@ -310,12 +330,14 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 获取用例集信息
             Long testCaseSetId = null;
             String testCaseSetPath = null;
+            Long collectStrategyId = null;
             if (!instances.isEmpty()) {
                 // 从第一个实例获取采集任务ID，然后查询用例集信息
                 Long collectTaskId = instances.get(0).getCollectTaskId();
                 CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
                 if (collectTask != null) {
                     testCaseSetId = collectTask.getTestCaseSetId();
+                    collectStrategyId = collectTask.getCollectStrategyId();
                     
                     // 获取用例集详细信息
                     TestCaseSet testCaseSet = testCaseSetService.getById(testCaseSetId);
@@ -359,13 +381,24 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 }
             }
             
-            // 2. 构建HTTP请求
+            // 2. 获取执行机关联的UE全部信息
+            List<TestCaseExecutionRequest.UeInfo> ueList = getExecutorUeList(executorIp);
+            log.info("获取执行机关联的UE信息 - 执行机IP: {}, UE数量: {}", executorIp, ueList.size());
+            
+            // 3. 获取采集策略的所有信息
+            TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(collectStrategyId);
+            log.info("获取采集策略信息 - 策略ID: {}, 策略名称: {}", collectStrategyId, 
+                    collectStrategyInfo != null ? collectStrategyInfo.getName() : "未知");
+            
+            // 4. 构建HTTP请求
             TestCaseExecutionRequest request = new TestCaseExecutionRequest();
             request.setTaskId(taskId);
             request.setExecutorIp(executorIp);
             request.setTestCaseSetId(testCaseSetId);
             request.setTestCaseSetPath(testCaseSetPath);
             request.setTestCaseList(testCaseList);
+            request.setUeList(ueList);
+            request.setCollectStrategyInfo(collectStrategyInfo);
             request.setResultReportUrl(dataCollectServiceBaseUrl + "/api/test-result/report");
             
             // 使用gohttpserver地址作为日志上报URL，这样CaseExecuteService就可以上传日志文件到gohttpserver
@@ -386,7 +419,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 log.info("使用默认日志上报URL: {}", dataCollectServiceBaseUrl + "/api/test-result/log");
             }
             
-            // 3. 发送HTTP请求到执行机
+            // 5. 发送HTTP请求到执行机
             String caseExecuteServiceUrl = "http://" + executorIp + ":8081/api/test-case-execution/receive";
             log.info("调用CaseExecuteService - URL: {}, 任务ID: {}", caseExecuteServiceUrl, taskId);
             
@@ -401,7 +434,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     if (code != null && code == 200) {
                         log.info("CaseExecuteService调用成功 - 任务ID: {}, 执行机IP: {}", taskId, executorIp);
                         
-                        // 4. 更新例次状态
+                        // 6. 更新例次状态
                         for (TestCaseExecutionInstance instance : instances) {
                             testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "RUNNING", taskId);
                         }
@@ -426,6 +459,131 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         } catch (Exception e) {
             log.error("为执行机创建执行任务异常 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
             return false;
+        }
+    }
+    
+    /**
+     * 获取执行机关联的UE全部信息
+     * 
+     * @param executorIp 执行机IP
+     * @return UE信息列表
+     */
+    private List<TestCaseExecutionRequest.UeInfo> getExecutorUeList(String executorIp) {
+        List<TestCaseExecutionRequest.UeInfo> ueList = new ArrayList<>();
+        
+        try {
+            // 1. 根据执行机IP获取执行机信息
+            QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
+            executorQuery.eq("ip_address", executorIp);
+            Executor executor = executorService.getOne(executorQuery);
+            
+            if (executor == null) {
+                log.warn("未找到执行机信息 - 执行机IP: {}", executorIp);
+                return ueList;
+            }
+            
+            // 2. 获取执行机关联的逻辑环境
+            QueryWrapper<LogicEnvironment> envQuery = new QueryWrapper<>();
+            envQuery.eq("executor_id", executor.getId());
+            List<LogicEnvironment> logicEnvironments = logicEnvironmentService.list(envQuery);
+            
+            if (logicEnvironments.isEmpty()) {
+                log.warn("执行机未关联逻辑环境 - 执行机IP: {}, 执行机ID: {}", executorIp, executor.getId());
+                return ueList;
+            }
+            
+            // 3. 获取所有逻辑环境关联的UE
+            Set<Long> allUeIds = new HashSet<>();
+            for (LogicEnvironment logicEnvironment : logicEnvironments) {
+                QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+                ueQuery.eq("logic_environment_id", logicEnvironment.getId());
+                List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+                
+                for (LogicEnvironmentUe logicEnvironmentUe : logicEnvironmentUes) {
+                    allUeIds.add(logicEnvironmentUe.getUeId());
+                }
+            }
+            
+            if (allUeIds.isEmpty()) {
+                log.warn("执行机关联的逻辑环境未关联UE - 执行机IP: {}", executorIp);
+                return ueList;
+            }
+            
+            // 4. 获取UE详细信息
+            QueryWrapper<Ue> ueQuery = new QueryWrapper<>();
+            ueQuery.in("id", allUeIds);
+            List<Ue> ues = ueService.list(ueQuery);
+            
+            // 5. 转换为DTO格式
+            for (Ue ue : ues) {
+                TestCaseExecutionRequest.UeInfo ueInfo = new TestCaseExecutionRequest.UeInfo();
+                ueInfo.setId(ue.getId());
+                ueInfo.setUeId(ue.getUeId());
+                ueInfo.setName(ue.getName());
+                ueInfo.setPurpose(ue.getPurpose());
+                ueInfo.setNetworkTypeId(ue.getNetworkTypeId());
+                ueInfo.setBrand(ue.getBrand());
+                ueInfo.setPort(ue.getPort());
+                ueInfo.setDescription(ue.getDescription());
+                ueInfo.setStatus(ue.getStatus());
+                
+                // 获取网络类型名称
+                NetworkType networkType = networkTypeService.getById(ue.getNetworkTypeId());
+                if (networkType != null) {
+                    ueInfo.setNetworkTypeName(networkType.getName());
+                } else {
+                    ueInfo.setNetworkTypeName("未知网络类型");
+                }
+                
+                ueList.add(ueInfo);
+            }
+            
+            log.info("获取执行机关联的UE信息成功 - 执行机IP: {}, UE数量: {}", executorIp, ueList.size());
+            
+        } catch (Exception e) {
+            log.error("获取执行机关联的UE信息失败 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+        }
+        
+        return ueList;
+    }
+    
+    /**
+     * 获取采集策略的所有信息
+     * 
+     * @param collectStrategyId 采集策略ID
+     * @return 采集策略信息
+     */
+    private TestCaseExecutionRequest.CollectStrategyInfo getCollectStrategyInfo(Long collectStrategyId) {
+        if (collectStrategyId == null) {
+            log.warn("采集策略ID为空");
+            return null;
+        }
+        
+        try {
+            CollectStrategy collectStrategy = collectStrategyService.getById(collectStrategyId);
+            if (collectStrategy == null) {
+                log.warn("采集策略不存在 - 策略ID: {}", collectStrategyId);
+                return null;
+            }
+            
+            TestCaseExecutionRequest.CollectStrategyInfo strategyInfo = new TestCaseExecutionRequest.CollectStrategyInfo();
+            strategyInfo.setId(collectStrategy.getId());
+            strategyInfo.setName(collectStrategy.getName());
+            strategyInfo.setCollectCount(collectStrategy.getCollectCount());
+            strategyInfo.setTestCaseSetId(collectStrategy.getTestCaseSetId());
+            strategyInfo.setBusinessCategory(collectStrategy.getBusinessCategory());
+            strategyInfo.setApp(collectStrategy.getApp());
+            strategyInfo.setIntent(collectStrategy.getIntent());
+            strategyInfo.setCustomParams(collectStrategy.getCustomParams());
+            strategyInfo.setDescription(collectStrategy.getDescription());
+            strategyInfo.setStatus(collectStrategy.getStatus());
+            
+            log.info("获取采集策略信息成功 - 策略ID: {}, 策略名称: {}", collectStrategyId, collectStrategy.getName());
+            return strategyInfo;
+            
+        } catch (Exception e) {
+            log.error("获取采集策略信息失败 - 策略ID: {}, 错误: {}", collectStrategyId, e.getMessage(), e);
+            return null;
         }
     }
 }

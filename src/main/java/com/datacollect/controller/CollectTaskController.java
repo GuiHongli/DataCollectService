@@ -442,10 +442,33 @@ public class CollectTaskController {
             }
             log.info("获取到采集策略: {} (用例集ID: {})", strategy.getName(), strategy.getTestCaseSetId());
             
-            // 2. 获取策略关联的用例集的所有测试用例
-            log.info("步骤2: 获取策略关联的测试用例 - 用例集ID: {}", strategy.getTestCaseSetId());
-            List<TestCase> testCases = testCaseService.getByTestCaseSetId(strategy.getTestCaseSetId());
-            log.info("获取到测试用例数量: {}", testCases.size());
+            // 2. 获取策略关联的用例集的所有测试用例（基于筛选条件）
+            log.info("步骤2: 获取策略关联的测试用例 - 用例集ID: {}, 筛选条件: 业务大类={}, APP={}", 
+                    strategy.getTestCaseSetId(), strategy.getBusinessCategory(), strategy.getApp());
+            List<TestCase> allTestCases = testCaseService.getByTestCaseSetId(strategy.getTestCaseSetId());
+            log.info("获取到原始测试用例数量: {}", allTestCases.size());
+            
+            // 根据策略的筛选条件过滤用例
+            List<TestCase> testCases = allTestCases.stream()
+                .filter(testCase -> {
+                    // 业务大类筛选
+                    if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
+                        if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
+                            return false;
+                        }
+                    }
+                    
+                    // APP筛选
+                    if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
+                        if (!strategy.getApp().equals(testCase.getApp())) {
+                            return false;
+                        }
+                    }
+                    
+                    return true;
+                })
+                .collect(java.util.stream.Collectors.toList());
+            log.info("筛选后的测试用例数量: {}", testCases.size());
             
             // 3. 提取测试用例中的环境组网列表A
             log.info("步骤3: 提取测试用例中的环境组网需求");
