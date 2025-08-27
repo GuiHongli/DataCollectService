@@ -3,12 +3,14 @@ package com.datacollect.service.impl;
 import com.datacollect.dto.CollectTaskRequest;
 import com.datacollect.dto.TestCaseExecutionRequest;
 import com.datacollect.entity.CollectTask;
+import com.datacollect.entity.CollectStrategy;
 import com.datacollect.entity.TestCase;
 import com.datacollect.entity.TestCaseSet;
 import com.datacollect.entity.TestCaseExecutionInstance;
 import com.datacollect.entity.dto.LogicEnvironmentDTO;
 import com.datacollect.service.CollectTaskProcessService;
 import com.datacollect.service.CollectTaskService;
+import com.datacollect.service.CollectStrategyService;
 import com.datacollect.service.TestCaseExecutionInstanceService;
 import com.datacollect.service.TestCaseService;
 import com.datacollect.service.TestCaseSetService;
@@ -40,6 +42,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private CollectTaskService collectTaskService;
     
     @Autowired
+    private CollectStrategyService collectStrategyService;
+    
+    @Autowired
     private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
     
     @Autowired
@@ -69,11 +74,44 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             Long collectTaskId = collectTaskService.createCollectTask(request);
             log.info("采集任务创建成功 - 任务ID: {}", collectTaskId);
             
-            // 2. 获取采集策略关联的测试用例
+            // 2. 获取采集策略关联的测试用例（基于筛选条件）
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
-            List<TestCase> testCases = testCaseService.getByTestCaseSetId(collectTask.getTestCaseSetId());
-            List<Long> testCaseIds = testCases.stream().map(TestCase::getId).collect(java.util.stream.Collectors.toList());
-            log.info("获取到测试用例数量: {} - 任务ID: {}", testCaseIds.size(), collectTaskId);
+            
+            // 获取策略信息
+            CollectStrategy strategy = collectStrategyService.getById(collectTask.getCollectStrategyId());
+            if (strategy == null) {
+                log.error("采集策略不存在 - 策略ID: {}", collectTask.getCollectStrategyId());
+                throw new RuntimeException("采集策略不存在");
+            }
+            
+            // 获取用例集中的所有用例
+            List<TestCase> allTestCases = testCaseService.getByTestCaseSetId(collectTask.getTestCaseSetId());
+            
+            // 根据策略的筛选条件过滤用例
+            List<TestCase> filteredTestCases = allTestCases.stream()
+                .filter(testCase -> {
+                    // 业务大类筛选
+                    if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
+                        if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
+                            return false;
+                        }
+                    }
+                    
+                    // APP筛选
+                    if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
+                        if (!strategy.getApp().equals(testCase.getApp())) {
+                            return false;
+                        }
+                    }
+                    
+                    return true;
+                })
+                .collect(java.util.stream.Collectors.toList());
+            
+            List<Long> testCaseIds = filteredTestCases.stream().map(TestCase::getId).collect(java.util.stream.Collectors.toList());
+            log.info("获取到筛选后的测试用例数量: {} (原始数量: {}) - 任务ID: {}, 筛选条件: 业务大类={}, APP={}", 
+                    testCaseIds.size(), allTestCases.size(), collectTaskId, 
+                    strategy.getBusinessCategory(), strategy.getApp());
             
             // 3. 组装用例执行例次列表
             List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount());
