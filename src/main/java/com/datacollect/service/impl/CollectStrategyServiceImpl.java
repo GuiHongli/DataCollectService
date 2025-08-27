@@ -137,6 +137,8 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
                         testCaseInfo.setName(testCase.getName());
                         testCaseInfo.setNumber(testCase.getNumber());
                         testCaseInfo.setLogicNetwork(testCase.getLogicNetwork());
+                        testCaseInfo.setBusinessCategory(testCase.getBusinessCategory());
+                        testCaseInfo.setApp(testCase.getApp());
                         testCaseInfo.setTestSteps(testCase.getTestSteps());
                         testCaseInfo.setExpectedResult(testCase.getExpectedResult());
                         return testCaseInfo;

@@ -139,4 +139,10 @@ public class CollectTask {
      * 更新时间
      */
     private LocalDateTime updateTime;
+    
+    /**
+     * 自定义参数列表（JSON格式）
+     */
+    @TableField("custom_params")
+    private String customParams;
 }

@@ -39,6 +39,8 @@ public class CollectStrategyDTO extends CollectStrategy {
         private String name;
         private String number;
         private String logicNetwork;
+        private String businessCategory;
+        private String app;
         private String testSteps;
         private String expectedResult;
     }

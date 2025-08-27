@@ -57,6 +57,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         collectTask.setSuccessTestCaseCount(0);
         collectTask.setFailedTestCaseCount(0);
         
+        // 设置自定义参数
+        collectTask.setCustomParams(request.getCustomParams());
+        
         LocalDateTime now = LocalDateTime.now();
         collectTask.setCreateTime(now);
         collectTask.setUpdateTime(now);

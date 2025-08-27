@@ -63,4 +63,9 @@ public class CollectTaskRequest {
      */
     @NotNull(message = "逻辑环境列表不能为空")
     private List<Long> logicEnvironmentIds;
+    
+    /**
+     * 自定义参数列表（JSON格式）
+     */
+    private String customParams;
 }
