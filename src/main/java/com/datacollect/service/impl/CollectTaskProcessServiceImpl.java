@@ -390,7 +390,18 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             log.info("获取采集策略信息 - 策略ID: {}, 策略名称: {}", collectStrategyId, 
                     collectStrategyInfo != null ? collectStrategyInfo.getName() : "未知");
             
-            // 4. 构建HTTP请求
+            // 4. 获取采集任务的自定义参数
+            String taskCustomParams = null;
+            if (!instances.isEmpty()) {
+                Long collectTaskId = instances.get(0).getCollectTaskId();
+                CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                if (collectTask != null) {
+                    taskCustomParams = collectTask.getCustomParams();
+                    log.info("获取采集任务自定义参数 - 任务ID: {}, 自定义参数: {}", collectTaskId, taskCustomParams);
+                }
+            }
+            
+            // 5. 构建HTTP请求
             TestCaseExecutionRequest request = new TestCaseExecutionRequest();
             request.setTaskId(taskId);
             request.setExecutorIp(executorIp);
@@ -399,6 +410,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             request.setTestCaseList(testCaseList);
             request.setUeList(ueList);
             request.setCollectStrategyInfo(collectStrategyInfo);
+            request.setTaskCustomParams(taskCustomParams);
             request.setResultReportUrl(dataCollectServiceBaseUrl + "/api/test-result/report");
             
             // 使用gohttpserver地址作为日志上报URL，这样CaseExecuteService就可以上传日志文件到gohttpserver
