@@ -32,8 +32,8 @@ public class Ue {
     @TableField("network_type_id")
     private Long networkTypeId;
 
-    @TableField("brand")
-    private String brand;
+    @TableField("vendor")
+    private String vendor;
 
     @TableField("port")
     private String port;

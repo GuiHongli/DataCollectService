@@ -91,15 +91,15 @@ public class UeController {
         return Result.success(options);
     }
 
-    @GetMapping("/brands")
-    public Result<List<Map<String, String>>> getBrands() {
-        List<Map<String, String>> brands = new ArrayList<>();
-        for (UeBrandEnum brand : UeBrandEnum.values()) {
-            Map<String, String> brandMap = new HashMap<>();
-            brandMap.put("code", brand.getCode());
-            brandMap.put("name", brand.getName());
-            brands.add(brandMap);
+    @GetMapping("/vendors")
+    public Result<List<Map<String, String>>> getVendors() {
+        List<Map<String, String>> vendors = new ArrayList<>();
+        for (UeBrandEnum vendor : UeBrandEnum.values()) {
+            Map<String, String> vendorMap = new HashMap<>();
+            vendorMap.put("code", vendor.getCode());
+            vendorMap.put("name", vendor.getName());
+            vendors.add(vendorMap);
         }
-        return Result.success(brands);
+        return Result.success(vendors);
     }
 }

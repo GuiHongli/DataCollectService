@@ -64,10 +64,10 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             // 处理网络类型名称，如果不存在则显示"未知网络类型"
             String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
             dto.setNetworkTypeName(networkTypeName != null ? networkTypeName : "未知网络类型");
-            dto.setBrand(ue.getBrand());
-            // 处理品牌名称
-            String brandName = ue.getBrand() != null ? UeBrandEnum.getNameByCode(ue.getBrand()) : null;
-            dto.setBrandName(brandName);
+            dto.setVendor(ue.getVendor());
+            // 处理厂商名称
+            String vendorName = ue.getVendor() != null ? UeBrandEnum.getNameByCode(ue.getVendor()) : null;
+            dto.setVendorName(vendorName);
             dto.setPort(ue.getPort());
             dto.setDescription(ue.getDescription());
             dto.setStatus(ue.getStatus());
@@ -114,9 +114,9 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
             option.put("networkTypeName", networkTypeName != null ? networkTypeName : "未知网络类型");
             
-            // 添加品牌和port信息
-            option.put("brand", ue.getBrand());
-            option.put("brandName", ue.getBrand() != null ? UeBrandEnum.getNameByCode(ue.getBrand()) : null);
+            // 添加厂商和port信息
+            option.put("vendor", ue.getVendor());
+            option.put("vendorName", ue.getVendor() != null ? UeBrandEnum.getNameByCode(ue.getVendor()) : null);
             option.put("port", ue.getPort());
             
             // 构建显示名称：UE名称 + UE ID + 用途

@@ -522,7 +522,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 ueInfo.setName(ue.getName());
                 ueInfo.setPurpose(ue.getPurpose());
                 ueInfo.setNetworkTypeId(ue.getNetworkTypeId());
-                ueInfo.setBrand(ue.getBrand());
+                ueInfo.setVendor(ue.getVendor());
                 ueInfo.setPort(ue.getPort());
                 ueInfo.setDescription(ue.getDescription());
                 ueInfo.setStatus(ue.getStatus());

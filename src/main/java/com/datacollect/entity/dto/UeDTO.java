@@ -13,8 +13,8 @@ public class UeDTO {
     private String purpose;
     private Long networkTypeId;
     private String networkTypeName; // 网络类型名称
-    private String brand;
-    private String brandName; // 品牌名称
+    private String vendor;
+    private String vendorName; // 厂商名称
     private String port;
     private String description;
     private Integer status;
