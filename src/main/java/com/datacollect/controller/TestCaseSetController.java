@@ -187,12 +187,12 @@ public class TestCaseSetController {
         try {
             if (goHttpServerClient.isAvailable()) {
                 goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), originalFilename);
-                log.info("文件已上传到gohttpserver: {}", goHttpServerUrl);
+                log.info("File uploaded to gohttpserver: {}", goHttpServerUrl);
             } else {
-                log.warn("gohttpserver不可用，跳过上传");
+                log.warn("gohttpserver is not available, skipping upload");
             }
         } catch (Exception e) {
-            log.error("上传到gohttpserver失败: {}", e.getMessage());
+            log.error("Failed to upload to gohttpserver: {}", e.getMessage());
             // 不影响主要流程，继续执行
         }
         return goHttpServerUrl;

@@ -123,7 +123,7 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
                 ueInfoList = createUeInfoList(ues);
             }
         } catch (Exception e) {
-            System.err.println("获取UE信息失败: " + e.getMessage());
+            log.error("Failed to get UE information: {}", e.getMessage());
         }
         return ueInfoList;
     }
@@ -137,7 +137,7 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
                 networkInfoList = createNetworkInfoList(networks);
             }
         } catch (Exception e) {
-            System.err.println("获取逻辑组网信息失败: " + e.getMessage());
+            log.error("Failed to get logic network information: {}", e.getMessage());
         }
         return networkInfoList;
     }

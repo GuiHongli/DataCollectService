@@ -1,15 +1,21 @@
 package com.datacollect.util;
 
-import com.datacollect.entity.TestCase;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.stereotype.Component;
-
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.stereotype.Component;
+
+import com.datacollect.entity.TestCase;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -150,7 +156,7 @@ public class ExcelParser {
             return cell.getDateCellValue().toString();
         }
         double numericValue = cell.getNumericCellValue();
-        if (numericValue == (long) numericValue) {
+        if (Math.abs(numericValue - (long) numericValue) < 1e-10) {
             return String.valueOf((long) numericValue);
         } else {
             return String.valueOf(numericValue);
