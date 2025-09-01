@@ -28,7 +28,25 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     @Override
     public Page<UeDTO> getUePageWithNetworkType(Integer current, Integer size, String name, String ueId, String purpose, Long networkTypeId) {
         // 1. 获取UE分页数据
+        Page<Ue> uePage = getUePage(current, size, name, ueId, purpose, networkTypeId);
+        
+        // 2. 获取所有网络类型数据
+        Map<Long, String> networkTypeMap = buildNetworkTypeMap();
+        
+        // 3. 转换为DTO
+        List<UeDTO> dtoList = convertToUeDTOs(uePage.getRecords(), networkTypeMap);
+        
+        // 4. 创建返回的分页对象
+        return createResultPage(current, size, dtoList, uePage.getTotal());
+    }
+
+    private Page<Ue> getUePage(Integer current, Integer size, String name, String ueId, String purpose, Long networkTypeId) {
         Page<Ue> page = new Page<>(current, size);
+        QueryWrapper<Ue> queryWrapper = buildUeQueryWrapper(name, ueId, purpose, networkTypeId);
+        return page(page, queryWrapper);
+    }
+
+    private QueryWrapper<Ue> buildUeQueryWrapper(String name, String ueId, String purpose, Long networkTypeId) {
         QueryWrapper<Ue> queryWrapper = new QueryWrapper<>();
         
         if (name != null && !name.isEmpty()) {
@@ -45,90 +63,125 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
         }
         
         queryWrapper.orderByDesc("create_time");
-        Page<Ue> uePage = page(page, queryWrapper);
-        
-        // 2. 获取所有网络类型数据
+        return queryWrapper;
+    }
+
+    private Map<Long, String> buildNetworkTypeMap() {
         List<NetworkType> networkTypes = networkTypeService.list();
-        Map<Long, String> networkTypeMap = networkTypes.stream()
+        return networkTypes.stream()
                 .collect(Collectors.toMap(NetworkType::getId, NetworkType::getName));
-        
-        // 3. 转换为DTO
+    }
+
+    private List<UeDTO> convertToUeDTOs(List<Ue> ues, Map<Long, String> networkTypeMap) {
         List<UeDTO> dtoList = new ArrayList<>();
-        for (Ue ue : uePage.getRecords()) {
-            UeDTO dto = new UeDTO();
-            dto.setId(ue.getId());
-            dto.setUeId(ue.getUeId());
-            dto.setName(ue.getName());
-            dto.setPurpose(ue.getPurpose());
-            dto.setNetworkTypeId(ue.getNetworkTypeId());
-            // 处理网络类型名称，如果不存在则显示"未知网络类型"
-            String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
-            dto.setNetworkTypeName(networkTypeName != null ? networkTypeName : "未知网络类型");
-            dto.setVendor(ue.getVendor());
-            // 处理厂商名称
-            String vendorName = ue.getVendor() != null ? UeBrandEnum.getNameByCode(ue.getVendor()) : null;
-            dto.setVendorName(vendorName);
-            dto.setPort(ue.getPort());
-            dto.setDescription(ue.getDescription());
-            dto.setStatus(ue.getStatus());
-            dto.setCreateBy(ue.getCreateBy());
-            dto.setUpdateBy(ue.getUpdateBy());
-            dto.setCreateTime(ue.getCreateTime());
-            dto.setUpdateTime(ue.getUpdateTime());
+        for (Ue ue : ues) {
+            UeDTO dto = createUeDTO(ue, networkTypeMap);
             dtoList.add(dto);
         }
+        return dtoList;
+    }
+
+    private UeDTO createUeDTO(Ue ue, Map<Long, String> networkTypeMap) {
+        UeDTO dto = new UeDTO();
+        dto.setId(ue.getId());
+        dto.setUeId(ue.getUeId());
+        dto.setName(ue.getName());
+        dto.setPurpose(ue.getPurpose());
+        dto.setNetworkTypeId(ue.getNetworkTypeId());
         
-        // 4. 创建返回的分页对象
+        setNetworkTypeName(dto, ue, networkTypeMap);
+        setVendorInfo(dto, ue);
+        
+        dto.setPort(ue.getPort());
+        dto.setDescription(ue.getDescription());
+        dto.setStatus(ue.getStatus());
+        dto.setCreateBy(ue.getCreateBy());
+        dto.setUpdateBy(ue.getUpdateBy());
+        dto.setCreateTime(ue.getCreateTime());
+        dto.setUpdateTime(ue.getUpdateTime());
+        
+        return dto;
+    }
+
+    private void setNetworkTypeName(UeDTO dto, Ue ue, Map<Long, String> networkTypeMap) {
+        String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
+        dto.setNetworkTypeName(networkTypeName != null ? networkTypeName : "未知网络类型");
+    }
+
+    private void setVendorInfo(UeDTO dto, Ue ue) {
+        dto.setVendor(ue.getVendor());
+        String vendorName = ue.getVendor() != null ? UeBrandEnum.getNameByCode(ue.getVendor()) : null;
+        dto.setVendorName(vendorName);
+    }
+
+    private Page<UeDTO> createResultPage(Integer current, Integer size, List<UeDTO> dtoList, Long total) {
         Page<UeDTO> resultPage = new Page<>(current, size);
         resultPage.setRecords(dtoList);
-        resultPage.setTotal(uePage.getTotal());
-        
+        resultPage.setTotal(total);
         return resultPage;
     }
     
     @Override
     public List<Map<String, Object>> getUeOptionsForSelect() {
-        List<Map<String, Object>> options = new ArrayList<>();
-        
         // 获取所有UE数据
+        List<Ue> ues = getEnabledUes();
+        
+        // 获取所有网络类型数据
+        Map<Long, String> networkTypeMap = buildNetworkTypeMap();
+        
+        // 为每个UE构建选项
+        return buildUeOptions(ues, networkTypeMap);
+    }
+
+    private List<Ue> getEnabledUes() {
         QueryWrapper<Ue> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1); // 只获取启用的UE
         queryWrapper.orderByAsc("name");
-        List<Ue> ues = list(queryWrapper);
+        return list(queryWrapper);
+    }
+
+    private List<Map<String, Object>> buildUeOptions(List<Ue> ues, Map<Long, String> networkTypeMap) {
+        List<Map<String, Object>> options = new ArrayList<>();
         
-        // 获取所有网络类型数据
-        List<NetworkType> networkTypes = networkTypeService.list();
-        Map<Long, String> networkTypeMap = networkTypes.stream()
-                .collect(Collectors.toMap(NetworkType::getId, NetworkType::getName));
-        
-        // 为每个UE构建选项
         for (Ue ue : ues) {
-            Map<String, Object> option = new HashMap<>();
-            option.put("id", ue.getId());
-            option.put("name", ue.getName());
-            option.put("ueId", ue.getUeId());
-            option.put("purpose", ue.getPurpose());
-            option.put("networkTypeId", ue.getNetworkTypeId());
-            
-            // 获取网络类型名称
-            String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
-            option.put("networkTypeName", networkTypeName != null ? networkTypeName : "未知网络类型");
-            
-            // 添加厂商和port信息
-            option.put("vendor", ue.getVendor());
-            option.put("vendorName", ue.getVendor() != null ? UeBrandEnum.getNameByCode(ue.getVendor()) : null);
-            option.put("port", ue.getPort());
-            
-            // 构建显示名称：UE名称 + UE ID + 用途
-            String displayName = String.format("%s (%s) - %s", 
-                ue.getName(), 
-                ue.getUeId(), 
-                ue.getPurpose());
-            option.put("displayName", displayName);
-            
+            Map<String, Object> option = createUeOption(ue, networkTypeMap);
             options.add(option);
         }
         
         return options;
+    }
+
+    private Map<String, Object> createUeOption(Ue ue, Map<Long, String> networkTypeMap) {
+        Map<String, Object> option = new HashMap<>();
+        option.put("id", ue.getId());
+        option.put("name", ue.getName());
+        option.put("ueId", ue.getUeId());
+        option.put("purpose", ue.getPurpose());
+        option.put("networkTypeId", ue.getNetworkTypeId());
+        
+        setNetworkTypeInfo(option, ue, networkTypeMap);
+        setVendorAndPortInfo(option, ue);
+        setDisplayName(option, ue);
+        
+        return option;
+    }
+
+    private void setNetworkTypeInfo(Map<String, Object> option, Ue ue, Map<Long, String> networkTypeMap) {
+        String networkTypeName = networkTypeMap.get(ue.getNetworkTypeId());
+        option.put("networkTypeName", networkTypeName != null ? networkTypeName : "未知网络类型");
+    }
+
+    private void setVendorAndPortInfo(Map<String, Object> option, Ue ue) {
+        option.put("vendor", ue.getVendor());
+        option.put("vendorName", ue.getVendor() != null ? UeBrandEnum.getNameByCode(ue.getVendor()) : null);
+        option.put("port", ue.getPort());
+    }
+
+    private void setDisplayName(Map<String, Object> option, Ue ue) {
+        String displayName = String.format("%s (%s) - %s", 
+            ue.getName(), 
+            ue.getUeId(), 
+            ue.getPurpose());
+        option.put("displayName", displayName);
     }
 }

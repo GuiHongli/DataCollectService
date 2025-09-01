@@ -383,53 +383,45 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         return true;
     }
     
-    /**
-     * 为执行机创建执行任务
-     */
     private boolean createExecutionTaskForExecutor(String executorIp, List<TestCaseExecutionInstance> instances) {
         try {
             log.info("为执行机创建执行任务 - 执行机IP: {}, 例次数量: {}", executorIp, instances.size());
             
-            // 检查任务状态，如果任务已停止则不再继续下发
             if (!checkTaskStatus(instances)) {
                 log.warn("任务已停止，不再为执行机创建执行任务 - 执行机IP: {}", executorIp);
                 return false;
             }
             
-            // 1. 构建请求参数
-            String taskId = "TASK_" + System.currentTimeMillis() + "_" + executorIp.replace(".", "_");
-            
-            // 获取用例集和策略信息
+            String taskId = generateTaskId(executorIp);
             TestCaseSetInfo testCaseSetInfo = getTestCaseSetInfo(instances);
             if (!validateTestCaseSetInfo(testCaseSetInfo, executorIp)) {
                 return false;
             }
             
-            // 构建用例列表
             List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = buildTestCaseList(instances);
-            
-            // 2. 获取执行机关联的UE全部信息
             List<TestCaseExecutionRequest.UeInfo> ueList = getExecutorUeList(executorIp);
-            log.info("获取执行机关联的UE信息 - 执行机IP: {}, UE数量: {}", executorIp, ueList.size());
-            
-            // 3. 获取采集策略的所有信息
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
-            log.info("获取采集策略信息 - 策略ID: {}, 策略名称: {}", testCaseSetInfo.getCollectStrategyId(), 
-                    collectStrategyInfo != null ? collectStrategyInfo.getName() : "未知");
-            
-            // 4. 获取采集任务的自定义参数
             String taskCustomParams = getTaskCustomParams(instances);
             
-            // 5. 构建HTTP请求
-            TestCaseExecutionRequest request = buildExecutionRequest(taskId, executorIp, testCaseSetInfo, testCaseList, ueList, collectStrategyInfo, taskCustomParams);
+            logExecutorInfo(executorIp, ueList, collectStrategyInfo, testCaseSetInfo.getCollectStrategyId());
             
-            // 6. 发送HTTP请求到执行机
+            TestCaseExecutionRequest request = buildExecutionRequest(taskId, executorIp, testCaseSetInfo, testCaseList, ueList, collectStrategyInfo, taskCustomParams);
             return sendExecutionRequest(request, instances, taskId, executorIp);
             
         } catch (Exception e) {
             log.error("为执行机创建执行任务异常 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
             return false;
         }
+    }
+
+    private String generateTaskId(String executorIp) {
+        return "TASK_" + System.currentTimeMillis() + "_" + executorIp.replace(".", "_");
+    }
+
+    private void logExecutorInfo(String executorIp, List<TestCaseExecutionRequest.UeInfo> ueList, TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, Long collectStrategyId) {
+        log.info("获取执行机关联的UE信息 - 执行机IP: {}, UE数量: {}", executorIp, ueList.size());
+        log.info("获取采集策略信息 - 策略ID: {}, 策略名称: {}", collectStrategyId, 
+                collectStrategyInfo != null ? collectStrategyInfo.getName() : "未知");
     }
 
     /**
@@ -454,31 +446,41 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private TestCaseSetInfo getTestCaseSetInfo(List<TestCaseExecutionInstance> instances) {
         TestCaseSetInfo info = new TestCaseSetInfo();
         
-        if (!instances.isEmpty()) {
-            // 从第一个实例获取采集任务ID，然后查询用例集信息
-            Long collectTaskId = instances.get(0).getCollectTaskId();
-            CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
-            if (collectTask != null) {
-                info.setTestCaseSetId(collectTask.getTestCaseSetId());
-                info.setCollectStrategyId(collectTask.getCollectStrategyId());
-                
-                // 获取用例集详细信息
-                TestCaseSet testCaseSet = testCaseSetService.getById(collectTask.getTestCaseSetId());
-                if (testCaseSet != null) {
-                    // 优先使用gohttpserver URL，如果没有则使用本地文件路径
-                    String testCaseSetPath = testCaseSet.getGohttpserverUrl();
-                    if (testCaseSetPath == null || testCaseSetPath.trim().isEmpty()) {
-                        testCaseSetPath = testCaseSet.getFilePath();
-                    }
-                    info.setTestCaseSetPath(testCaseSetPath);
-                    log.info("获取到用例集路径 - 用例集ID: {}, 路径: {}", collectTask.getTestCaseSetId(), testCaseSetPath);
-                } else {
-                    log.warn("用例集不存在 - 用例集ID: {}", collectTask.getTestCaseSetId());
-                }
-            }
+        if (instances.isEmpty()) {
+            return info;
         }
         
+        Long collectTaskId = instances.get(0).getCollectTaskId();
+        CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+        if (collectTask == null) {
+            return info;
+        }
+        
+        info.setTestCaseSetId(collectTask.getTestCaseSetId());
+        info.setCollectStrategyId(collectTask.getCollectStrategyId());
+        
+        enrichTestCaseSetPath(info, collectTask.getTestCaseSetId());
         return info;
+    }
+
+    private void enrichTestCaseSetPath(TestCaseSetInfo info, Long testCaseSetId) {
+        TestCaseSet testCaseSet = testCaseSetService.getById(testCaseSetId);
+        if (testCaseSet == null) {
+            log.warn("用例集不存在 - 用例集ID: {}", testCaseSetId);
+            return;
+        }
+        
+        String testCaseSetPath = determineTestCaseSetPath(testCaseSet);
+        info.setTestCaseSetPath(testCaseSetPath);
+        log.info("获取到用例集路径 - 用例集ID: {}, 路径: {}", testCaseSetId, testCaseSetPath);
+    }
+
+    private String determineTestCaseSetPath(TestCaseSet testCaseSet) {
+        String testCaseSetPath = testCaseSet.getGohttpserverUrl();
+        if (testCaseSetPath == null || testCaseSetPath.trim().isEmpty()) {
+            testCaseSetPath = testCaseSet.getFilePath();
+        }
+        return testCaseSetPath;
     }
 
     /**
@@ -716,29 +718,36 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         List<Ue> ues = ueService.list(ueQuery);
         
         for (Ue ue : ues) {
-            TestCaseExecutionRequest.UeInfo ueInfo = new TestCaseExecutionRequest.UeInfo();
-            ueInfo.setId(ue.getId());
-            ueInfo.setUeId(ue.getUeId());
-            ueInfo.setName(ue.getName());
-            ueInfo.setPurpose(ue.getPurpose());
-            ueInfo.setNetworkTypeId(ue.getNetworkTypeId());
-            ueInfo.setVendor(ue.getVendor());
-            ueInfo.setPort(ue.getPort());
-            ueInfo.setDescription(ue.getDescription());
-            ueInfo.setStatus(ue.getStatus());
-            
-            // 获取网络类型名称
-            NetworkType networkType = networkTypeService.getById(ue.getNetworkTypeId());
-            if (networkType != null) {
-                ueInfo.setNetworkTypeName(networkType.getName());
-            } else {
-                ueInfo.setNetworkTypeName("未知网络类型");
-            }
-            
+            TestCaseExecutionRequest.UeInfo ueInfo = createUeInfo(ue);
             ueList.add(ueInfo);
         }
         
         return ueList;
+    }
+
+    private TestCaseExecutionRequest.UeInfo createUeInfo(Ue ue) {
+        TestCaseExecutionRequest.UeInfo ueInfo = new TestCaseExecutionRequest.UeInfo();
+        ueInfo.setId(ue.getId());
+        ueInfo.setUeId(ue.getUeId());
+        ueInfo.setName(ue.getName());
+        ueInfo.setPurpose(ue.getPurpose());
+        ueInfo.setNetworkTypeId(ue.getNetworkTypeId());
+        ueInfo.setVendor(ue.getVendor());
+        ueInfo.setPort(ue.getPort());
+        ueInfo.setDescription(ue.getDescription());
+        ueInfo.setStatus(ue.getStatus());
+        
+        setNetworkTypeName(ueInfo, ue.getNetworkTypeId());
+        return ueInfo;
+    }
+
+    private void setNetworkTypeName(TestCaseExecutionRequest.UeInfo ueInfo, Long networkTypeId) {
+        NetworkType networkType = networkTypeService.getById(networkTypeId);
+        if (networkType != null) {
+            ueInfo.setNetworkTypeName(networkType.getName());
+        } else {
+            ueInfo.setNetworkTypeName("未知网络类型");
+        }
     }
     
     /**
@@ -760,18 +769,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return null;
             }
             
-            TestCaseExecutionRequest.CollectStrategyInfo strategyInfo = new TestCaseExecutionRequest.CollectStrategyInfo();
-            strategyInfo.setId(collectStrategy.getId());
-            strategyInfo.setName(collectStrategy.getName());
-            strategyInfo.setCollectCount(collectStrategy.getCollectCount());
-            strategyInfo.setTestCaseSetId(collectStrategy.getTestCaseSetId());
-            strategyInfo.setBusinessCategory(collectStrategy.getBusinessCategory());
-            strategyInfo.setApp(collectStrategy.getApp());
-            strategyInfo.setIntent(collectStrategy.getIntent());
-            strategyInfo.setCustomParams(collectStrategy.getCustomParams());
-            strategyInfo.setDescription(collectStrategy.getDescription());
-            strategyInfo.setStatus(collectStrategy.getStatus());
-            
+            TestCaseExecutionRequest.CollectStrategyInfo strategyInfo = createCollectStrategyInfo(collectStrategy);
             log.info("获取采集策略信息成功 - 策略ID: {}, 策略名称: {}", collectStrategyId, collectStrategy.getName());
             return strategyInfo;
             
@@ -779,5 +777,20 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             log.error("获取采集策略信息失败 - 策略ID: {}, 错误: {}", collectStrategyId, e.getMessage(), e);
             return null;
         }
+    }
+
+    private TestCaseExecutionRequest.CollectStrategyInfo createCollectStrategyInfo(CollectStrategy collectStrategy) {
+        TestCaseExecutionRequest.CollectStrategyInfo strategyInfo = new TestCaseExecutionRequest.CollectStrategyInfo();
+        strategyInfo.setId(collectStrategy.getId());
+        strategyInfo.setName(collectStrategy.getName());
+        strategyInfo.setCollectCount(collectStrategy.getCollectCount());
+        strategyInfo.setTestCaseSetId(collectStrategy.getTestCaseSetId());
+        strategyInfo.setBusinessCategory(collectStrategy.getBusinessCategory());
+        strategyInfo.setApp(collectStrategy.getApp());
+        strategyInfo.setIntent(collectStrategy.getIntent());
+        strategyInfo.setCustomParams(collectStrategy.getCustomParams());
+        strategyInfo.setDescription(collectStrategy.getDescription());
+        strategyInfo.setStatus(collectStrategy.getStatus());
+        return strategyInfo;
     }
 }

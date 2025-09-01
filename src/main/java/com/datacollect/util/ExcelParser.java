@@ -15,6 +15,15 @@ import java.util.List;
 @Component
 public class ExcelParser {
 
+    private static final int COL_NAME = 0;
+    private static final int COL_NUMBER = 1;
+    private static final int COL_LOGIC_NETWORK = 2;
+    private static final int COL_BUSINESS_CATEGORY = 3;
+    private static final int COL_APP = 4;
+    private static final int COL_TEST_STEPS = 5;
+    private static final int COL_EXPECTED_RESULT = 6;
+    private static final int EMPTY_ROW_CHECK_COLUMNS = 7; // 与解析列保持一致
+
     /**
      * 解析Excel文件中的测试用例数据
      * @param filePath Excel文件路径
@@ -32,7 +41,9 @@ public class ExcelParser {
             // 跳过表头行，从第二行开始读取数据
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
-                if (row == null) continue;
+                if (row == null) {
+                    continue;
+                }
                 
                 TestCase testCase = parseRow(row, testCaseSetId);
                 if (testCase != null) {
@@ -53,32 +64,12 @@ public class ExcelParser {
      */
     private TestCase parseRow(Row row, Long testCaseSetId) {
         try {
-            // 检查是否为空行
             if (isEmptyRow(row)) {
                 return null;
             }
             
-            TestCase testCase = new TestCase();
-            testCase.setTestCaseSetId(testCaseSetId);
-            
-            // 解析各列数据
-            // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_测试步骤 用例_预期结果
-            testCase.setName(getCellValue(row.getCell(0)));
-            testCase.setNumber(getCellValue(row.getCell(1)));
-            testCase.setLogicNetwork(getCellValue(row.getCell(2)));
-            testCase.setBusinessCategory(getCellValue(row.getCell(3)));
-            testCase.setApp(getCellValue(row.getCell(4)));
-            testCase.setTestSteps(getCellValue(row.getCell(5)));
-            testCase.setExpectedResult(getCellValue(row.getCell(6)));
-            
-            // 验证必填字段
-            if (testCase.getName() == null || testCase.getName().trim().isEmpty()) {
-                log.warn("第{}行用例名称为空，跳过该行", row.getRowNum() + 1);
-                return null;
-            }
-            
-            if (testCase.getNumber() == null || testCase.getNumber().trim().isEmpty()) {
-                log.warn("第{}行用例编号为空，跳过该行", row.getRowNum() + 1);
+            TestCase testCase = buildTestCaseFromRow(row, testCaseSetId);
+            if (!validateRequiredFields(testCase, row)) {
                 return null;
             }
             
@@ -88,6 +79,38 @@ public class ExcelParser {
             log.error("解析第{}行数据时发生错误: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 根据行构建测试用例实体
+     */
+    private TestCase buildTestCaseFromRow(Row row, Long testCaseSetId) {
+        TestCase testCase = new TestCase();
+        testCase.setTestCaseSetId(testCaseSetId);
+        // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_测试步骤 用例_预期结果
+        testCase.setName(getCellValue(row.getCell(COL_NAME)));
+        testCase.setNumber(getCellValue(row.getCell(COL_NUMBER)));
+        testCase.setLogicNetwork(getCellValue(row.getCell(COL_LOGIC_NETWORK)));
+        testCase.setBusinessCategory(getCellValue(row.getCell(COL_BUSINESS_CATEGORY)));
+        testCase.setApp(getCellValue(row.getCell(COL_APP)));
+        testCase.setTestSteps(getCellValue(row.getCell(COL_TEST_STEPS)));
+        testCase.setExpectedResult(getCellValue(row.getCell(COL_EXPECTED_RESULT)));
+        return testCase;
+    }
+
+    /**
+     * 验证必填字段
+     */
+    private boolean validateRequiredFields(TestCase testCase, Row row) {
+        if (testCase.getName() == null || testCase.getName().trim().isEmpty()) {
+            log.warn("第{}行用例名称为空，跳过该行", row.getRowNum() + 1);
+            return false;
+        }
+        if (testCase.getNumber() == null || testCase.getNumber().trim().isEmpty()) {
+            log.warn("第{}行用例编号为空，跳过该行", row.getRowNum() + 1);
+            return false;
+        }
+        return true;
     }
     
     /**
@@ -101,26 +124,36 @@ public class ExcelParser {
         }
         
         switch (cell.getCellType()) {
-            case STRING:
+            case STRING: {
                 return cell.getStringCellValue().trim();
-            case NUMERIC:
-                if (DateUtil.isCellDateFormatted(cell)) {
-                    return cell.getDateCellValue().toString();
-                } else {
-                    // 避免科学计数法，转为整数
-                    double numericValue = cell.getNumericCellValue();
-                    if (numericValue == (long) numericValue) {
-                        return String.valueOf((long) numericValue);
-                    } else {
-                        return String.valueOf(numericValue);
-                    }
-                }
-            case BOOLEAN:
+            }
+            case NUMERIC: {
+                return formatNumericCellValue(cell);
+            }
+            case BOOLEAN: {
                 return String.valueOf(cell.getBooleanCellValue());
-            case FORMULA:
+            }
+            case FORMULA: {
                 return cell.getCellFormula();
-            default:
+            }
+            default: {
                 return null;
+            }
+        }
+    }
+
+    /**
+     * 数值单元格转字符串，避免科学计数法
+     */
+    private String formatNumericCellValue(Cell cell) {
+        if (DateUtil.isCellDateFormatted(cell)) {
+            return cell.getDateCellValue().toString();
+        }
+        double numericValue = cell.getNumericCellValue();
+        if (numericValue == (long) numericValue) {
+            return String.valueOf((long) numericValue);
+        } else {
+            return String.valueOf(numericValue);
         }
     }
     
@@ -130,9 +163,11 @@ public class ExcelParser {
      * @return 是否为空行
      */
     private boolean isEmptyRow(Row row) {
-        if (row == null) return true;
+        if (row == null) {
+            return true;
+        }
         
-        for (int i = 0; i < 5; i++) { // 检查前5列
+        for (int i = 0; i < EMPTY_ROW_CHECK_COLUMNS; i++) {
             Cell cell = row.getCell(i);
             if (cell != null) {
                 String value = getCellValue(cell);

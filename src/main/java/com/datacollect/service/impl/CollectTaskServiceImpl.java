@@ -84,31 +84,40 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     public boolean updateTaskStatus(Long id, String status) {
         log.info("更新任务状态 - 任务ID: {}, 状态: {}", id, status);
         
-        // 验证状态值
         if (!isValidStatus(status)) {
             log.error("无效的任务状态: {} - 任务ID: {}", status, id);
             return false;
         }
         
+        UpdateWrapper<CollectTask> updateWrapper = createBaseUpdateWrapper(id);
+        updateWrapper.set("status", status);
+        setTimeFieldsByStatus(updateWrapper, status);
+        
+        return executeUpdate(updateWrapper, id, status);
+    }
+
+    private UpdateWrapper<CollectTask> createBaseUpdateWrapper(Long id) {
         UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
         updateWrapper.eq("id", id);
-        updateWrapper.set("status", status);
         updateWrapper.set("update_time", LocalDateTime.now());
-        
-        // 根据状态设置相应的时间字段
+        return updateWrapper;
+    }
+
+    private void setTimeFieldsByStatus(UpdateWrapper<CollectTask> updateWrapper, String status) {
         if ("RUNNING".equals(status)) {
             updateWrapper.set("start_time", LocalDateTime.now());
         } else if ("COMPLETED".equals(status) || "STOPPED".equals(status) || "PAUSED".equals(status)) {
             updateWrapper.set("end_time", LocalDateTime.now());
         }
-        
+    }
+
+    private boolean executeUpdate(UpdateWrapper<CollectTask> updateWrapper, Long id, String status) {
         boolean success = update(updateWrapper);
         if (success) {
             log.info("任务状态更新成功 - 任务ID: {}, 状态: {}", id, status);
         } else {
             log.error("任务状态更新失败 - 任务ID: {}, 状态: {}", id, status);
         }
-        
         return success;
     }
     

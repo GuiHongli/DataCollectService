@@ -78,8 +78,14 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
      */
     private CollectStrategyDTO convertToDTO(CollectStrategy strategy) {
         CollectStrategyDTO dto = new CollectStrategyDTO();
-        
-        // 复制基本属性
+        copyBasicFields(strategy, dto);
+        setIntentName(strategy, dto);
+        setCustomParams(strategy, dto);
+        enrichTestCaseSetInfo(strategy, dto);
+        return dto;
+    }
+
+    private void copyBasicFields(CollectStrategy strategy, CollectStrategyDTO dto) {
         dto.setId(strategy.getId());
         dto.setName(strategy.getName());
         dto.setCollectCount(strategy.getCollectCount());
@@ -87,13 +93,23 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
         dto.setBusinessCategory(strategy.getBusinessCategory());
         dto.setApp(strategy.getApp());
         dto.setIntent(strategy.getIntent());
-        // 设置采集意图名称
+        dto.setDescription(strategy.getDescription());
+        dto.setStatus(strategy.getStatus());
+        dto.setCreateBy(strategy.getCreateBy());
+        dto.setUpdateBy(strategy.getUpdateBy());
+        dto.setCreateTime(strategy.getCreateTime());
+        dto.setUpdateTime(strategy.getUpdateTime());
+        dto.setDeleted(strategy.getDeleted());
+    }
+
+    private void setIntentName(CollectStrategy strategy, CollectStrategyDTO dto) {
         if (strategy.getIntent() != null) {
             CollectIntentEnum intentEnum = CollectIntentEnum.getByCode(strategy.getIntent());
             dto.setIntentName(intentEnum != null ? intentEnum.getName() : strategy.getIntent());
         }
-        
-        // 设置自定义参数
+    }
+
+    private void setCustomParams(CollectStrategy strategy, CollectStrategyDTO dto) {
         dto.setCustomParams(strategy.getCustomParams());
         if (strategy.getCustomParams() != null && !strategy.getCustomParams().isEmpty()) {
             try {
@@ -103,51 +119,50 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
                 );
                 dto.setCustomParamList(customParamList);
             } catch (Exception e) {
-                // 如果解析失败，设置为空列表
                 dto.setCustomParamList(new ArrayList<>());
             }
         } else {
             dto.setCustomParamList(new ArrayList<>());
         }
-        
-        dto.setDescription(strategy.getDescription());
-        dto.setStatus(strategy.getStatus());
-        dto.setCreateBy(strategy.getCreateBy());
-        dto.setUpdateBy(strategy.getUpdateBy());
-        dto.setCreateTime(strategy.getCreateTime());
-        dto.setUpdateTime(strategy.getUpdateTime());
-        dto.setDeleted(strategy.getDeleted());
-        
-        // 获取用例集详细信息
-        if (strategy.getTestCaseSetId() != null) {
-            TestCaseSet testCaseSet = testCaseSetService.getById(strategy.getTestCaseSetId());
-            if (testCaseSet != null) {
-                dto.setTestCaseSetName(testCaseSet.getName());
-                dto.setTestCaseSetVersion(testCaseSet.getVersion());
-                dto.setTestCaseSetDescription(testCaseSet.getDescription());
-                dto.setTestCaseSetFileSize(testCaseSet.getFileSize());
-                dto.setTestCaseSetGohttpserverUrl(testCaseSet.getGohttpserverUrl());
-                
-                // 获取测试用例信息
-                List<TestCase> testCases = testCaseService.getByTestCaseSetId(testCaseSet.getId());
-                List<CollectStrategyDTO.TestCaseInfo> testCaseInfoList = testCases.stream()
-                    .map(testCase -> {
-                        CollectStrategyDTO.TestCaseInfo testCaseInfo = new CollectStrategyDTO.TestCaseInfo();
-                        testCaseInfo.setId(testCase.getId());
-                        testCaseInfo.setName(testCase.getName());
-                        testCaseInfo.setNumber(testCase.getNumber());
-                        testCaseInfo.setLogicNetwork(testCase.getLogicNetwork());
-                        testCaseInfo.setBusinessCategory(testCase.getBusinessCategory());
-                        testCaseInfo.setApp(testCase.getApp());
-                        testCaseInfo.setTestSteps(testCase.getTestSteps());
-                        testCaseInfo.setExpectedResult(testCase.getExpectedResult());
-                        return testCaseInfo;
-                    })
-                    .collect(Collectors.toList());
-                dto.setTestCaseList(testCaseInfoList);
-            }
+    }
+
+    private void enrichTestCaseSetInfo(CollectStrategy strategy, CollectStrategyDTO dto) {
+        if (strategy.getTestCaseSetId() == null) {
+            return;
+        }
+        TestCaseSet testCaseSet = testCaseSetService.getById(strategy.getTestCaseSetId());
+        if (testCaseSet == null) {
+            return;
         }
         
-        return dto;
+        setTestCaseSetBasicInfo(dto, testCaseSet);
+        List<TestCase> testCases = testCaseService.getByTestCaseSetId(testCaseSet.getId());
+        List<CollectStrategyDTO.TestCaseInfo> testCaseInfoList = buildTestCaseInfoList(testCases);
+        dto.setTestCaseList(testCaseInfoList);
+    }
+
+    private void setTestCaseSetBasicInfo(CollectStrategyDTO dto, TestCaseSet testCaseSet) {
+        dto.setTestCaseSetName(testCaseSet.getName());
+        dto.setTestCaseSetVersion(testCaseSet.getVersion());
+        dto.setTestCaseSetDescription(testCaseSet.getDescription());
+        dto.setTestCaseSetFileSize(testCaseSet.getFileSize());
+        dto.setTestCaseSetGohttpserverUrl(testCaseSet.getGohttpserverUrl());
+    }
+
+    private List<CollectStrategyDTO.TestCaseInfo> buildTestCaseInfoList(List<TestCase> testCases) {
+        return testCases.stream().map(this::createTestCaseInfo).collect(Collectors.toList());
+    }
+
+    private CollectStrategyDTO.TestCaseInfo createTestCaseInfo(TestCase testCase) {
+        CollectStrategyDTO.TestCaseInfo testCaseInfo = new CollectStrategyDTO.TestCaseInfo();
+        testCaseInfo.setId(testCase.getId());
+        testCaseInfo.setName(testCase.getName());
+        testCaseInfo.setNumber(testCase.getNumber());
+        testCaseInfo.setLogicNetwork(testCase.getLogicNetwork());
+        testCaseInfo.setBusinessCategory(testCase.getBusinessCategory());
+        testCaseInfo.setApp(testCase.getApp());
+        testCaseInfo.setTestSteps(testCase.getTestSteps());
+        testCaseInfo.setExpectedResult(testCase.getExpectedResult());
+        return testCaseInfo;
     }
 }

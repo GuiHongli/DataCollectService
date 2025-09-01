@@ -22,7 +22,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
@@ -85,89 +84,112 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
         dto.setUpdateBy(logicEnvironment.getUpdateBy());
         dto.setCreateTime(logicEnvironment.getCreateTime());
         dto.setUpdateTime(logicEnvironment.getUpdateTime());
-        
-        // 获取执行机信息
+
+        enrichExecutorInfo(dto, logicEnvironment);
+        dto.setUeList(buildUeInfoList(logicEnvironment));
+        dto.setNetworkList(buildNetworkInfoList(logicEnvironment));
+        return dto;
+    }
+
+    private void enrichExecutorInfo(LogicEnvironmentDTO dto, LogicEnvironment logicEnvironment) {
         try {
             Executor executor = executorService.getById(logicEnvironment.getExecutorId());
             if (executor != null) {
                 dto.setExecutorName(executor.getName());
                 dto.setExecutorIpAddress(executor.getIpAddress());
-                // 这里可以进一步获取地域信息，暂时使用简单的方式
                 dto.setExecutorRegionName("中国/北京");
             } else {
-                dto.setExecutorName("未知执行机");
-                dto.setExecutorIpAddress("未知IP");
-                dto.setExecutorRegionName("未知地域");
+                setUnknownExecutorInfo(dto);
             }
         } catch (Exception e) {
-            dto.setExecutorName("未知执行机");
-            dto.setExecutorIpAddress("未知IP");
-            dto.setExecutorRegionName("未知地域");
+            setUnknownExecutorInfo(dto);
         }
-        
-        // 获取UE信息
+    }
+
+    private void setUnknownExecutorInfo(LogicEnvironmentDTO dto) {
+        dto.setExecutorName("未知执行机");
+        dto.setExecutorIpAddress("未知IP");
+        dto.setExecutorRegionName("未知地域");
+    }
+
+    private List<LogicEnvironmentDTO.UeInfo> buildUeInfoList(LogicEnvironment logicEnvironment) {
         List<LogicEnvironmentDTO.UeInfo> ueInfoList = new ArrayList<>();
         try {
-            QueryWrapper<LogicEnvironmentUe> ueQueryWrapper = new QueryWrapper<>();
-            ueQueryWrapper.eq("logic_environment_id", logicEnvironment.getId());
-            List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQueryWrapper);
-            
-            if (!logicEnvironmentUes.isEmpty()) {
-                List<Long> ueIds = logicEnvironmentUes.stream()
-                    .map(LogicEnvironmentUe::getUeId)
-                    .collect(Collectors.toList());
-                
-                QueryWrapper<Ue> ueQuery = new QueryWrapper<>();
-                ueQuery.in("id", ueIds);
-                List<Ue> ues = ueService.list(ueQuery);
-                
-                for (Ue ue : ues) {
-                    LogicEnvironmentDTO.UeInfo ueInfo = new LogicEnvironmentDTO.UeInfo();
-                    ueInfo.setId(ue.getId());
-                    ueInfo.setUeId(ue.getUeId());
-                    ueInfo.setName(ue.getName());
-                    ueInfo.setPurpose(ue.getPurpose());
-                    ueInfo.setNetworkTypeName("正常网络"); // 这里应该从网络类型表获取
-                    ueInfoList.add(ueInfo);
-                }
+            List<Long> ueIds = getUeIdsByEnvironment(logicEnvironment.getId());
+            if (!ueIds.isEmpty()) {
+                List<Ue> ues = getUesByIds(ueIds);
+                ueInfoList = createUeInfoList(ues);
             }
         } catch (Exception e) {
-            // 如果获取UE信息失败，记录日志但不影响主流程
             System.err.println("获取UE信息失败: " + e.getMessage());
         }
-        dto.setUeList(ueInfoList);
-        
-        // 获取逻辑组网信息
+        return ueInfoList;
+    }
+
+    private List<LogicEnvironmentDTO.NetworkInfo> buildNetworkInfoList(LogicEnvironment logicEnvironment) {
         List<LogicEnvironmentDTO.NetworkInfo> networkInfoList = new ArrayList<>();
         try {
-            QueryWrapper<LogicEnvironmentNetwork> networkQueryWrapper = new QueryWrapper<>();
-            networkQueryWrapper.eq("logic_environment_id", logicEnvironment.getId());
-            List<LogicEnvironmentNetwork> logicEnvironmentNetworks = logicEnvironmentNetworkService.list(networkQueryWrapper);
-            
-            if (!logicEnvironmentNetworks.isEmpty()) {
-                List<Long> networkIds = logicEnvironmentNetworks.stream()
-                    .map(LogicEnvironmentNetwork::getLogicNetworkId)
-                    .collect(Collectors.toList());
-                
-                QueryWrapper<LogicNetwork> networkQuery = new QueryWrapper<>();
-                networkQuery.in("id", networkIds);
-                List<LogicNetwork> networks = logicNetworkService.list(networkQuery);
-                
-                for (LogicNetwork network : networks) {
-                    LogicEnvironmentDTO.NetworkInfo networkInfo = new LogicEnvironmentDTO.NetworkInfo();
-                    networkInfo.setId(network.getId());
-                    networkInfo.setName(network.getName());
-                    networkInfo.setDescription(network.getDescription());
-                    networkInfoList.add(networkInfo);
-                }
+            List<Long> networkIds = getNetworkIdsByEnvironment(logicEnvironment.getId());
+            if (!networkIds.isEmpty()) {
+                List<LogicNetwork> networks = getNetworksByIds(networkIds);
+                networkInfoList = createNetworkInfoList(networks);
             }
         } catch (Exception e) {
-            // 如果获取逻辑组网信息失败，记录日志但不影响主流程
             System.err.println("获取逻辑组网信息失败: " + e.getMessage());
         }
-        dto.setNetworkList(networkInfoList);
-        
-        return dto;
+        return networkInfoList;
+    }
+
+    private List<Long> getUeIdsByEnvironment(Long environmentId) {
+        QueryWrapper<LogicEnvironmentUe> ueQueryWrapper = new QueryWrapper<>();
+        ueQueryWrapper.eq("logic_environment_id", environmentId);
+        List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQueryWrapper);
+        return logicEnvironmentUes.stream().map(LogicEnvironmentUe::getUeId).collect(Collectors.toList());
+    }
+
+    private List<Ue> getUesByIds(List<Long> ueIds) {
+        QueryWrapper<Ue> ueQuery = new QueryWrapper<>();
+        ueQuery.in("id", ueIds);
+        return ueService.list(ueQuery);
+    }
+
+    private List<LogicEnvironmentDTO.UeInfo> createUeInfoList(List<Ue> ues) {
+        List<LogicEnvironmentDTO.UeInfo> ueInfoList = new ArrayList<>();
+        for (Ue ue : ues) {
+            LogicEnvironmentDTO.UeInfo ueInfo = new LogicEnvironmentDTO.UeInfo();
+            ueInfo.setId(ue.getId());
+            ueInfo.setUeId(ue.getUeId());
+            ueInfo.setName(ue.getName());
+            ueInfo.setPurpose(ue.getPurpose());
+            ueInfo.setNetworkTypeName("正常网络");
+            ueInfoList.add(ueInfo);
+        }
+        return ueInfoList;
+    }
+
+    private List<Long> getNetworkIdsByEnvironment(Long environmentId) {
+        QueryWrapper<LogicEnvironmentNetwork> networkQueryWrapper = new QueryWrapper<>();
+        networkQueryWrapper.eq("logic_environment_id", environmentId);
+        List<LogicEnvironmentNetwork> logicEnvironmentNetworks = logicEnvironmentNetworkService.list(networkQueryWrapper);
+        return logicEnvironmentNetworks.stream().map(LogicEnvironmentNetwork::getLogicNetworkId).collect(Collectors.toList());
+    }
+
+    private List<LogicNetwork> getNetworksByIds(List<Long> networkIds) {
+        QueryWrapper<LogicNetwork> networkQuery = new QueryWrapper<>();
+        networkQuery.in("id", networkIds);
+        return logicNetworkService.list(networkQuery);
+    }
+
+    private List<LogicEnvironmentDTO.NetworkInfo> createNetworkInfoList(List<LogicNetwork> networks) {
+        List<LogicEnvironmentDTO.NetworkInfo> networkInfoList = new ArrayList<>();
+        for (LogicNetwork network : networks) {
+            LogicEnvironmentDTO.NetworkInfo networkInfo = new LogicEnvironmentDTO.NetworkInfo();
+            networkInfo.setId(network.getId());
+            networkInfo.setName(network.getName());
+            networkInfo.setDescription(network.getDescription());
+            networkInfoList.add(networkInfo);
+        }
+        return networkInfoList;
     }
     
     @Override

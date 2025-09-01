@@ -475,22 +475,22 @@ public class CollectTaskController {
      * 获取状态转换信息
      */
     private StatusTransitionInfo getStatusTransitionInfo(String oldStatus, String newStatus) {
-        // 根据状态转换确定需要更新的例次状态
-        if ("PENDING".equals(oldStatus) && "RUNNING".equals(newStatus)) {
-            return new StatusTransitionInfo("PENDING", "RUNNING");
-        } else if ("RUNNING".equals(oldStatus) && "STOPPED".equals(newStatus)) {
-            return new StatusTransitionInfo("RUNNING", "STOPPED");
-        } else if ("RUNNING".equals(oldStatus) && "PAUSED".equals(newStatus)) {
-            return new StatusTransitionInfo("RUNNING", "PAUSED");
-        } else if ("PAUSED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
-            return new StatusTransitionInfo("PAUSED", "RUNNING");
-        } else if ("STOPPED".equals(oldStatus) && "PENDING".equals(newStatus)) {
-            return new StatusTransitionInfo("STOPPED", "PENDING");
-        } else if ("STOPPED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
-            return new StatusTransitionInfo("STOPPED", "PENDING");
-        }
+        // // 根据状态转换确定需要更新的例次状态
+        // if ("PENDING".equals(oldStatus) && "RUNNING".equals(newStatus)) {
+        //     return new StatusTransitionInfo("PENDING", "RUNNING");
+        // } else if ("RUNNING".equals(oldStatus) && "STOPPED".equals(newStatus)) {
+        //     return new StatusTransitionInfo("RUNNING", "STOPPED");
+        // } else if ("RUNNING".equals(oldStatus) && "PAUSED".equals(newStatus)) {
+        //     return new StatusTransitionInfo("RUNNING", "PAUSED");
+        // } else if ("PAUSED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
+        //     return new StatusTransitionInfo("PAUSED", "RUNNING");
+        // } else if ("STOPPED".equals(oldStatus) && "PENDING".equals(newStatus)) {
+        //     return new StatusTransitionInfo("STOPPED", "PENDING");
+        // } else if ("STOPPED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
+        //     return new StatusTransitionInfo("STOPPED", "PENDING");
+        // }
         
-        return null;
+        return new StatusTransitionInfo(oldStatus, newStatus);
     }
 
     /**

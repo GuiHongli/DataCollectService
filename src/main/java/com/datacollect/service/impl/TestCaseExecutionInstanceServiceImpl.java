@@ -111,24 +111,11 @@ public class TestCaseExecutionInstanceServiceImpl extends ServiceImpl<TestCaseEx
         log.info("根据用例ID和轮次更新执行状态和结果 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
                 collectTaskId, testCaseId, round, status, result);
         
-        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("collect_task_id", collectTaskId);
-        updateWrapper.eq("test_case_id", testCaseId);
-        updateWrapper.eq("round", round);
+        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = createBaseUpdateWrapper(collectTaskId, testCaseId, round);
         updateWrapper.set("status", status);
         updateWrapper.set("result", result);
-        updateWrapper.set("update_time", LocalDateTime.now());
         
-        boolean success = update(updateWrapper);
-        if (success) {
-            log.info("执行状态和结果更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
-                    collectTaskId, testCaseId, round, status, result);
-        } else {
-            log.error("执行状态和结果更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
-                    collectTaskId, testCaseId, round, status, result);
-        }
-        
-        return success;
+        return executeUpdate(updateWrapper, "执行状态和结果", collectTaskId, testCaseId, round, status, result);
     }
     
     @Override
@@ -136,25 +123,12 @@ public class TestCaseExecutionInstanceServiceImpl extends ServiceImpl<TestCaseEx
         log.info("根据用例ID和轮次更新执行状态、结果和失败原因 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}", 
                 collectTaskId, testCaseId, round, status, result, failureReason);
         
-        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("collect_task_id", collectTaskId);
-        updateWrapper.eq("test_case_id", testCaseId);
-        updateWrapper.eq("round", round);
+        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = createBaseUpdateWrapper(collectTaskId, testCaseId, round);
         updateWrapper.set("status", status);
         updateWrapper.set("result", result);
         updateWrapper.set("failure_reason", failureReason);
-        updateWrapper.set("update_time", LocalDateTime.now());
         
-        boolean success = update(updateWrapper);
-        if (success) {
-            log.info("执行状态、结果和失败原因更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}", 
-                    collectTaskId, testCaseId, round, status, result, failureReason);
-        } else {
-            log.error("执行状态、结果和失败原因更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}", 
-                    collectTaskId, testCaseId, round, status, result, failureReason);
-        }
-        
-        return success;
+        return executeUpdate(updateWrapper, "执行状态、结果和失败原因", collectTaskId, testCaseId, round, status, result, failureReason);
     }
     
     @Override
@@ -162,26 +136,13 @@ public class TestCaseExecutionInstanceServiceImpl extends ServiceImpl<TestCaseEx
         log.info("根据用例ID和轮次更新执行状态、结果、失败原因和日志文件路径 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}, 日志文件: {}", 
                 collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
         
-        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("collect_task_id", collectTaskId);
-        updateWrapper.eq("test_case_id", testCaseId);
-        updateWrapper.eq("round", round);
+        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = createBaseUpdateWrapper(collectTaskId, testCaseId, round);
         updateWrapper.set("status", status);
         updateWrapper.set("result", result);
         updateWrapper.set("failure_reason", failureReason);
         updateWrapper.set("log_file_path", logFilePath);
-        updateWrapper.set("update_time", LocalDateTime.now());
         
-        boolean success = update(updateWrapper);
-        if (success) {
-            log.info("执行状态、结果、失败原因和日志文件路径更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}, 日志文件: {}", 
-                    collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
-        } else {
-            log.error("执行状态、结果、失败原因和日志文件路径更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 失败原因: {}, 日志文件: {}", 
-                    collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
-        }
-        
-        return success;
+        return executeUpdate(updateWrapper, "执行状态、结果、失败原因和日志文件路径", collectTaskId, testCaseId, round, status, result, failureReason, logFilePath);
     }
     
     @Override
@@ -197,5 +158,24 @@ public class TestCaseExecutionInstanceServiceImpl extends ServiceImpl<TestCaseEx
         log.debug("查询到用例执行例次数量: {} - 任务ID: {}, 状态: {}", instances.size(), collectTaskId, status);
         
         return instances;
+    }
+
+    private UpdateWrapper<TestCaseExecutionInstance> createBaseUpdateWrapper(Long collectTaskId, Long testCaseId, Integer round) {
+        UpdateWrapper<TestCaseExecutionInstance> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("collect_task_id", collectTaskId);
+        updateWrapper.eq("test_case_id", testCaseId);
+        updateWrapper.eq("round", round);
+        updateWrapper.set("update_time", LocalDateTime.now());
+        return updateWrapper;
+    }
+
+    private boolean executeUpdate(UpdateWrapper<TestCaseExecutionInstance> updateWrapper, String operationType, Long collectTaskId, Long testCaseId, Integer round, Object... additionalParams) {
+        boolean success = update(updateWrapper);
+        if (success) {
+            log.info("{}更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}", operationType, collectTaskId, testCaseId, round);
+        } else {
+            log.error("{}更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}", operationType, collectTaskId, testCaseId, round);
+        }
+        return success;
     }
 }
