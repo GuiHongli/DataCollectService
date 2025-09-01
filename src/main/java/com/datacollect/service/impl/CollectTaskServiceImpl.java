@@ -7,6 +7,7 @@ import com.datacollect.dto.CollectTaskRequest;
 import com.datacollect.entity.CollectTask;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.mapper.CollectTaskMapper;
+import com.datacollect.common.exception.CollectTaskException;
 import com.datacollect.service.CollectTaskService;
 import com.datacollect.service.CollectStrategyService;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +38,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         CollectStrategy strategy = collectStrategyService.getById(request.getCollectStrategyId());
         if (strategy == null) {
             log.error("采集策略不存在 - 策略ID: {}", request.getCollectStrategyId());
-            throw new RuntimeException("采集策略不存在");
+            throw new CollectTaskException("COLLECT_STRATEGY_NOT_FOUND", "采集策略不存在");
         }
         
         CollectTask collectTask = new CollectTask();
@@ -70,7 +71,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
             return collectTask.getId();
         } else {
             log.error("采集任务创建失败 - 任务名称: {}", request.getName());
-            throw new RuntimeException("采集任务创建失败");
+            throw new CollectTaskException("COLLECT_TASK_SAVE_FAILED", "采集任务创建失败");
         }
     }
 

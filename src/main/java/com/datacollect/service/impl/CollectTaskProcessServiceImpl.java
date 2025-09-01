@@ -24,6 +24,7 @@ import com.datacollect.entity.Ue;
 import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.Executor;
 import com.datacollect.entity.LogicEnvironment;
+import com.datacollect.common.exception.CollectTaskException;
 import com.datacollect.util.HttpClientUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import java.util.Set;
@@ -87,12 +88,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
 
     @Override
     public Long processCollectTaskCreation(CollectTaskRequest request) {
-        log.info("开始处理采集任务创建 - 任务名称: {}", request.getName());
+        log.info("Start processing collect task creation - task name: {}", request.getName());
         
         try {
             // 1. 记录采集任务本身的信息
             Long collectTaskId = collectTaskService.createCollectTask(request);
-            log.info("采集任务创建成功 - 任务ID: {}", collectTaskId);
+            log.info("Collect task created successfully - task ID: {}", collectTaskId);
             
             // 2. 获取采集策略关联的测试用例（基于筛选条件）
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
@@ -100,11 +101,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
             // 3. 组装用例执行例次列表
             List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount());
-            log.info("组装用例执行例次完成 - 例次数量: {} - 任务ID: {}", instances.size(), collectTaskId);
+            log.info("Test case execution instances assembled - instance count: {} - task ID: {}", instances.size(), collectTaskId);
             
             // 4. 分配用例执行例次到逻辑环境
             List<TestCaseExecutionInstance> distributedInstances = distributeInstancesToEnvironments(instances, request.getLogicEnvironmentIds());
-            log.info("分配用例执行例次完成 - 任务ID: {}", collectTaskId);
+            log.info("Test case execution instances distribution completed - task ID: {}", collectTaskId);
             
             // 5. 保存用例执行例次
             saveTestCaseInstances(distributedInstances, collectTaskId);
@@ -118,8 +119,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return collectTaskId;
             
         } catch (Exception e) {
-            log.error("处理采集任务创建失败 - 任务名称: {}, 错误: {}", request.getName(), e.getMessage(), e);
-            throw new RuntimeException("处理采集任务创建失败: " + e.getMessage());
+            log.error("Failed to process collect task creation - task name: {}, error: {}", request.getName(), e.getMessage(), e);
+            throw new CollectTaskException("COLLECT_TASK_CREATE_FAILED", "处理采集任务创建失败: " + e.getMessage(), e);
         }
     }
 
@@ -130,8 +131,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         // 获取策略信息
         CollectStrategy strategy = collectStrategyService.getById(collectTask.getCollectStrategyId());
         if (strategy == null) {
-            log.error("采集策略不存在 - 策略ID: {}", collectTask.getCollectStrategyId());
-            throw new RuntimeException("采集策略不存在");
+            log.error("Collect strategy not found - strategy ID: {}", collectTask.getCollectStrategyId());
+            throw new CollectTaskException("COLLECT_STRATEGY_NOT_FOUND", "采集策略不存在");
         }
         
         // 获取用例集中的所有用例
@@ -144,7 +145,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             .map(TestCase::getId)
             .collect(java.util.stream.Collectors.toList());
             
-        log.info("获取到筛选后的测试用例数量: {} (原始数量: {}) - 任务ID: {}, 筛选条件: 业务大类={}, APP={}", 
+        log.info("Filtered test cases count: {} (original count: {}) - task ID: {}, filter criteria: business category={}, APP={}", 
                 testCaseIds.size(), allTestCases.size(), collectTask.getId(), 
                 strategy.getBusinessCategory(), strategy.getApp());
                 
@@ -182,9 +183,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private void saveTestCaseInstances(List<TestCaseExecutionInstance> distributedInstances, Long collectTaskId) {
         boolean saveSuccess = testCaseExecutionInstanceService.batchSaveInstances(distributedInstances);
         if (!saveSuccess) {
-            throw new RuntimeException("保存用例执行例次失败");
+            throw new CollectTaskException("TEST_CASE_INSTANCE_SAVE_FAILED", "保存用例执行例次失败");
         }
-        log.info("用例执行例次保存成功 - 任务ID: {}", collectTaskId);
+        log.info("Test case execution instances saved successfully - task ID: {}", collectTaskId);
     }
 
     /**
@@ -197,21 +198,21 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 if (!callSuccess) {
                     collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
                     collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用失败");
-                    log.error("执行机服务调用失败 - 任务ID: {}", collectTaskId);
+                    log.error("Executor service call failed - task ID: {}", collectTaskId);
                 } else {
-                    log.info("执行机服务调用成功 - 任务ID: {}", collectTaskId);
+                    log.info("Executor service call successful - task ID: {}", collectTaskId);
                 }
             } catch (Exception e) {
                 collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
                 collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用异常: " + e.getMessage());
-                log.error("执行机服务调用异常 - 任务ID: {}, 错误: {}", collectTaskId, e.getMessage(), e);
+                                    log.error("Executor service call exception - task ID: {}, error: {}", collectTaskId, e.getMessage(), e);
             }
         });
     }
 
     @Override
     public List<TestCaseExecutionInstance> assembleTestCaseInstances(Long collectTaskId, List<Long> testCaseIds, Integer collectCount) {
-        log.info("开始组装用例执行例次 - 任务ID: {}, 用例数量: {}, 采集次数: {}", collectTaskId, testCaseIds.size(), collectCount);
+        log.info("Start assembling test case execution instances - task ID: {}, test case count: {}, collect count: {}", collectTaskId, testCaseIds.size(), collectCount);
         
         List<TestCaseExecutionInstance> instances = new ArrayList<>();
         
@@ -226,13 +227,13 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
         }
         
-        log.info("用例执行例次组装完成 - 例次数量: {} - 任务ID: {}", instances.size(), collectTaskId);
+        log.info("Test case execution instances assembly completed - instance count: {} - task ID: {}", instances.size(), collectTaskId);
         return instances;
     }
 
     @Override
     public List<TestCaseExecutionInstance> distributeInstancesToEnvironments(List<TestCaseExecutionInstance> instances, List<Long> logicEnvironmentIds) {
-        log.info("开始分配用例执行例次到逻辑环境 - 例次数量: {}, 逻辑环境数量: {}", instances.size(), logicEnvironmentIds.size());
+        log.info("Start distributing test case execution instances to logic environments - instance count: {}, logic environment count: {}", instances.size(), logicEnvironmentIds.size());
         
         validateLogicEnvironments(logicEnvironmentIds);
         
@@ -242,7 +243,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         // 均分分配用例执行例次到逻辑环境
         distributeInstancesEvenly(instances, logicEnvironmentIds, environmentToExecutorMap);
         
-        log.info("用例执行例次均分分配完成 - 任务ID: {}", instances.get(0).getCollectTaskId());
+        log.info("Test case execution instances distribution completed - task ID: {}", instances.get(0).getCollectTaskId());
         return instances;
     }
 
@@ -251,8 +252,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private void validateLogicEnvironments(List<Long> logicEnvironmentIds) {
         if (logicEnvironmentIds.isEmpty()) {
-            log.error("逻辑环境列表为空，无法分配用例执行例次");
-            throw new RuntimeException("逻辑环境列表为空");
+            log.error("Logic environment list is empty, cannot distribute test case execution instances");
+            throw new CollectTaskException("LOGIC_ENVIRONMENT_EMPTY", "逻辑环境列表为空");
         }
     }
 
@@ -269,8 +270,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         if (environmentToExecutorMap.isEmpty()) {
-            log.error("未找到可用的执行机IP");
-            throw new RuntimeException("未找到可用的执行机IP");
+            log.error("No available executor IP found");
+            throw new CollectTaskException("EXECUTOR_IP_NOT_FOUND", "未找到可用的执行机IP");
         }
         
         return environmentToExecutorMap;
@@ -285,7 +286,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         int baseCount = totalInstances / environmentCount; // 每个环境的基础数量
         int remainder = totalInstances % environmentCount; // 剩余数量
         
-        log.info("分配策略 - 总例次数: {}, 逻辑环境数: {}, 基础分配数: {}, 剩余数: {}", 
+        log.info("Distribution strategy - total instances: {}, logic environment count: {}, base allocation: {}, remainder: {}", 
                 totalInstances, environmentCount, baseCount, remainder);
         
         int instanceIndex = 0;
@@ -296,7 +297,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 计算当前环境应分配的例次数量
             int currentEnvironmentCount = baseCount + (i < remainder ? 1 : 0);
             
-            log.info("逻辑环境 {} (执行机IP: {}) 分配 {} 个例次", logicEnvironmentId, executorIp, currentEnvironmentCount);
+            log.info("Logic environment {} (executor IP: {}) allocated {} instances", logicEnvironmentId, executorIp, currentEnvironmentCount);
             
             // 为当前环境分配例次
             for (int j = 0; j < currentEnvironmentCount; j++) {
@@ -312,7 +313,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
 
     @Override
     public boolean callExecutorServices(List<TestCaseExecutionInstance> instances) {
-        log.info("开始调用执行机服务 - 例次数量: {}", instances.size());
+        log.info("Start calling executor service - instance count: {}", instances.size());
         
         try {
             // 检查任务状态，如果任务已停止则不再继续下发
@@ -327,7 +328,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return createExecutionTasksForExecutors(instancesByExecutor);
             
         } catch (Exception e) {
-            log.error("调用执行机服务异常 - 错误: {}", e.getMessage(), e);
+            log.error("Executor service call exception - error: {}", e.getMessage(), e);
             return false;
         }
     }
@@ -340,7 +341,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             Long collectTaskId = instances.get(0).getCollectTaskId();
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
             if (collectTask != null && "STOPPED".equals(collectTask.getStatus())) {
-                log.warn("任务已停止，不再继续下发用例执行 - 任务ID: {}, 状态: {}", collectTaskId, collectTask.getStatus());
+                log.warn("Task stopped, no longer continue to distribute test case execution - task ID: {}, status: {}", collectTaskId, collectTask.getStatus());
                 return false;
             }
         }
@@ -368,27 +369,27 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
             // 再次检查任务状态，确保在调用执行机前任务未被停止
             if (!checkTaskStatus(executorInstances)) {
-                log.warn("任务已停止，跳过执行机 {} 的用例下发", executorIp);
+                log.warn("Task stopped, skip test case distribution for executor {}", executorIp);
                 continue;
             }
             
             boolean success = createExecutionTaskForExecutor(executorIp, executorInstances);
             if (!success) {
-                log.error("为执行机创建执行任务失败 - 执行机IP: {}", executorIp);
+                log.error("Failed to create execution task for executor - executor IP: {}", executorIp);
                 return false;
             }
         }
         
-        log.info("执行机服务调用完成");
+        log.info("Executor service call completed");
         return true;
     }
     
     private boolean createExecutionTaskForExecutor(String executorIp, List<TestCaseExecutionInstance> instances) {
         try {
-            log.info("为执行机创建执行任务 - 执行机IP: {}, 例次数量: {}", executorIp, instances.size());
+            log.info("Create execution task for executor - executor IP: {}, instance count: {}", executorIp, instances.size());
             
             if (!checkTaskStatus(instances)) {
-                log.warn("任务已停止，不再为执行机创建执行任务 - 执行机IP: {}", executorIp);
+                log.warn("Task stopped, no longer create execution task for executor - executor IP: {}", executorIp);
                 return false;
             }
             
@@ -409,7 +410,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return sendExecutionRequest(request, instances, taskId, executorIp);
             
         } catch (Exception e) {
-            log.error("为执行机创建执行任务异常 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+            log.error("Exception creating execution task for executor - executor IP: {}, error: {}", executorIp, e.getMessage(), e);
             return false;
         }
     }
@@ -419,9 +420,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     private void logExecutorInfo(String executorIp, List<TestCaseExecutionRequest.UeInfo> ueList, TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, Long collectStrategyId) {
-        log.info("获取执行机关联的UE信息 - 执行机IP: {}, UE数量: {}", executorIp, ueList.size());
-        log.info("获取采集策略信息 - 策略ID: {}, 策略名称: {}", collectStrategyId, 
-                collectStrategyInfo != null ? collectStrategyInfo.getName() : "未知");
+        log.info("Get UE information associated with executor - executor IP: {}, UE count: {}", executorIp, ueList.size());
+                log.info("Get collect strategy information - strategy ID: {}, strategy name: {}", collectStrategyId,
+                collectStrategyInfo != null ? collectStrategyInfo.getName() : "Unknown");
     }
 
     /**
@@ -466,13 +467,13 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private void enrichTestCaseSetPath(TestCaseSetInfo info, Long testCaseSetId) {
         TestCaseSet testCaseSet = testCaseSetService.getById(testCaseSetId);
         if (testCaseSet == null) {
-            log.warn("用例集不存在 - 用例集ID: {}", testCaseSetId);
+                            log.warn("Test case set not found - test case set ID: {}", testCaseSetId);
             return;
         }
         
         String testCaseSetPath = determineTestCaseSetPath(testCaseSet);
         info.setTestCaseSetPath(testCaseSetPath);
-        log.info("获取到用例集路径 - 用例集ID: {}, 路径: {}", testCaseSetId, testCaseSetPath);
+        log.info("Got test case set path - test case set ID: {}, path: {}", testCaseSetId, testCaseSetPath);
     }
 
     private String determineTestCaseSetPath(TestCaseSet testCaseSet) {
@@ -488,12 +489,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private boolean validateTestCaseSetInfo(TestCaseSetInfo testCaseSetInfo, String executorIp) {
         if (testCaseSetInfo.getTestCaseSetId() == null) {
-            log.error("无法获取用例集ID - 执行机IP: {}", executorIp);
+            log.error("Cannot get test case set ID - executor IP: {}", executorIp);
             return false;
         }
         
         if (testCaseSetInfo.getTestCaseSetPath() == null || testCaseSetInfo.getTestCaseSetPath().trim().isEmpty()) {
-            log.error("无法获取用例集路径 - 用例集ID: {}, 执行机IP: {}", testCaseSetInfo.getTestCaseSetId(), executorIp);
+            log.error("Cannot get test case set path - test case set ID: {}, executor IP: {}", testCaseSetInfo.getTestCaseSetId(), executorIp);
             return false;
         }
         
@@ -516,7 +517,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 testCaseInfo.setRound(instance.getRound());
                 testCaseList.add(testCaseInfo);
             } else {
-                log.warn("用例不存在 - 用例ID: {}", instance.getTestCaseId());
+                log.warn("Test case not found - test case ID: {}", instance.getTestCaseId());
             }
         }
         return testCaseList;
@@ -532,7 +533,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
             if (collectTask != null) {
                 taskCustomParams = collectTask.getCustomParams();
-                log.info("获取采集任务自定义参数 - 任务ID: {}, 自定义参数: {}", collectTaskId, taskCustomParams);
+                log.info("Get collect task custom parameters - task ID: {}, custom parameters: {}", collectTaskId, taskCustomParams);
             }
         }
         return taskCustomParams;
@@ -561,10 +562,10 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         
         if (goHttpServerUrl != null && !goHttpServerUrl.trim().isEmpty()) {
             request.setLogReportUrl(goHttpServerUrl);
-            log.info("使用gohttpserver地址作为日志上报URL: {}", goHttpServerUrl);
+            log.info("Using gohttpserver address as log report URL: {}", goHttpServerUrl);
         } else {
             request.setLogReportUrl(dataCollectServiceBaseUrl + "/api/test-result/log");
-            log.info("使用默认日志上报URL: {}", dataCollectServiceBaseUrl + "/api/test-result/log");
+            log.info("Using default log report URL: {}", dataCollectServiceBaseUrl + "/api/test-result/log");
         }
         
         return request;
@@ -590,7 +591,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private boolean sendExecutionRequest(TestCaseExecutionRequest request, List<TestCaseExecutionInstance> instances, String taskId, String executorIp) {
         String caseExecuteServiceUrl = "http://" + executorIp + ":8081/api/test-case-execution/receive";
-        log.info("调用CaseExecuteService - URL: {}, 任务ID: {}", caseExecuteServiceUrl, taskId);
+        log.info("Calling CaseExecuteService - URL: {}, task ID: {}", caseExecuteServiceUrl, taskId);
         
         try {
             org.springframework.http.ResponseEntity<Map> response = 
@@ -601,7 +602,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 Integer code = (Integer) result.get("code");
                 
                 if (code != null && code == 200) {
-                    log.info("CaseExecuteService调用成功 - 任务ID: {}, 执行机IP: {}", taskId, executorIp);
+                    log.info("CaseExecuteService call successful - task ID: {}, executor IP: {}", taskId, executorIp);
                     
                     // 更新例次状态
                     updateInstanceStatus(instances, taskId);
@@ -609,16 +610,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     return true;
                 } else {
                     String message = (String) result.get("message");
-                    log.error("CaseExecuteService返回错误 - 任务ID: {}, 错误信息: {}", taskId, message);
+                    log.error("CaseExecuteService returned error - task ID: {}, error message: {}", taskId, message);
                     return false;
                 }
             } else {
-                log.error("CaseExecuteService调用失败 - 任务ID: {}, HTTP状态: {}", taskId, response.getStatusCode());
+                log.error("CaseExecuteService call failed - task ID: {}, HTTP status: {}", taskId, response.getStatusCode());
                 return false;
             }
             
         } catch (Exception e) {
-            log.error("CaseExecuteService网络调用异常 - 任务ID: {}, 执行机IP: {}, 错误: {}", 
+            log.error("CaseExecuteService network call exception - task ID: {}, executor IP: {}, error: {}", 
                     taskId, executorIp, e.getMessage(), e);
             return false;
         }
@@ -649,7 +650,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             Executor executor = executorService.getOne(executorQuery);
             
             if (executor == null) {
-                log.warn("未找到执行机信息 - 执行机IP: {}", executorIp);
+                log.warn("Executor information not found - executor IP: {}", executorIp);
                 return ueList;
             }
             
@@ -657,7 +658,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             List<LogicEnvironment> logicEnvironments = getExecutorLogicEnvironments(executor);
             
             if (logicEnvironments.isEmpty()) {
-                log.warn("执行机未关联逻辑环境 - 执行机IP: {}, 执行机ID: {}", executorIp, executor.getId());
+                log.warn("Executor not associated with logic environment - executor IP: {}, executor ID: {}", executorIp, executor.getId());
                 return ueList;
             }
             
@@ -665,17 +666,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             Set<Long> allUeIds = getAllUeIds(logicEnvironments);
             
             if (allUeIds.isEmpty()) {
-                log.warn("执行机关联的逻辑环境未关联UE - 执行机IP: {}", executorIp);
+                log.warn("Logic environment associated with executor not associated with UE - executor IP: {}", executorIp);
                 return ueList;
             }
             
             // 4. 获取UE详细信息并转换为DTO格式
             ueList = convertUesToDto(allUeIds);
             
-            log.info("获取执行机关联的UE信息成功 - 执行机IP: {}, UE数量: {}", executorIp, ueList.size());
+            log.info("Successfully got UE information associated with executor - executor IP: {}, UE count: {}", executorIp, ueList.size());
             
         } catch (Exception e) {
-            log.error("获取执行机关联的UE信息失败 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+            log.error("Failed to get UE information associated with executor - executor IP: {}, error: {}", executorIp, e.getMessage(), e);
         }
         
         return ueList;
@@ -758,23 +759,23 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private TestCaseExecutionRequest.CollectStrategyInfo getCollectStrategyInfo(Long collectStrategyId) {
         if (collectStrategyId == null) {
-            log.warn("采集策略ID为空");
+                            log.warn("Collect strategy ID is empty");
             return null;
         }
         
         try {
             CollectStrategy collectStrategy = collectStrategyService.getById(collectStrategyId);
             if (collectStrategy == null) {
-                log.warn("采集策略不存在 - 策略ID: {}", collectStrategyId);
+                log.warn("Collect strategy not found - strategy ID: {}", collectStrategyId);
                 return null;
             }
             
             TestCaseExecutionRequest.CollectStrategyInfo strategyInfo = createCollectStrategyInfo(collectStrategy);
-            log.info("获取采集策略信息成功 - 策略ID: {}, 策略名称: {}", collectStrategyId, collectStrategy.getName());
+            log.info("Successfully got collect strategy information - strategy ID: {}, strategy name: {}", collectStrategyId, collectStrategy.getName());
             return strategyInfo;
             
         } catch (Exception e) {
-            log.error("获取采集策略信息失败 - 策略ID: {}, 错误: {}", collectStrategyId, e.getMessage(), e);
+            log.error("Failed to get collect strategy information - strategy ID: {}, error: {}", collectStrategyId, e.getMessage(), e);
             return null;
         }
     }

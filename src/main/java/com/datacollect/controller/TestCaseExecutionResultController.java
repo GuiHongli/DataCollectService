@@ -37,12 +37,12 @@ public class TestCaseExecutionResultController {
      */
     @PostMapping("/report")
     public Result<Map<String, Object>> reportTestCaseResult(@Valid @RequestBody TestCaseExecutionResult result) {
-        log.info("接收到用例执行结果 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}", 
+        log.info("Received test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
                 result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus());
         
         // 记录日志文件信息
         if (result.getLogFilePath() != null && !result.getLogFilePath().trim().isEmpty()) {
-            log.info("用例执行结果包含日志文件 - 任务ID: {}, 用例ID: {}, 轮次: {}, 日志文件: {}", 
+            log.info("Test case execution result contains log file - task ID: {}, test case ID: {}, round: {}, log file: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getLogFilePath());
         }
         
@@ -60,55 +60,24 @@ public class TestCaseExecutionResultController {
                 data.put("message", "用例执行结果接收成功");
                 data.put("timestamp", System.currentTimeMillis());
                 
-                log.info("用例执行结果接收成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 日志文件: {}", 
+                log.info("Test case execution result received successfully - task ID: {}, test case ID: {}, round: {}, log file: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getLogFilePath());
                 
                 return Result.success(data);
             } else {
-                log.error("用例执行结果保存失败 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
+                log.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
                 return Result.error("用例执行结果保存失败");
             }
             
         } catch (Exception e) {
-            log.error("接收用例执行结果异常 - 任务ID: {}, 用例ID: {}, 轮次: {}, 错误: {}", 
+            log.error("Exception receiving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
             return Result.error("接收用例执行结果失败: " + e.getMessage());
         }
     }
     
-    /**
-     * 接收用例执行日志
-     * 
-     * @param logFileName 日志文件名
-     * @param logContent 日志内容
-     * @return 接收结果
-     */
-    @PostMapping("/log/{logFileName}")
-    public Result<Map<String, Object>> reportTestCaseLog(@PathVariable String logFileName, 
-                                                        @RequestBody String logContent) {
-        log.info("接收到用例执行日志 - 文件名: {}, 内容长度: {}", logFileName, logContent.length());
-        
-        try {
-            // TODO: 这里可以添加日志保存逻辑，比如保存到文件系统或数据库
-            // 目前只是记录日志，不做实际存储
-            
-            Map<String, Object> data = new HashMap<>();
-            data.put("logFileName", logFileName);
-            data.put("contentLength", logContent.length());
-            data.put("message", "用例执行日志接收成功");
-            data.put("timestamp", System.currentTimeMillis());
-            
-            log.info("用例执行日志接收成功 - 文件名: {}", logFileName);
-            
-            return Result.success(data);
-            
-        } catch (Exception e) {
-            log.error("接收用例执行日志异常 - 文件名: {}, 错误: {}", logFileName, e.getMessage(), e);
-            return Result.error("接收用例执行日志失败: " + e.getMessage());
-        }
-    }
-    
+   
     /**
      * 接收用例执行日志文件
      * 
@@ -123,7 +92,7 @@ public class TestCaseExecutionResultController {
                                                         @RequestParam("testCaseId") Long testCaseId,
                                                         @RequestParam("round") Integer round,
                                                         @RequestParam("logFile") MultipartFile logFile) {
-        log.info("接收到用例执行日志文件 - 任务ID: {}, 用例ID: {}, 轮次: {}, 文件名: {}, 文件大小: {} bytes", 
+        log.info("Received test case execution log file - task ID: {}, test case ID: {}, round: {}, filename: {}, file size: {} bytes", 
                 taskId, testCaseId, round, logFile.getOriginalFilename(), logFile.getSize());
         
         try {
@@ -133,13 +102,13 @@ public class TestCaseExecutionResultController {
             // 构建响应数据
             Map<String, Object> data = buildUploadResponseData(taskId, testCaseId, round, logFile, filePath);
             
-            log.info("用例执行日志文件上传成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 文件路径: {}", 
+            log.info("Test case execution log file uploaded successfully - task ID: {}, test case ID: {}, round: {}, file path: {}", 
                     taskId, testCaseId, round, filePath);
             
             return Result.success(data);
             
         } catch (Exception e) {
-            log.error("接收用例执行日志文件异常 - 任务ID: {}, 用例ID: {}, 轮次: {}, 错误: {}", 
+            log.error("Exception receiving test case execution log file - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     taskId, testCaseId, round, e.getMessage(), e);
             return Result.error("接收用例执行日志文件失败: " + e.getMessage());
         }
@@ -198,16 +167,16 @@ public class TestCaseExecutionResultController {
      */
     @GetMapping("/task/{taskId}")
     public Result<java.util.List<com.datacollect.entity.TestCaseExecutionResult>> getResultsByTaskId(@PathVariable String taskId) {
-        log.info("查询任务执行结果 - 任务ID: {}", taskId);
+        log.info("Query task execution results - task ID: {}", taskId);
         
         try {
             java.util.List<com.datacollect.entity.TestCaseExecutionResult> results = testCaseExecutionResultService.getByTaskId(taskId);
             
-            log.info("查询到任务执行结果数量: {} - 任务ID: {}", results.size(), taskId);
+            log.info("Found task execution result count: {} - task ID: {}", results.size(), taskId);
             return Result.success(results);
             
         } catch (Exception e) {
-            log.error("查询任务执行结果失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+            log.error("Failed to query task execution results - task ID: {}, error: {}", taskId, e.getMessage(), e);
             return Result.error("查询任务执行结果失败: " + e.getMessage());
         }
     }
@@ -220,16 +189,16 @@ public class TestCaseExecutionResultController {
      */
     @GetMapping("/testcase/{testCaseId}")
     public Result<java.util.List<com.datacollect.entity.TestCaseExecutionResult>> getResultsByTestCaseId(@PathVariable Long testCaseId) {
-        log.info("查询用例执行结果 - 用例ID: {}", testCaseId);
+        log.info("Query test case execution results - test case ID: {}", testCaseId);
         
         try {
             java.util.List<com.datacollect.entity.TestCaseExecutionResult> results = testCaseExecutionResultService.getByTestCaseId(testCaseId);
             
-            log.info("查询到用例执行结果数量: {} - 用例ID: {}", results.size(), testCaseId);
+            log.info("Found test case execution result count: {} - test case ID: {}", results.size(), testCaseId);
             return Result.success(results);
             
         } catch (Exception e) {
-            log.error("查询用例执行结果失败 - 用例ID: {}, 错误: {}", testCaseId, e.getMessage(), e);
+            log.error("Failed to query test case execution results - test case ID: {}, error: {}", testCaseId, e.getMessage(), e);
             return Result.error("查询用例执行结果失败: " + e.getMessage());
         }
     }

@@ -1,5 +1,6 @@
 package com.datacollect.config;
 
+import com.datacollect.common.exception.ConfigurationException;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,7 @@ public class FileUploadConfig {
                 Files.createDirectories(tempPath);
             }
         } catch (Exception e) {
-            throw new RuntimeException("初始化文件上传目录失败", e);
+            throw new ConfigurationException("FILE_UPLOAD_DIR_INIT_FAILED", "初始化文件上传目录失败", e);
         }
     }
 
@@ -68,7 +69,7 @@ public class FileUploadConfig {
             Files.createDirectories(tempDir);
             return tempDir;
         } catch (Exception e) {
-            throw new RuntimeException("创建临时目录失败", e);
+            throw new ConfigurationException("TEMP_DIR_CREATE_FAILED", "创建临时目录失败", e);
         }
     }
 }

@@ -52,7 +52,7 @@ public class ExcelParser {
             }
         }
         
-        log.info("成功解析Excel文件，共解析到 {} 条测试用例", testCases.size());
+        log.info("Successfully parsed Excel file, found {} test cases", testCases.size());
         return testCases;
     }
     
@@ -76,7 +76,7 @@ public class ExcelParser {
             return testCase;
             
         } catch (Exception e) {
-            log.error("解析第{}行数据时发生错误: {}", row.getRowNum() + 1, e.getMessage());
+            log.error("Error parsing row {}: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
     }
@@ -103,11 +103,11 @@ public class ExcelParser {
      */
     private boolean validateRequiredFields(TestCase testCase, Row row) {
         if (testCase.getName() == null || testCase.getName().trim().isEmpty()) {
-            log.warn("第{}行用例名称为空，跳过该行", row.getRowNum() + 1);
+            log.warn("Row {} test case name is empty, skipping this row", row.getRowNum() + 1);
             return false;
         }
         if (testCase.getNumber() == null || testCase.getNumber().trim().isEmpty()) {
-            log.warn("第{}行用例编号为空，跳过该行", row.getRowNum() + 1);
+            log.warn("Row {} test case number is empty, skipping this row", row.getRowNum() + 1);
             return false;
         }
         return true;
