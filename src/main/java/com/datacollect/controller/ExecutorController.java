@@ -34,19 +34,19 @@ public class ExecutorController {
     @PutMapping("/{id}")
     public Result<Executor> update(@PathVariable @NotNull Long id, @Valid @RequestBody Executor executor) {
         try {
-            log.info("更新执行机 - ID: {}, 名称: {}, IP地址: {}", id, executor.getName(), executor.getIpAddress());
+            log.info("Update executor - ID: {}, name: {}, IP address: {}", id, executor.getName(), executor.getIpAddress());
             
             // 检查IP地址是否已被其他执行机使用
             if (isIpAddressInUse(executor.getIpAddress(), id)) {
-                return Result.error("IP地址 " + executor.getIpAddress() + " 已被其他执行机使用");
+                return Result.error("IP address " + executor.getIpAddress() + " is already used by another executor");
             }
             
             // 执行更新
             return performUpdate(id, executor);
             
         } catch (Exception e) {
-            log.error("更新执行机异常 - ID: {}, 错误: {}", id, e.getMessage(), e);
-            return Result.error("更新失败: " + e.getMessage());
+            log.error("Exception updating executor - ID: {}, error: {}", id, e.getMessage(), e);
+            return Result.error("Update failed: " + e.getMessage());
         }
     }
 
@@ -61,7 +61,7 @@ public class ExecutorController {
         Executor existingExecutor = executorService.getOne(queryWrapper);
         
         if (existingExecutor != null) {
-            log.warn("IP地址 {} 已被执行机 {} (ID: {}) 使用", 
+            log.warn("IP address {} is already used by executor {} (ID: {})", 
                     ipAddress, existingExecutor.getName(), existingExecutor.getId());
             return true;
         }
@@ -77,11 +77,11 @@ public class ExecutorController {
         boolean success = executorService.updateById(executor);
         
         if (success) {
-            log.info("执行机更新成功 - ID: {}", id);
+            log.info("Executor updated successfully - ID: {}", id);
             return Result.success(executor);
         } else {
-            log.error("执行机更新失败 - ID: {}", id);
-            return Result.error("更新失败");
+            log.error("Executor update failed - ID: {}", id);
+            return Result.error("Update failed");
         }
     }
 

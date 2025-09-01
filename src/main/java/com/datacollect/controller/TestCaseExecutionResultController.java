@@ -57,7 +57,7 @@ public class TestCaseExecutionResultController {
                 data.put("round", result.getRound());
                 data.put("status", result.getStatus());
                 data.put("logFilePath", result.getLogFilePath());
-                data.put("message", "用例执行结果接收成功");
+                data.put("message", "Test case execution result received successfully");
                 data.put("timestamp", System.currentTimeMillis());
                 
                 log.info("Test case execution result received successfully - task ID: {}, test case ID: {}, round: {}, log file: {}", 
@@ -67,13 +67,13 @@ public class TestCaseExecutionResultController {
             } else {
                 log.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
-                return Result.error("用例执行结果保存失败");
+                return Result.error("Failed to save test case execution result");
             }
             
         } catch (Exception e) {
             log.error("Exception receiving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
-            return Result.error("接收用例执行结果失败: " + e.getMessage());
+            return Result.error("Failed to receive test case execution result: " + e.getMessage());
         }
     }
     
@@ -110,7 +110,7 @@ public class TestCaseExecutionResultController {
         } catch (Exception e) {
             log.error("Exception receiving test case execution log file - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     taskId, testCaseId, round, e.getMessage(), e);
-            return Result.error("接收用例执行日志文件失败: " + e.getMessage());
+            return Result.error("Failed to receive test case execution log file: " + e.getMessage());
         }
     }
 
@@ -154,7 +154,7 @@ public class TestCaseExecutionResultController {
         data.put("logFileName", filePath.getFileName().toString());
         data.put("fileSize", logFile.getSize());
         data.put("filePath", filePath.toString());
-        data.put("message", "用例执行日志文件上传成功");
+        data.put("message", "Test case execution log file uploaded successfully");
         data.put("timestamp", System.currentTimeMillis());
         return data;
     }
@@ -177,7 +177,7 @@ public class TestCaseExecutionResultController {
             
         } catch (Exception e) {
             log.error("Failed to query task execution results - task ID: {}, error: {}", taskId, e.getMessage(), e);
-            return Result.error("查询任务执行结果失败: " + e.getMessage());
+            return Result.error("Failed to query task execution results: " + e.getMessage());
         }
     }
     
@@ -199,7 +199,7 @@ public class TestCaseExecutionResultController {
             
         } catch (Exception e) {
             log.error("Failed to query test case execution results - test case ID: {}, error: {}", testCaseId, e.getMessage(), e);
-            return Result.error("查询用例执行结果失败: " + e.getMessage());
+            return Result.error("Failed to query test case execution results: " + e.getMessage());
         }
     }
 }

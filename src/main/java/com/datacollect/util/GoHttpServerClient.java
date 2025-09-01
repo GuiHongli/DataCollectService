@@ -1,6 +1,10 @@
 package com.datacollect.util;
 
-import lombok.extern.slf4j.Slf4j;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -16,11 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -50,7 +50,7 @@ public class GoHttpServerClient {
      * @return 上传后的文件URL
      */
     public String uploadFile(MultipartFile file, String targetFileName) throws IOException {
-        log.info("开始上传文件到gohttpserver: {}", targetFileName);
+        log.info("Starting file upload to gohttpserver: {}", targetFileName);
         
         try {
             // 构建上传URL，使用gohttpserver的标准上传接口
@@ -75,16 +75,16 @@ public class GoHttpServerClient {
                 
                 if (statusCode == 200 || statusCode == 201) {
                     String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
-                    log.info("文件上传成功: {}", fileUrl);
+                    log.info("File upload successful: {}", fileUrl);
                     return fileUrl;
                 } else {
-                    throw new IOException("上传失败，HTTP状态码: " + statusCode + ", 响应: " + responseBody);
+                    throw new IOException("Upload failed, HTTP status code: " + statusCode + ", Response: " + responseBody);
                 }
             }
             
         } catch (Exception e) {
-            log.error("上传文件到gohttpserver失败: {}", e.getMessage());
-            throw new IOException("上传文件失败: " + e.getMessage(), e);
+            log.error("Failed to upload file to gohttpserver: {}", e.getMessage());
+            throw new IOException("File upload failed: " + e.getMessage(), e);
         }
     }
 
@@ -95,12 +95,12 @@ public class GoHttpServerClient {
      * @return 上传后的文件URL
      */
     public String uploadLocalFile(String localFilePath, String targetFileName) throws IOException {
-        log.info("开始上传本地文件到gohttpserver: {} -> {}", localFilePath, targetFileName);
+        log.info("Starting local file upload to gohttpserver: {} -> {}", localFilePath, targetFileName);
         
         try {
             Path sourcePath = Paths.get(localFilePath);
             if (!Files.exists(sourcePath)) {
-                throw new IOException("源文件不存在: " + localFilePath);
+                throw new IOException("Source file does not exist: " + localFilePath);
             }
             
             // 构建上传URL，使用gohttpserver的标准上传接口
@@ -125,16 +125,16 @@ public class GoHttpServerClient {
                 
                 if (statusCode == 200 || statusCode == 201) {
                     String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
-                    log.info("本地文件上传成功: {}", fileUrl);
+                    log.info("Local file upload successful: {}", fileUrl);
                     return fileUrl;
                 } else {
-                    throw new IOException("上传失败，HTTP状态码: " + statusCode + ", 响应: " + responseBody);
+                    throw new IOException("Upload failed, HTTP status code: " + statusCode + ", Response: " + responseBody);
                 }
             }
             
         } catch (Exception e) {
-            log.error("上传本地文件到gohttpserver失败: {}", e.getMessage());
-            throw new IOException("上传本地文件失败: " + e.getMessage(), e);
+            log.error("Failed to upload local file to gohttpserver: {}", e.getMessage());
+            throw new IOException("Local file upload failed: " + e.getMessage(), e);
         }
     }
 
@@ -153,15 +153,15 @@ public class GoHttpServerClient {
                 int statusCode = response.getStatusLine().getStatusCode();
                 
                 if (statusCode == 200 || statusCode == 204) {
-                    log.info("文件删除成功: {}", fileName);
+                    log.info("File deleted successfully: {}", fileName);
                     return true;
                 } else {
-                    log.warn("文件删除失败，HTTP状态码: {}", statusCode);
+                    log.warn("File deletion failed, HTTP status code: {}", statusCode);
                     return false;
                 }
             }
         } catch (Exception e) {
-            log.error("删除文件失败: {}", e.getMessage());
+            log.error("Failed to delete file: {}", e.getMessage());
             return false;
         }
     }
@@ -181,7 +181,7 @@ public class GoHttpServerClient {
                 return statusCode == 200;
             }
         } catch (Exception e) {
-            log.error("gohttpserver不可用: {}", e.getMessage());
+            log.error("gohttpserver is not available: {}", e.getMessage());
             return false;
         }
     }
@@ -191,6 +191,6 @@ public class GoHttpServerClient {
      * @return 配置信息
      */
     public String getConfigInfo() {
-        return String.format("GoHttpServer配置 - URL: %s", goHttpServerUrl);
+        return String.format("GoHttpServer Configuration - URL: %s", goHttpServerUrl);
     }
 }

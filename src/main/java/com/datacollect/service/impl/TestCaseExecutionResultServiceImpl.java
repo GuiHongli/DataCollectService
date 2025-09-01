@@ -1,21 +1,22 @@
 package com.datacollect.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.datacollect.dto.TestCaseExecutionResult;
-import com.datacollect.mapper.TestCaseExecutionResultMapper;
-import com.datacollect.service.TestCaseExecutionResultService;
-import com.datacollect.service.CollectTaskService;
-import com.datacollect.service.TestCaseExecutionInstanceService;
-import com.datacollect.entity.CollectTask;
-import com.datacollect.entity.TestCaseExecutionInstance;
-import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
+import java.util.List;
+
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.datacollect.dto.TestCaseExecutionResult;
+import com.datacollect.entity.TestCaseExecutionInstance;
+import com.datacollect.mapper.TestCaseExecutionResultMapper;
+import com.datacollect.service.CollectTaskService;
+import com.datacollect.service.TestCaseExecutionInstanceService;
+import com.datacollect.service.TestCaseExecutionResultService;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 用例执行结果服务实现类
@@ -35,7 +36,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
 
     @Override
     public boolean saveTestCaseExecutionResult(TestCaseExecutionResult result) {
-        log.info("保存用例执行结果 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}", 
+        log.info("Save test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
                 result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus());
         
         try {
@@ -43,7 +44,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             
             boolean success = save(entity);
             if (success) {
-                log.info("用例执行结果保存成功 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
+                log.info("Test case execution result saved successfully - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
                 
                 // 更新例次状态
@@ -52,14 +53,14 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 // 检查任务是否完成
                 checkAndUpdateTaskCompletion(result.getTaskId());
             } else {
-                log.error("用例执行结果保存失败 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
+                log.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
             }
             
             return success;
             
         } catch (Exception e) {
-            log.error("保存用例执行结果异常 - 任务ID: {}, 用例ID: {}, 轮次: {}, 错误: {}", 
+            log.error("Exception saving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
             return false;
         }
@@ -82,28 +83,28 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
 
     @Override
     public List<com.datacollect.entity.TestCaseExecutionResult> getByTaskId(String taskId) {
-        log.debug("根据任务ID查询执行结果 - 任务ID: {}", taskId);
+        log.debug("Query execution results by task ID - task ID: {}", taskId);
         
         QueryWrapper<com.datacollect.entity.TestCaseExecutionResult> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("task_id", taskId);
         queryWrapper.orderByDesc("create_time");
         
         List<com.datacollect.entity.TestCaseExecutionResult> results = list(queryWrapper);
-        log.debug("查询到执行结果数量: {}", results.size());
+        log.debug("Found execution result count: {}", results.size());
         
         return results;
     }
 
     @Override
     public List<com.datacollect.entity.TestCaseExecutionResult> getByTestCaseId(Long testCaseId) {
-        log.debug("根据用例ID查询执行结果 - 用例ID: {}", testCaseId);
+        log.debug("Query execution results by test case ID - test case ID: {}", testCaseId);
         
         QueryWrapper<com.datacollect.entity.TestCaseExecutionResult> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("test_case_id", testCaseId);
         queryWrapper.orderByDesc("create_time");
         
         List<com.datacollect.entity.TestCaseExecutionResult> results = list(queryWrapper);
-        log.debug("查询到执行结果数量: {}", results.size());
+        log.debug("Found execution result count: {}", results.size());
         
         return results;
     }
@@ -118,7 +119,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             // 根据taskId查找对应的采集任务ID
             Long collectTaskId = getCollectTaskIdFromTaskId(result.getTaskId());
             if (collectTaskId == null) {
-                log.warn("无法找到对应的采集任务ID: {}", result.getTaskId());
+                log.warn("Cannot find corresponding collect task ID: {}", result.getTaskId());
                 return;
             }
             
@@ -130,15 +131,15 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                     collectTaskId, result.getTestCaseId(), result.getRound(), statusInfo.getStatus(), statusInfo.getResult(), statusInfo.getFailureReason(), result.getLogFilePath());
             
             if (success) {
-                log.debug("例次状态和结果更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
+                log.debug("Instance status and result updated successfully - task ID: {}, test case ID: {}, round: {}, status: {}, result: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound(), statusInfo.getStatus(), statusInfo.getResult());
             } else {
-                log.warn("例次状态和结果更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
+                log.warn("Failed to update instance status and result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
             }
             
         } catch (Exception e) {
-            log.error("更新例次状态和结果异常 - 任务ID: {}, 用例ID: {}, 轮次: {}, 错误: {}", 
+            log.error("Exception updating instance status and result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
         }
     }
@@ -190,7 +191,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             return Long.parseLong(taskId);
         } catch (NumberFormatException e) {
             // 2. 如果不是数字，则通过execution_task_id查找对应的collect_task_id
-            log.debug("taskId不是数字格式，尝试通过execution_task_id查找: {}", taskId);
+            log.debug("taskId is not numeric format, trying to find through execution_task_id: {}", taskId);
             return findCollectTaskIdByExecutionTaskId(taskId);
         }
     }
@@ -208,14 +209,14 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             
             TestCaseExecutionInstance instance = testCaseExecutionInstanceService.getOne(queryWrapper);
             if (instance != null) {
-                log.debug("通过execution_task_id找到collect_task_id: {} -> {}", taskId, instance.getCollectTaskId());
+                log.debug("Found collect_task_id through execution_task_id: {} -> {}", taskId, instance.getCollectTaskId());
                 return instance.getCollectTaskId();
             } else {
-                log.warn("未找到execution_task_id对应的collect_task_id: {}", taskId);
+                log.warn("Cannot find collect_task_id corresponding to execution_task_id: {}", taskId);
                 return null;
             }
         } catch (Exception ex) {
-            log.error("通过execution_task_id查找collect_task_id异常: {}", ex.getMessage(), ex);
+            log.error("Exception finding collect_task_id through execution_task_id: {}", ex.getMessage(), ex);
             return null;
         }
     }
@@ -227,19 +228,19 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
      */
     private void checkAndUpdateTaskCompletion(String taskId) {
         try {
-            log.debug("检查任务完成状态 - 任务ID: {}", taskId);
+            log.debug("Check task completion status - task ID: {}", taskId);
             
             // 1. 根据taskId查找对应的采集任务ID
             Long collectTaskId = getCollectTaskIdFromTaskId(taskId);
             if (collectTaskId == null) {
-                log.warn("无法找到对应的采集任务ID: {}", taskId);
+                log.warn("Cannot find corresponding collect task ID: {}", taskId);
                 return;
             }
             
             // 2. 查询该任务的所有用例执行例次
             List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(collectTaskId);
             if (instances.isEmpty()) {
-                log.warn("未找到任务相关的用例执行例次 - 任务ID: {}", taskId);
+                log.warn("No test case execution instances found for task - task ID: {}", taskId);
                 return;
             }
             
@@ -255,7 +256,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             }
             
         } catch (Exception e) {
-            log.error("检查任务完成状态异常 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+            log.error("Exception checking task completion status - task ID: {}, error: {}", taskId, e.getMessage(), e);
         }
     }
 
@@ -277,9 +278,9 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
     private void updateTaskToCompleted(Long collectTaskId) {
         boolean success = collectTaskService.updateTaskStatus(collectTaskId, "COMPLETED");
         if (success) {
-            log.info("任务状态更新为已完成 - 任务ID: {}", collectTaskId);
+            log.info("Task status updated to completed - task ID: {}", collectTaskId);
         } else {
-            log.error("任务状态更新失败 - 任务ID: {}", collectTaskId);
+            log.error("Failed to update task status - task ID: {}", collectTaskId);
         }
     }
 
@@ -294,14 +295,14 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             // 更新任务进度
             boolean progressUpdated = collectTaskService.updateTaskProgress(collectTaskId, progressInfo.getTotalCount(), progressInfo.getSuccessCount(), progressInfo.getFailedCount());
             if (progressUpdated) {
-                log.info("任务执行进度更新成功 - 任务ID: {}, 总数: {}, 成功: {}, 失败: {}", 
+                log.info("Task execution progress updated successfully - task ID: {}, total: {}, success: {}, failed: {}", 
                         collectTaskId, progressInfo.getTotalCount(), progressInfo.getSuccessCount(), progressInfo.getFailedCount());
             } else {
-                log.error("任务执行进度更新失败 - 任务ID: {}", collectTaskId);
+                log.error("Failed to update task execution progress - task ID: {}", collectTaskId);
             }
             
         } catch (Exception e) {
-            log.error("更新任务执行进度异常 - 任务ID: {}, 错误: {}", collectTaskId, e.getMessage(), e);
+            log.error("Exception updating task execution progress - task ID: {}, error: {}", collectTaskId, e.getMessage(), e);
         }
     }
 

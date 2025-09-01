@@ -120,7 +120,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
         } catch (Exception e) {
             log.error("Failed to process collect task creation - task name: {}, error: {}", request.getName(), e.getMessage(), e);
-            throw new CollectTaskException("COLLECT_TASK_CREATE_FAILED", "处理采集任务创建失败: " + e.getMessage(), e);
+            throw new CollectTaskException("COLLECT_TASK_CREATE_FAILED", "Failed to process collect task creation: " + e.getMessage(), e);
         }
     }
 
@@ -747,7 +747,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         if (networkType != null) {
             ueInfo.setNetworkTypeName(networkType.getName());
         } else {
-            ueInfo.setNetworkTypeName("未知网络类型");
+            ueInfo.setNetworkTypeName("Unknown network type");
         }
     }
     

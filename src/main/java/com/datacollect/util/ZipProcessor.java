@@ -1,10 +1,5 @@
 package com.datacollect.util;
 
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
-import org.springframework.stereotype.Component;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -12,6 +7,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.springframework.stereotype.Component;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -40,7 +41,7 @@ public class ZipProcessor {
             while ((entry = zis.getNextZipEntry()) != null) {
                 if (!entry.isDirectory()) {
                     String entryName = entry.getName();
-                    log.info("解压文件: {}", entryName);
+                    log.info("Extracting file: {}", entryName);
                     
                     // 检查是否是目标Excel文件
                     if (entryName.equals(excelFileName)) {
@@ -64,9 +65,9 @@ public class ZipProcessor {
         }
         
         if (foundExcelPath != null) {
-            log.info("找到Excel文件: {}", foundExcelPath);
+            log.info("Found Excel file: {}", foundExcelPath);
         } else {
-            log.warn("未找到指定的Excel文件: {}", excelFileName);
+            log.warn("Specified Excel file not found: {}", excelFileName);
         }
         
         return foundExcelPath;
@@ -81,10 +82,10 @@ public class ZipProcessor {
             Path extractPath = Paths.get(extractDir);
             if (Files.exists(extractPath)) {
                 deleteDirectory(extractPath.toFile());
-                log.info("清理临时文件目录: {}", extractDir);
+                log.info("Cleaned up temporary file directory: {}", extractDir);
             }
         } catch (Exception e) {
-            log.error("清理临时文件失败: {}", e.getMessage());
+            log.error("Failed to clean up temporary files: {}", e.getMessage());
         }
     }
     

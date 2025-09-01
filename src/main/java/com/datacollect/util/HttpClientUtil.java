@@ -1,11 +1,13 @@
 package com.datacollect.util;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * HTTP客户端工具类
@@ -38,16 +40,16 @@ public class HttpClientUtil {
             
             HttpEntity<Object> entity = new HttpEntity<>(requestBody, headers);
             
-            log.debug("发送POST请求 - URL: {}, 请求体: {}", url, requestBody);
+            log.debug("Sending POST request - URL: {}, Request body: {}", url, requestBody);
             
             ResponseEntity<T> response = restTemplate.postForEntity(url, entity, responseType);
             
-            log.debug("收到响应 - 状态码: {}, 响应体: {}", response.getStatusCode(), response.getBody());
+            log.debug("Received response - Status code: {}, Response body: {}", response.getStatusCode(), response.getBody());
             
             return response;
             
         } catch (Exception e) {
-            log.error("HTTP请求异常 - URL: {}, 错误: {}", url, e.getMessage(), e);
+            log.error("HTTP request exception - URL: {}, Error: {}", url, e.getMessage(), e);
             throw e;
         }
     }
@@ -61,16 +63,16 @@ public class HttpClientUtil {
      */
     public <T> ResponseEntity<T> get(String url, Class<T> responseType) {
         try {
-            log.debug("发送GET请求 - URL: {}", url);
+            log.debug("Sending GET request - URL: {}", url);
             
             ResponseEntity<T> response = restTemplate.getForEntity(url, responseType);
             
-            log.debug("收到响应 - 状态码: {}, 响应体: {}", response.getStatusCode(), response.getBody());
+            log.debug("Received response - Status code: {}, Response body: {}", response.getStatusCode(), response.getBody());
             
             return response;
             
         } catch (Exception e) {
-            log.error("HTTP请求异常 - URL: {}, 错误: {}", url, e.getMessage(), e);
+            log.error("HTTP request exception - URL: {}, Error: {}", url, e.getMessage(), e);
             throw e;
         }
     }

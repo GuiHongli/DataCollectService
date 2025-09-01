@@ -101,15 +101,15 @@ public class TestCaseSetController {
             // 批量保存测试用例
             testCaseService.saveBatch(testCases);
             
-            log.info("成功上传用例集: {}, 版本: {}, 包含 {} 个测试用例", name, version, testCases.size());
+            log.info("Successfully uploaded test case set: {}, version: {}, containing {} test cases", name, version, testCases.size());
 
             return Result.success(testCaseSet);
 
         } catch (IOException e) {
-            log.error("文件上传或解析失败", e);
+            log.error("File upload or parsing failed", e);
             return Result.error("文件上传或解析失败：" + e.getMessage());
         } catch (Exception e) {
-            log.error("处理用例集上传时发生错误", e);
+            log.error("Error occurred while processing test case set upload", e);
             return Result.error("处理用例集上传时发生错误：" + e.getMessage());
         } finally {
             // 清理临时文件
@@ -239,7 +239,7 @@ public class TestCaseSetController {
             try {
                 Files.deleteIfExists(Paths.get(testCaseSet.getFilePath()));
             } catch (IOException e) {
-                log.error("删除文件失败", e);
+                log.error("Failed to delete file", e);
             }
         }
         
@@ -327,7 +327,7 @@ public class TestCaseSetController {
             String fileUrl = goHttpServerClient.uploadFile(file, targetFileName);
             return Result.success(fileUrl);
         } catch (IOException e) {
-            log.error("上传到gohttpserver失败", e);
+            log.error("Failed to upload to gohttpserver", e);
             return Result.error("上传失败：" + e.getMessage());
         }
     }
@@ -359,7 +359,7 @@ public class TestCaseSetController {
             
             return Result.success("成功清理 " + softDeletedRecords.size() + " 条软删除记录");
         } catch (Exception e) {
-            log.error("清理软删除记录失败", e);
+            log.error("Failed to cleanup soft deleted records", e);
             return Result.error("清理失败：" + e.getMessage());
         }
     }

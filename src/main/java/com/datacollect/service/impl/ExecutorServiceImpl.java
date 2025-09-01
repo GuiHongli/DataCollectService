@@ -1,5 +1,14 @@
 package com.datacollect.service.impl;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -9,15 +18,8 @@ import com.datacollect.entity.dto.ExecutorDTO;
 import com.datacollect.mapper.ExecutorMapper;
 import com.datacollect.service.ExecutorService;
 import com.datacollect.service.RegionService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -327,7 +329,7 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     
     @Override
     public List<Executor> getExecutorsByRegion(Long regionId, Long countryId, Long provinceId, Long cityId) {
-        log.info("开始根据地域条件获取执行机 - regionId={}, countryId={}, provinceId={}, cityId={}", 
+        log.info("Start getting executors by region conditions - regionId={}, countryId={}, provinceId={}, cityId={}", 
                 regionId, countryId, provinceId, cityId);
 
         QueryWrapper<Executor> queryWrapper = baseOnlineExecutorQuery();
@@ -363,38 +365,38 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
             filterByRegion(queryWrapper, regionId);
             return;
         }
-        log.info("未指定地域筛选条件，将查询所有执行机");
+        log.info("No region filter conditions specified, will query all executors");
     }
 
     private void filterByCity(QueryWrapper<Executor> queryWrapper, Long cityId) {
-        log.info("按城市筛选执行机 - cityId: {}", cityId);
+        log.info("Filter executors by city - cityId: {}", cityId);
         queryWrapper.eq("region_id", cityId);
     }
 
     private void filterByProvince(QueryWrapper<Executor> queryWrapper, Long provinceId) {
-        log.info("按省份筛选执行机 - provinceId: {}", provinceId);
+        log.info("Filter executors by province - provinceId: {}", provinceId);
         List<Region> cities = regionService.getRegionsByParentId(provinceId);
         List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-        log.debug("省份 {} 下的城市数量: {}, 城市ID列表: {}", provinceId, cityIds.size(), cityIds);
+        log.debug("Cities under province {}: count={}, city ID list: {}", provinceId, cityIds.size(), cityIds);
         if (!cityIds.isEmpty()) {
             queryWrapper.in("region_id", cityIds);
         }
     }
 
     private void filterByCountry(QueryWrapper<Executor> queryWrapper, Long countryId) {
-        log.info("按国家筛选执行机 - countryId: {}", countryId);
+        log.info("Filter executors by country - countryId: {}", countryId);
         List<Region> provinces = regionService.getRegionsByParentId(countryId);
         List<Long> provinceIds = provinces.stream().map(Region::getId).collect(Collectors.toList());
-        log.debug("国家 {} 下的省份数量: {}, 省份ID列表: {}", countryId, provinceIds.size(), provinceIds);
+        log.debug("Provinces under country {}: count={}, province ID list: {}", countryId, provinceIds.size(), provinceIds);
         if (!provinceIds.isEmpty()) {
             List<Long> allCityIds = new ArrayList<>();
             for (Long pid : provinceIds) {
                 List<Region> cities = regionService.getRegionsByParentId(pid);
                 List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                log.debug("省份 {} 下的城市数量: {}, 城市ID列表: {}", pid, cityIds.size(), cityIds);
+                log.debug("Cities under province {}: count={}, city ID list: {}", pid, cityIds.size(), cityIds);
                 allCityIds.addAll(cityIds);
             }
-            log.debug("国家 {} 下所有城市数量: {}, 城市ID列表: {}", countryId, allCityIds.size(), allCityIds);
+            log.debug("Total cities under country {}: count={}, city ID list: {}", countryId, allCityIds.size(), allCityIds);
             if (!allCityIds.isEmpty()) {
                 queryWrapper.in("region_id", allCityIds);
             }
@@ -402,23 +404,23 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     }
 
     private void filterByRegion(QueryWrapper<Executor> queryWrapper, Long regionId) {
-        log.info("按地域筛选执行机 - regionId: {}", regionId);
+        log.info("Filter executors by region - regionId: {}", regionId);
         List<Region> countries = regionService.getRegionsByParentId(regionId);
         List<Long> countryIds = countries.stream().map(Region::getId).collect(Collectors.toList());
-        log.debug("地域 {} 下的国家数量: {}, 国家ID列表: {}", regionId, countryIds.size(), countryIds);
+        log.debug("Countries under region {}: count={}, country ID list: {}", regionId, countryIds.size(), countryIds);
         if (!countryIds.isEmpty()) {
             List<Long> allCityIds = new ArrayList<>();
             for (Long cid : countryIds) {
                 List<Region> provinces = regionService.getRegionsByParentId(cid);
-                log.debug("国家 {} 下的省份数量: {}", cid, provinces.size());
+                log.debug("Provinces under country {}: count={}", cid, provinces.size());
                 for (Region province : provinces) {
                     List<Region> cities = regionService.getRegionsByParentId(province.getId());
                     List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                    log.debug("省份 {} 下的城市数量: {}, 城市ID列表: {}", province.getId(), cityIds.size(), cityIds);
+                    log.debug("Cities under province {}: count={}, city ID list: {}", province.getId(), cityIds.size(), cityIds);
                     allCityIds.addAll(cityIds);
                 }
             }
-            log.debug("地域 {} 下所有城市数量: {}, 城市ID列表: {}", regionId, allCityIds.size(), allCityIds);
+            log.debug("Total cities under region {}: count={}, city ID list: {}", regionId, allCityIds.size(), allCityIds);
             if (!allCityIds.isEmpty()) {
                 queryWrapper.in("region_id", allCityIds);
             }
@@ -426,9 +428,9 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     }
 
     private void logExecutors(List<Executor> executors) {
-        log.info("根据地域条件获取到执行机数量: {}", executors.size());
+        log.info("Executors found by region conditions: count={}", executors.size());
         for (Executor executor : executors) {
-            log.debug("匹配的执行机: {} (ID: {}, IP: {}, 地域ID: {})", 
+            log.debug("Matched executor: {} (ID: {}, IP: {}, region ID: {})", 
                     executor.getName(), executor.getId(), executor.getIpAddress(), executor.getRegionId());
         }
     }

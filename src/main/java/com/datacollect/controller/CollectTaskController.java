@@ -1,44 +1,53 @@
 package com.datacollect.controller;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.datacollect.common.Result;
-import com.datacollect.entity.CollectTask;
-import com.datacollect.service.CollectTaskService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.ArrayList;
-import com.datacollect.entity.dto.LogicEnvironmentDTO;
-import com.datacollect.service.LogicEnvironmentService;
-import com.datacollect.service.CollectStrategyService;
-import com.datacollect.service.TestCaseService;
-import com.datacollect.service.ExecutorService;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.datacollect.common.Result;
+import com.datacollect.dto.CollectTaskRequest;
 import com.datacollect.entity.CollectStrategy;
-import com.datacollect.entity.TestCase;
+import com.datacollect.entity.CollectTask;
 import com.datacollect.entity.Executor;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.entity.LogicEnvironmentNetwork;
 import com.datacollect.entity.LogicNetwork;
-import com.datacollect.service.LogicEnvironmentNetworkService;
-import com.datacollect.service.LogicNetworkService;
-import com.datacollect.service.CollectTaskProcessService;
-import com.datacollect.dto.CollectTaskRequest;
-import com.datacollect.service.CaseExecuteServiceClient;
-import com.datacollect.service.TestCaseExecutionInstanceService;
+import com.datacollect.entity.TestCase;
 import com.datacollect.entity.TestCaseExecutionInstance;
+import com.datacollect.entity.dto.LogicEnvironmentDTO;
+import com.datacollect.service.CaseExecuteServiceClient;
+import com.datacollect.service.CollectStrategyService;
+import com.datacollect.service.CollectTaskProcessService;
+import com.datacollect.service.CollectTaskService;
+import com.datacollect.service.ExecutorService;
+import com.datacollect.service.LogicEnvironmentNetworkService;
+import com.datacollect.service.LogicEnvironmentService;
+import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.TestCaseExecutionInstanceService;
+import com.datacollect.service.TestCaseService;
 
-import java.util.Set;
-import java.util.HashSet;
-import java.util.stream.Collectors;
-import java.util.Map;
-import java.util.HashMap;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
@@ -103,7 +112,7 @@ public class CollectTaskController {
             
         } catch (Exception e) {
             log.error("Failed to create collect task - task name: {}, error: {}", request.getName(), e.getMessage(), e);
-            return Result.error("创建采集任务失败: " + e.getMessage());
+            return Result.error("Failed to create collect task: " + e.getMessage());
         }
     }
 
@@ -113,7 +122,7 @@ public class CollectTaskController {
     private Map<String, Object> createSuccessResult(Long collectTaskId) {
         Map<String, Object> result = new HashMap<>();
         result.put("collectTaskId", collectTaskId);
-        result.put("message", "采集任务创建成功");
+        result.put("message", "Collect task created successfully");
         result.put("timestamp", System.currentTimeMillis());
         return result;
     }
@@ -195,13 +204,13 @@ public class CollectTaskController {
         try {
             CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
-                return Result.error("任务不存在");
+                return Result.error("Task not found");
             }
             
             // 更新任务状态
             boolean taskUpdated = collectTaskService.updateTaskStatus(id, "RUNNING");
             if (!taskUpdated) {
-                return Result.error("任务状态更新失败");
+                return Result.error("Task status update failed");
             }
             
             // 更新所有PENDING状态的用例执行例次为RUNNING
@@ -212,7 +221,7 @@ public class CollectTaskController {
             
         } catch (Exception e) {
             log.error("Failed to start task - task ID: {}, error: {}", id, e.getMessage(), e);
-            return Result.error("启动任务失败: " + e.getMessage());
+            return Result.error("Failed to start task: " + e.getMessage());
         }
     }
 
@@ -241,13 +250,13 @@ public class CollectTaskController {
         try {
             CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
-                return Result.error("任务不存在");
+                return Result.error("Task not found");
             }
             
             // 更新任务状态
             boolean taskUpdated = collectTaskService.updateTaskStatus(id, "STOPPED");
             if (!taskUpdated) {
-                return Result.error("任务状态更新失败");
+                return Result.error("Task status update failed");
             }
             
             // 获取所有RUNNING状态的用例执行例次
@@ -270,7 +279,7 @@ public class CollectTaskController {
             
         } catch (Exception e) {
             log.error("Failed to stop task - task ID: {}, error: {}", id, e.getMessage(), e);
-            return Result.error("停止任务失败: " + e.getMessage());
+            return Result.error("Failed to stop task: " + e.getMessage());
         }
     }
 
@@ -326,13 +335,13 @@ public class CollectTaskController {
         try {
             CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
-                return Result.error("任务不存在");
+                return Result.error("Task not found");
             }
             
             // 更新任务状态
             boolean taskUpdated = collectTaskService.updateTaskStatus(id, "PAUSED");
             if (!taskUpdated) {
-                return Result.error("任务状态更新失败");
+                return Result.error("Task status update failed");
             }
             
             // 更新所有RUNNING状态的用例执行例次为PAUSED
@@ -343,7 +352,7 @@ public class CollectTaskController {
             
         } catch (Exception e) {
             log.error("Failed to pause task - task ID: {}, error: {}", id, e.getMessage(), e);
-            return Result.error("暂停任务失败: " + e.getMessage());
+            return Result.error("Failed to pause task: " + e.getMessage());
         }
     }
 
@@ -381,18 +390,18 @@ public class CollectTaskController {
         try {
             CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
-                return Result.error("任务不存在");
+                return Result.error("Task not found");
             }
             
             // 验证状态转换是否有效
             if (!isValidStatusTransition(collectTask.getStatus(), status)) {
-                return Result.error("无效的状态转换: " + collectTask.getStatus() + " -> " + status);
+                return Result.error("Invalid status transition: " + collectTask.getStatus() + " -> " + status);
             }
             
             // 更新任务状态
             boolean taskUpdated = collectTaskService.updateTaskStatus(id, status);
             if (!taskUpdated) {
-                return Result.error("任务状态更新失败");
+                return Result.error("Task status update failed");
             }
             
             // 根据状态转换更新相关的用例执行例次状态
@@ -403,7 +412,7 @@ public class CollectTaskController {
             
         } catch (Exception e) {
             log.error("Failed to update task status - task ID: {}, new status: {}, error: {}", id, status, e.getMessage(), e);
-            return Result.error("更新任务状态失败: " + e.getMessage());
+            return Result.error("Failed to update task status: " + e.getMessage());
         }
     }
     
@@ -493,7 +502,7 @@ public class CollectTaskController {
         try {
             CollectTask task = collectTaskService.getById(id);
             if (task == null) {
-                return Result.error("任务不存在");
+                return Result.error("Task not found");
             }
             
             // 获取执行例次列表，基于真实数据计算进度
@@ -504,7 +513,7 @@ public class CollectTaskController {
             return Result.success(progress);
         } catch (Exception e) {
             log.error("Failed to get task execution progress - task ID: {}, error: {}", id, e.getMessage(), e);
-            return Result.error("获取任务执行进度失败: " + e.getMessage());
+            return Result.error("Failed to get task execution progress: " + e.getMessage());
         }
     }
 
@@ -557,7 +566,7 @@ public class CollectTaskController {
         try {
             CollectTask task = collectTaskService.getById(id);
             if (task == null) {
-                return Result.error("任务不存在");
+                return Result.error("Task not found");
             }
             
             // 获取执行例次列表
@@ -567,7 +576,7 @@ public class CollectTaskController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to get task execution instance list - task ID: {}, error: {}", id, e.getMessage(), e);
-            return Result.error("获取任务执行例次列表失败: " + e.getMessage());
+            return Result.error("Failed to get task execution instance list: " + e.getMessage());
         }
     }
 
@@ -662,7 +671,7 @@ public class CollectTaskController {
             // 1. 获取采集策略信息
             CollectStrategy strategy = validateAndGetStrategy(strategyId);
             if (strategy == null) {
-                return Result.error("采集策略不存在");
+                return Result.error("Collect strategy not found");
             }
             
             // 2. 获取策略关联的测试用例（基于筛选条件）
@@ -686,7 +695,7 @@ public class CollectTaskController {
             
         } catch (Exception e) {
             log.error("Failed to get available logic environment list", e);
-            return Result.error("获取可用逻辑环境列表失败: " + e.getMessage());
+            return Result.error("Failed to get available logic environment list: " + e.getMessage());
         }
     }
 

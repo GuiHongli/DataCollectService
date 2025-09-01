@@ -1,20 +1,21 @@
 package com.datacollect.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.datacollect.dto.CollectTaskRequest;
-import com.datacollect.entity.CollectTask;
-import com.datacollect.entity.CollectStrategy;
-import com.datacollect.mapper.CollectTaskMapper;
-import com.datacollect.common.exception.CollectTaskException;
-import com.datacollect.service.CollectTaskService;
-import com.datacollect.service.CollectStrategyService;
-import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.datacollect.common.exception.CollectTaskException;
+import com.datacollect.dto.CollectTaskRequest;
+import com.datacollect.entity.CollectStrategy;
+import com.datacollect.entity.CollectTask;
+import com.datacollect.mapper.CollectTaskMapper;
+import com.datacollect.service.CollectStrategyService;
+import com.datacollect.service.CollectTaskService;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 采集任务服务实现类
@@ -31,13 +32,13 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
 
     @Override
     public Long createCollectTask(CollectTaskRequest request) {
-        log.info("创建采集任务 - 任务名称: {}, 采集策略ID: {}, 采集次数: {}", 
+        log.info("Create collect task - task name: {}, collect strategy ID: {}, collect count: {}", 
                 request.getName(), request.getCollectStrategyId(), request.getCollectCount());
         
         // 获取采集策略信息
         CollectStrategy strategy = collectStrategyService.getById(request.getCollectStrategyId());
         if (strategy == null) {
-            log.error("采集策略不存在 - 策略ID: {}", request.getCollectStrategyId());
+            log.error("Collect strategy not found - strategy ID: {}", request.getCollectStrategyId());
             throw new CollectTaskException("COLLECT_STRATEGY_NOT_FOUND", "采集策略不存在");
         }
         
@@ -67,26 +68,26 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         boolean success = save(collectTask);
         if (success) {
-            log.info("采集任务创建成功 - 任务ID: {}", collectTask.getId());
+            log.info("Collect task created successfully - task ID: {}", collectTask.getId());
             return collectTask.getId();
         } else {
-            log.error("采集任务创建失败 - 任务名称: {}", request.getName());
+            log.error("Failed to create collect task - task name: {}", request.getName());
             throw new CollectTaskException("COLLECT_TASK_SAVE_FAILED", "采集任务创建失败");
         }
     }
 
     @Override
     public CollectTask getCollectTaskById(Long id) {
-        log.debug("根据ID获取采集任务 - 任务ID: {}", id);
+        log.debug("Get collect task by ID - task ID: {}", id);
         return getById(id);
     }
 
     @Override
     public boolean updateTaskStatus(Long id, String status) {
-        log.info("更新任务状态 - 任务ID: {}, 状态: {}", id, status);
+        log.info("Update task status - task ID: {}, status: {}", id, status);
         
         if (!isValidStatus(status)) {
-            log.error("无效的任务状态: {} - 任务ID: {}", status, id);
+            log.error("Invalid task status: {} - task ID: {}", status, id);
             return false;
         }
         
@@ -115,9 +116,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     private boolean executeUpdate(UpdateWrapper<CollectTask> updateWrapper, Long id, String status) {
         boolean success = update(updateWrapper);
         if (success) {
-            log.info("任务状态更新成功 - 任务ID: {}, 状态: {}", id, status);
+            log.info("Task status updated successfully - task ID: {}, status: {}", id, status);
         } else {
-            log.error("任务状态更新失败 - 任务ID: {}, 状态: {}", id, status);
+            log.error("Failed to update task status - task ID: {}, status: {}", id, status);
         }
         return success;
     }
@@ -145,7 +146,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
 
     @Override
     public boolean updateTaskProgress(Long id, Integer totalCount, Integer successCount, Integer failedCount) {
-        log.debug("更新任务进度 - 任务ID: {}, 总用例数: {}, 成功: {}, 失败: {}", 
+        log.debug("Update task progress - task ID: {}, total test case count: {}, success: {}, failed: {}", 
                 id, totalCount, successCount, failedCount);
         
         UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
@@ -157,9 +158,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         boolean success = update(updateWrapper);
         if (success) {
-            log.debug("任务进度更新成功 - 任务ID: {}", id);
+            log.debug("Task progress updated successfully - task ID: {}", id);
         } else {
-            log.error("任务进度更新失败 - 任务ID: {}", id);
+            log.error("Failed to update task progress - task ID: {}", id);
         }
         
         return success;
@@ -167,7 +168,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     
     @Override
     public boolean updateTaskFailureReason(Long id, String failureReason) {
-        log.info("更新任务失败原因 - 任务ID: {}, 失败原因: {}", id, failureReason);
+        log.info("Update task failure reason - task ID: {}, failure reason: {}", id, failureReason);
         
         UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
         updateWrapper.eq("id", id);
@@ -176,9 +177,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         boolean success = update(updateWrapper);
         if (success) {
-            log.info("任务失败原因更新成功 - 任务ID: {}", id);
+            log.info("Task failure reason updated successfully - task ID: {}", id);
         } else {
-            log.error("任务失败原因更新失败 - 任务ID: {}", id);
+            log.error("Failed to update task failure reason - task ID: {}", id);
         }
         
         return success;

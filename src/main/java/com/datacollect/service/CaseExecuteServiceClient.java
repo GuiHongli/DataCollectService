@@ -1,6 +1,7 @@
 package com.datacollect.service;
 
-import lombok.extern.slf4j.Slf4j;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -10,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * CaseExecuteService客户端
@@ -36,7 +37,7 @@ public class CaseExecuteServiceClient {
     public boolean cancelTaskExecution(String executorIp, String taskId) {
         try {
             String url = String.format("http://%s:8081/api/test-case-execution/cancel/%s", executorIp, taskId);
-            log.info("调用CaseExecuteService取消任务 - URL: {}, 任务ID: {}", url, taskId);
+            log.info("Call CaseExecuteService to cancel task - URL: {}, task ID: {}", url, taskId);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -49,20 +50,20 @@ public class CaseExecuteServiceClient {
                 Integer code = (Integer) result.get("code");
                 
                 if (code != null && code == 200) {
-                    log.info("CaseExecuteService取消任务成功 - 任务ID: {}, 执行机IP: {}", taskId, executorIp);
+                    log.info("CaseExecuteService task cancellation successful - task ID: {}, executor IP: {}", taskId, executorIp);
                     return true;
                 } else {
                     String message = (String) result.get("message");
-                    log.error("CaseExecuteService取消任务返回错误 - 任务ID: {}, 错误信息: {}", taskId, message);
+                    log.error("CaseExecuteService task cancellation returned error - task ID: {}, error message: {}", taskId, message);
                     return false;
                 }
             } else {
-                log.error("CaseExecuteService取消任务调用失败 - 任务ID: {}, HTTP状态: {}", taskId, response.getStatusCode());
+                log.error("CaseExecuteService task cancellation call failed - task ID: {}, HTTP status: {}", taskId, response.getStatusCode());
                 return false;
             }
             
         } catch (Exception e) {
-            log.error("CaseExecuteService取消任务网络调用异常 - 任务ID: {}, 执行机IP: {}, 错误: {}", 
+            log.error("CaseExecuteService task cancellation network call exception - task ID: {}, executor IP: {}, error: {}", 
                     taskId, executorIp, e.getMessage(), e);
             return false;
         }

@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(CollectTaskException.class)
     public Result<String> handleCollectTaskException(CollectTaskException e) {
         log.error("Collect task exception: {}", e.getMessage(), e);
-        return Result.error("采集任务异常: " + e.getMessage());
+        return Result.error("Collect task exception: " + e.getMessage());
     }
 
     /**
@@ -68,7 +68,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConfigurationException.class)
     public Result<String> handleConfigurationException(ConfigurationException e) {
         log.error("Configuration exception: {}", e.getMessage(), e);
-        return Result.error("配置异常: " + e.getMessage());
+        return Result.error("Configuration exception: " + e.getMessage());
     }
 
     /**
@@ -77,7 +77,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     public Result<String> handleRuntimeException(RuntimeException e) {
         log.error("Runtime exception", e);
-        return Result.error("系统运行异常: " + e.getMessage());
+        return Result.error("System runtime exception: " + e.getMessage());
     }
 
     /**
@@ -86,6 +86,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public Result<String> handleException(Exception e) {
         log.error("System exception", e);
-        return Result.error("系统异常: " + e.getMessage());
+        return Result.error("System exception: " + e.getMessage());
     }
 }

@@ -1,28 +1,30 @@
 package com.datacollect.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.datacollect.entity.LogicEnvironment;
-import com.datacollect.entity.LogicEnvironmentUe;
-import com.datacollect.entity.LogicEnvironmentNetwork;
-import com.datacollect.entity.Ue;
-import com.datacollect.entity.Executor;
-import com.datacollect.entity.LogicNetwork;
-import com.datacollect.entity.dto.LogicEnvironmentDTO;
-import com.datacollect.mapper.LogicEnvironmentMapper;
-import com.datacollect.service.LogicEnvironmentService;
-import com.datacollect.service.LogicEnvironmentUeService;
-import com.datacollect.service.LogicEnvironmentNetworkService;
-import com.datacollect.service.UeService;
-import com.datacollect.service.ExecutorService;
-import com.datacollect.service.LogicNetworkService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.datacollect.entity.Executor;
+import com.datacollect.entity.LogicEnvironment;
+import com.datacollect.entity.LogicEnvironmentNetwork;
+import com.datacollect.entity.LogicEnvironmentUe;
+import com.datacollect.entity.LogicNetwork;
+import com.datacollect.entity.Ue;
+import com.datacollect.entity.dto.LogicEnvironmentDTO;
+import com.datacollect.mapper.LogicEnvironmentMapper;
+import com.datacollect.service.ExecutorService;
+import com.datacollect.service.LogicEnvironmentNetworkService;
+import com.datacollect.service.LogicEnvironmentService;
+import com.datacollect.service.LogicEnvironmentUeService;
+import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.UeService;
+
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -194,29 +196,29 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
     
     @Override
     public List<LogicEnvironment> getByExecutorId(Long executorId) {
-        log.debug("获取执行机关联的逻辑环境 - 执行机ID: {}", executorId);
+        log.debug("Getting logic environments associated with executor - Executor ID: {}", executorId);
         QueryWrapper<LogicEnvironment> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("executor_id", executorId);
         queryWrapper.eq("status", 1);
         queryWrapper.orderByAsc("name");
         List<LogicEnvironment> environments = list(queryWrapper);
-        log.debug("执行机 {} 关联的逻辑环境数量: {}", executorId, environments.size());
+        log.debug("Number of logic environments associated with executor {}: {}", executorId, environments.size());
         for (LogicEnvironment env : environments) {
-            log.debug("执行机 {} 关联的逻辑环境: {} (ID: {})", executorId, env.getName(), env.getId());
+            log.debug("Executor {} associated logic environment: {} (ID: {})", executorId, env.getName(), env.getId());
         }
         return environments;
     }
     
     @Override
     public LogicEnvironmentDTO getLogicEnvironmentDTO(Long logicEnvironmentId) {
-        log.debug("获取逻辑环境详细信息 - 逻辑环境ID: {}", logicEnvironmentId);
+        log.debug("Getting logic environment details - Logic Environment ID: {}", logicEnvironmentId);
         LogicEnvironment logicEnvironment = getById(logicEnvironmentId);
         if (logicEnvironment == null) {
-            log.warn("逻辑环境不存在 - 逻辑环境ID: {}", logicEnvironmentId);
+            log.warn("Logic environment not found - Logic Environment ID: {}", logicEnvironmentId);
             return null;
         }
         LogicEnvironmentDTO dto = convertToDTO(logicEnvironment);
-        log.debug("获取到逻辑环境详细信息: {} (ID: {})", dto.getName(), dto.getId());
+        log.debug("Retrieved logic environment details: {} (ID: {})", dto.getName(), dto.getId());
         return dto;
     }
 }
