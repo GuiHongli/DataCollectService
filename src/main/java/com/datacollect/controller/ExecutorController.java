@@ -37,32 +37,51 @@ public class ExecutorController {
             log.info("更新执行机 - ID: {}, 名称: {}, IP地址: {}", id, executor.getName(), executor.getIpAddress());
             
             // 检查IP地址是否已被其他执行机使用
-            QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("ip_address", executor.getIpAddress());
-            queryWrapper.ne("id", id); // 排除当前执行机
-            queryWrapper.eq("deleted", 0); // 只检查未删除的记录
-            Executor existingExecutor = executorService.getOne(queryWrapper);
-            
-            if (existingExecutor != null) {
-                log.warn("IP地址 {} 已被执行机 {} (ID: {}) 使用", 
-                        executor.getIpAddress(), existingExecutor.getName(), existingExecutor.getId());
+            if (isIpAddressInUse(executor.getIpAddress(), id)) {
                 return Result.error("IP地址 " + executor.getIpAddress() + " 已被其他执行机使用");
             }
             
-            executor.setId(id);
-            boolean success = executorService.updateById(executor);
-            
-            if (success) {
-                log.info("执行机更新成功 - ID: {}", id);
-                return Result.success(executor);
-            } else {
-                log.error("执行机更新失败 - ID: {}", id);
-                return Result.error("更新失败");
-            }
+            // 执行更新
+            return performUpdate(id, executor);
             
         } catch (Exception e) {
             log.error("更新执行机异常 - ID: {}, 错误: {}", id, e.getMessage(), e);
             return Result.error("更新失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 检查IP地址是否已被其他执行机使用
+     */
+    private boolean isIpAddressInUse(String ipAddress, Long excludeId) {
+        QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("ip_address", ipAddress);
+        queryWrapper.ne("id", excludeId); // 排除当前执行机
+        queryWrapper.eq("deleted", 0); // 只检查未删除的记录
+        Executor existingExecutor = executorService.getOne(queryWrapper);
+        
+        if (existingExecutor != null) {
+            log.warn("IP地址 {} 已被执行机 {} (ID: {}) 使用", 
+                    ipAddress, existingExecutor.getName(), existingExecutor.getId());
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * 执行更新操作
+     */
+    private Result<Executor> performUpdate(Long id, Executor executor) {
+        executor.setId(id);
+        boolean success = executorService.updateById(executor);
+        
+        if (success) {
+            log.info("执行机更新成功 - ID: {}", id);
+            return Result.success(executor);
+        } else {
+            log.error("执行机更新失败 - ID: {}", id);
+            return Result.error("更新失败");
         }
     }
 

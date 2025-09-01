@@ -127,29 +127,11 @@ public class TestCaseExecutionResultController {
                 taskId, testCaseId, round, logFile.getOriginalFilename(), logFile.getSize());
         
         try {
-            // 创建日志文件存储目录
-            String logDir = "logs/testcase/" + taskId + "/" + testCaseId + "/" + round;
-            java.nio.file.Path logPath = java.nio.file.Paths.get(logDir);
-            java.nio.file.Files.createDirectories(logPath);
+            // 创建日志文件存储目录并保存文件
+            java.nio.file.Path filePath = createLogFileAndSave(taskId, testCaseId, round, logFile);
             
-            // 保存日志文件
-            String fileName = logFile.getOriginalFilename();
-            if (fileName == null || fileName.trim().isEmpty()) {
-                fileName = "testcase_" + testCaseId + "_" + round + ".log";
-            }
-            
-            java.nio.file.Path filePath = logPath.resolve(fileName);
-            logFile.transferTo(filePath.toFile());
-            
-            Map<String, Object> data = new HashMap<>();
-            data.put("taskId", taskId);
-            data.put("testCaseId", testCaseId);
-            data.put("round", round);
-            data.put("logFileName", fileName);
-            data.put("fileSize", logFile.getSize());
-            data.put("filePath", filePath.toString());
-            data.put("message", "用例执行日志文件上传成功");
-            data.put("timestamp", System.currentTimeMillis());
+            // 构建响应数据
+            Map<String, Object> data = buildUploadResponseData(taskId, testCaseId, round, logFile, filePath);
             
             log.info("用例执行日志文件上传成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 文件路径: {}", 
                     taskId, testCaseId, round, filePath);
@@ -161,6 +143,51 @@ public class TestCaseExecutionResultController {
                     taskId, testCaseId, round, e.getMessage(), e);
             return Result.error("接收用例执行日志文件失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 创建日志文件并保存
+     */
+    private java.nio.file.Path createLogFileAndSave(String taskId, Long testCaseId, Integer round, MultipartFile logFile) throws Exception {
+        // 创建日志文件存储目录
+        String logDir = "logs/testcase/" + taskId + "/" + testCaseId + "/" + round;
+        java.nio.file.Path logPath = java.nio.file.Paths.get(logDir);
+        java.nio.file.Files.createDirectories(logPath);
+        
+        // 保存日志文件
+        String fileName = getLogFileName(logFile, testCaseId, round);
+        java.nio.file.Path filePath = logPath.resolve(fileName);
+        logFile.transferTo(filePath.toFile());
+        
+        return filePath;
+    }
+
+    /**
+     * 获取日志文件名
+     */
+    private String getLogFileName(MultipartFile logFile, Long testCaseId, Integer round) {
+        String fileName = logFile.getOriginalFilename();
+        if (fileName == null || fileName.trim().isEmpty()) {
+            fileName = "testcase_" + testCaseId + "_" + round + ".log";
+        }
+        return fileName;
+    }
+
+    /**
+     * 构建上传响应数据
+     */
+    private Map<String, Object> buildUploadResponseData(String taskId, Long testCaseId, Integer round, 
+                                                      MultipartFile logFile, java.nio.file.Path filePath) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("taskId", taskId);
+        data.put("testCaseId", testCaseId);
+        data.put("round", round);
+        data.put("logFileName", filePath.getFileName().toString());
+        data.put("fileSize", logFile.getSize());
+        data.put("filePath", filePath.toString());
+        data.put("message", "用例执行日志文件上传成功");
+        data.put("timestamp", System.currentTimeMillis());
+        return data;
     }
 
     /**

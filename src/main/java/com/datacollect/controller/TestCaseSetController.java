@@ -62,95 +62,38 @@ public class TestCaseSetController {
                                      @RequestParam("description") String description) {
         String extractDir = null;
         try {
-            // 检查文件类型
+            // 验证文件
             String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null || !originalFilename.endsWith(".zip")) {
-                return Result.error("只支持上传zip文件");
-            }
-
-            // 检查文件大小（100MB限制）
-            long maxSize = 100 * 1024 * 1024; // 100MB
-            if (file.getSize() > maxSize) {
-                return Result.error("文件大小不能超过100MB");
+            if (!isValidFile(file, originalFilename)) {
+                return Result.error("文件验证失败");
             }
 
             // 解析文件名获取用例集名称和版本
-            String[] parts = originalFilename.replace(".zip", "").split("_");
-            if (parts.length < 2) {
+            String[] nameAndVersion = parseFileName(originalFilename);
+            if (nameAndVersion == null) {
                 return Result.error("文件名格式错误，应为：用例集名称_版本.zip");
             }
 
-            String name = parts[0];
-            String version = parts[1];
+            String name = nameAndVersion[0];
+            String version = nameAndVersion[1];
 
-            // 检查是否已存在相同名称和版本（不包含软删除的记录）
-            QueryWrapper<TestCaseSet> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("name", name);
-            queryWrapper.eq("version", version);
-            queryWrapper.eq("deleted", 0); // 只查未被软删除的记录
-            if (testCaseSetService.count(queryWrapper) > 0) {
+            // 检查是否已存在相同名称和版本
+            if (isDuplicateTestCaseSet(name, version)) {
                 return Result.error("已存在相同名称和版本的用例集");
             }
 
-            // 使用配置的上传目录
-            Path uploadPath = fileUploadConfig.getTestcaseUploadPath();
+            // 保存文件到本地
+            Path filePath = saveFileToLocal(file, originalFilename);
 
-            // 保持原始文件名，但检查文件是否已存在
-            String originalFileName = originalFilename;
-            Path filePath = uploadPath.resolve(originalFileName);
-            
-            // 如果文件已存在，添加时间戳后缀
-            if (Files.exists(filePath)) {
-                String nameWithoutExt = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
-                String extension = originalFileName.substring(originalFileName.lastIndexOf('.'));
-                String timestamp = String.valueOf(System.currentTimeMillis());
-                originalFileName = nameWithoutExt + "_" + timestamp + extension;
-                filePath = uploadPath.resolve(originalFileName);
-            }
-
-            // 保存ZIP文件到本地
-            File dest = filePath.toFile();
-            file.transferTo(dest);
-            
-            // 上传到gohttpserver，使用原始文件名
-            String goHttpServerUrl = null;
-            try {
-                if (goHttpServerClient.isAvailable()) {
-                    goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), originalFileName);
-                    log.info("文件已上传到gohttpserver: {}", goHttpServerUrl);
-                } else {
-                    log.warn("gohttpserver不可用，跳过上传");
-                }
-            } catch (Exception e) {
-                log.error("上传到gohttpserver失败: {}", e.getMessage());
-                // 不影响主要流程，继续执行
-            }
+            // 上传到gohttpserver
+            String goHttpServerUrl = uploadToGoHttpServer(filePath, originalFilename);
 
             // 创建用例集记录
-            TestCaseSet testCaseSet = new TestCaseSet();
-            testCaseSet.setName(name);
-            testCaseSet.setVersion(version);
-            testCaseSet.setFilePath(filePath.toString());
-            testCaseSet.setGohttpserverUrl(goHttpServerUrl);
-            testCaseSet.setFileSize(file.getSize());
-            testCaseSet.setDescription(description);
-            testCaseSet.setStatus(1);
-            testCaseSet.setCreateBy("admin"); // 这里应该从登录用户获取
-
+            TestCaseSet testCaseSet = createTestCaseSet(name, version, filePath, goHttpServerUrl, file.getSize(), description);
             testCaseSetService.save(testCaseSet);
 
-            // 解压ZIP文件并解析Excel
-            Path extractPath = fileUploadConfig.createTempDir("extract");
-            extractDir = extractPath.toString();
-            String excelFilePath = zipProcessor.extractAndFindExcel(filePath.toString(), extractDir, "cases.xlsx");
-            
-            if (excelFilePath == null) {
-                return Result.error("ZIP文件中未找到case.xlsx文件");
-            }
-
-            // 解析Excel文件
-            List<TestCase> testCases = excelParser.parseTestCaseExcel(excelFilePath, testCaseSet.getId());
-            
+            // 处理ZIP文件并解析Excel
+            List<TestCase> testCases = processZipFileAndParseExcel(filePath, testCaseSet.getId());
             if (testCases.isEmpty()) {
                 return Result.error("Excel文件中未解析到有效的测试用例数据");
             }
@@ -174,6 +117,116 @@ public class TestCaseSetController {
                 zipProcessor.cleanupExtractedFiles(extractDir);
             }
         }
+    }
+
+    /**
+     * 验证文件
+     */
+    private boolean isValidFile(MultipartFile file, String originalFilename) {
+        if (originalFilename == null || !originalFilename.endsWith(".zip")) {
+            return false;
+        }
+
+        long maxSize = 100 * 1024 * 1024; // 100MB
+        if (file.getSize() > maxSize) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 解析文件名获取用例集名称和版本
+     */
+    private String[] parseFileName(String originalFilename) {
+        String[] parts = originalFilename.replace(".zip", "").split("_");
+        if (parts.length < 2) {
+            return null;
+        }
+        return parts;
+    }
+
+    /**
+     * 检查是否已存在相同名称和版本的用例集
+     */
+    private boolean isDuplicateTestCaseSet(String name, String version) {
+        QueryWrapper<TestCaseSet> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("name", name);
+        queryWrapper.eq("version", version);
+        queryWrapper.eq("deleted", 0); // 只查未被软删除的记录
+        return testCaseSetService.count(queryWrapper) > 0;
+    }
+
+    /**
+     * 保存文件到本地
+     */
+    private Path saveFileToLocal(MultipartFile file, String originalFilename) throws IOException {
+        Path uploadPath = fileUploadConfig.getTestcaseUploadPath();
+        String originalFileName = originalFilename;
+        Path filePath = uploadPath.resolve(originalFileName);
+        
+        // 如果文件已存在，添加时间戳后缀
+        if (Files.exists(filePath)) {
+            String nameWithoutExt = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+            String extension = originalFileName.substring(originalFileName.lastIndexOf('.'));
+            String timestamp = String.valueOf(System.currentTimeMillis());
+            originalFileName = nameWithoutExt + "_" + timestamp + extension;
+            filePath = uploadPath.resolve(originalFileName);
+        }
+
+        File dest = filePath.toFile();
+        file.transferTo(dest);
+        return filePath;
+    }
+
+    /**
+     * 上传到gohttpserver
+     */
+    private String uploadToGoHttpServer(Path filePath, String originalFilename) {
+        String goHttpServerUrl = null;
+        try {
+            if (goHttpServerClient.isAvailable()) {
+                goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), originalFilename);
+                log.info("文件已上传到gohttpserver: {}", goHttpServerUrl);
+            } else {
+                log.warn("gohttpserver不可用，跳过上传");
+            }
+        } catch (Exception e) {
+            log.error("上传到gohttpserver失败: {}", e.getMessage());
+            // 不影响主要流程，继续执行
+        }
+        return goHttpServerUrl;
+    }
+
+    /**
+     * 创建用例集记录
+     */
+    private TestCaseSet createTestCaseSet(String name, String version, Path filePath, 
+                                        String goHttpServerUrl, long fileSize, String description) {
+        TestCaseSet testCaseSet = new TestCaseSet();
+        testCaseSet.setName(name);
+        testCaseSet.setVersion(version);
+        testCaseSet.setFilePath(filePath.toString());
+        testCaseSet.setGohttpserverUrl(goHttpServerUrl);
+        testCaseSet.setFileSize(fileSize);
+        testCaseSet.setDescription(description);
+        testCaseSet.setStatus(1);
+        testCaseSet.setCreateBy("admin"); // 这里应该从登录用户获取
+        return testCaseSet;
+    }
+
+    /**
+     * 处理ZIP文件并解析Excel
+     */
+    private List<TestCase> processZipFileAndParseExcel(Path filePath, Long testCaseSetId) throws IOException {
+        Path extractPath = fileUploadConfig.createTempDir("extract");
+        String excelFilePath = zipProcessor.extractAndFindExcel(filePath.toString(), extractPath.toString(), "cases.xlsx");
+        
+        if (excelFilePath == null) {
+            throw new IOException("ZIP文件中未找到case.xlsx文件");
+        }
+
+        return excelParser.parseTestCaseExcel(excelFilePath, testCaseSetId);
     }
 
 

@@ -82,26 +82,10 @@ public class LogicEnvironmentController {
         logicEnvironmentService.save(logicEnvironment);
         
         // 关联UE
-        List<Long> ueIds = request.getUeIds();
-        if (ueIds != null && !ueIds.isEmpty()) {
-            for (Long ueId : ueIds) {
-                LogicEnvironmentUe logicEnvironmentUe = new LogicEnvironmentUe();
-                logicEnvironmentUe.setLogicEnvironmentId(logicEnvironment.getId());
-                logicEnvironmentUe.setUeId(ueId);
-                logicEnvironmentUeService.save(logicEnvironmentUe);
-            }
-        }
+        associateUes(logicEnvironment.getId(), request.getUeIds());
         
         // 关联逻辑组网
-        List<Long> networkIds = request.getNetworkIds();
-        if (networkIds != null && !networkIds.isEmpty()) {
-            for (Long networkId : networkIds) {
-                LogicEnvironmentNetwork logicEnvironmentNetwork = new LogicEnvironmentNetwork();
-                logicEnvironmentNetwork.setLogicEnvironmentId(logicEnvironment.getId());
-                logicEnvironmentNetwork.setLogicNetworkId(networkId);
-                logicEnvironmentNetworkService.save(logicEnvironmentNetwork);
-            }
-        }
+        associateNetworks(logicEnvironment.getId(), request.getNetworkIds());
         
         return Result.success(logicEnvironment);
     }
@@ -120,37 +104,11 @@ public class LogicEnvironmentController {
         logicEnvironment.setId(id);
         logicEnvironmentService.updateById(logicEnvironment);
         
-        // 删除原有的UE关联，然后重新插入
-        QueryWrapper<LogicEnvironmentUe> ueQueryWrapper = new QueryWrapper<>();
-        ueQueryWrapper.eq("logic_environment_id", id);
-        logicEnvironmentUeService.remove(ueQueryWrapper);
-        
         // 重新关联UE
-        List<Long> ueIds = request.getUeIds();
-        if (ueIds != null && !ueIds.isEmpty()) {
-            for (Long ueId : ueIds) {
-                LogicEnvironmentUe logicEnvironmentUe = new LogicEnvironmentUe();
-                logicEnvironmentUe.setLogicEnvironmentId(id);
-                logicEnvironmentUe.setUeId(ueId);
-                logicEnvironmentUeService.save(logicEnvironmentUe);
-            }
-        }
-        
-        // 删除原有的逻辑组网关联，然后重新插入
-        QueryWrapper<LogicEnvironmentNetwork> networkQueryWrapper = new QueryWrapper<>();
-        networkQueryWrapper.eq("logic_environment_id", id);
-        logicEnvironmentNetworkService.remove(networkQueryWrapper);
+        updateUeAssociations(id, request.getUeIds());
         
         // 重新关联逻辑组网
-        List<Long> networkIds = request.getNetworkIds();
-        if (networkIds != null && !networkIds.isEmpty()) {
-            for (Long networkId : networkIds) {
-                LogicEnvironmentNetwork logicEnvironmentNetwork = new LogicEnvironmentNetwork();
-                logicEnvironmentNetwork.setLogicEnvironmentId(id);
-                logicEnvironmentNetwork.setLogicNetworkId(networkId);
-                logicEnvironmentNetworkService.save(logicEnvironmentNetwork);
-            }
-        }
+        updateNetworkAssociations(id, request.getNetworkIds());
         
         return Result.success(logicEnvironment);
     }
@@ -314,5 +272,59 @@ public class LogicEnvironmentController {
         } catch (Exception e) {
             return Result.error("获取组网信息失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 关联UE到逻辑环境
+     */
+    private void associateUes(Long logicEnvironmentId, List<Long> ueIds) {
+        if (ueIds != null && !ueIds.isEmpty()) {
+            for (Long ueId : ueIds) {
+                LogicEnvironmentUe logicEnvironmentUe = new LogicEnvironmentUe();
+                logicEnvironmentUe.setLogicEnvironmentId(logicEnvironmentId);
+                logicEnvironmentUe.setUeId(ueId);
+                logicEnvironmentUeService.save(logicEnvironmentUe);
+            }
+        }
+    }
+
+    /**
+     * 关联网络到逻辑环境
+     */
+    private void associateNetworks(Long logicEnvironmentId, List<Long> networkIds) {
+        if (networkIds != null && !networkIds.isEmpty()) {
+            for (Long networkId : networkIds) {
+                LogicEnvironmentNetwork logicEnvironmentNetwork = new LogicEnvironmentNetwork();
+                logicEnvironmentNetwork.setLogicEnvironmentId(logicEnvironmentId);
+                logicEnvironmentNetwork.setLogicNetworkId(networkId);
+                logicEnvironmentNetworkService.save(logicEnvironmentNetwork);
+            }
+        }
+    }
+
+    /**
+     * 更新UE关联
+     */
+    private void updateUeAssociations(Long logicEnvironmentId, List<Long> ueIds) {
+        // 删除原有的UE关联
+        QueryWrapper<LogicEnvironmentUe> ueQueryWrapper = new QueryWrapper<>();
+        ueQueryWrapper.eq("logic_environment_id", logicEnvironmentId);
+        logicEnvironmentUeService.remove(ueQueryWrapper);
+        
+        // 重新关联UE
+        associateUes(logicEnvironmentId, ueIds);
+    }
+
+    /**
+     * 更新网络关联
+     */
+    private void updateNetworkAssociations(Long logicEnvironmentId, List<Long> networkIds) {
+        // 删除原有的逻辑组网关联
+        QueryWrapper<LogicEnvironmentNetwork> networkQueryWrapper = new QueryWrapper<>();
+        networkQueryWrapper.eq("logic_environment_id", logicEnvironmentId);
+        logicEnvironmentNetworkService.remove(networkQueryWrapper);
+        
+        // 重新关联逻辑组网
+        associateNetworks(logicEnvironmentId, networkIds);
     }
 }
