@@ -96,10 +96,7 @@ public class CollectTaskController {
             // 调用处理服务创建采集任务
             Long collectTaskId = collectTaskProcessService.processCollectTaskCreation(request);
             
-            Map<String, Object> result = new HashMap<>();
-            result.put("collectTaskId", collectTaskId);
-            result.put("message", "采集任务创建成功");
-            result.put("timestamp", System.currentTimeMillis());
+            Map<String, Object> result = createSuccessResult(collectTaskId);
             
             log.info("采集任务创建成功 - 任务ID: {}", collectTaskId);
             return Result.success(result);
@@ -108,6 +105,17 @@ public class CollectTaskController {
             log.error("创建采集任务失败 - 任务名称: {}, 错误: {}", request.getName(), e.getMessage(), e);
             return Result.error("创建采集任务失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 创建成功结果
+     */
+    private Map<String, Object> createSuccessResult(Long collectTaskId) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("collectTaskId", collectTaskId);
+        result.put("message", "采集任务创建成功");
+        result.put("timestamp", System.currentTimeMillis());
+        return result;
     }
 
     @PutMapping("/{id}")
@@ -138,6 +146,15 @@ public class CollectTaskController {
             @RequestParam(required = false) String status) {
         
         Page<CollectTask> page = new Page<>(current, size);
+        QueryWrapper<CollectTask> queryWrapper = buildPageQueryWrapper(name, strategyId, status);
+        Page<CollectTask> result = collectTaskService.page(page, queryWrapper);
+        return Result.success(result);
+    }
+
+    /**
+     * 构建分页查询条件
+     */
+    private QueryWrapper<CollectTask> buildPageQueryWrapper(String name, Long strategyId, String status) {
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
         
         if (name != null && !name.isEmpty()) {
@@ -151,8 +168,7 @@ public class CollectTaskController {
         }
         
         queryWrapper.orderByDesc("create_time");
-        Page<CollectTask> result = collectTaskService.page(page, queryWrapper);
-        return Result.success(result);
+        return queryWrapper;
     }
 
     @GetMapping("/list")
@@ -177,7 +193,7 @@ public class CollectTaskController {
         log.info("启动任务 - 任务ID: {}", id);
         
         try {
-            CollectTask collectTask = collectTaskService.getById(id);
+            CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
                 return Result.error("任务不存在");
             }
@@ -189,12 +205,9 @@ public class CollectTaskController {
             }
             
             // 更新所有PENDING状态的用例执行例次为RUNNING
-            List<TestCaseExecutionInstance> pendingInstances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(id, "PENDING");
-            for (TestCaseExecutionInstance instance : pendingInstances) {
-                testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "RUNNING", null);
-            }
+            updatePendingInstancesToRunning(id);
             
-            log.info("任务启动成功 - 任务ID: {}, 更新例次数量: {}", id, pendingInstances.size());
+            log.info("任务启动成功 - 任务ID: {}", id);
             return Result.success(true);
             
         } catch (Exception e) {
@@ -203,12 +216,30 @@ public class CollectTaskController {
         }
     }
 
+    /**
+     * 验证并获取任务
+     */
+    private CollectTask validateAndGetTask(Long id) {
+        return collectTaskService.getById(id);
+    }
+
+    /**
+     * 更新待执行实例为运行状态
+     */
+    private void updatePendingInstancesToRunning(Long taskId) {
+        List<TestCaseExecutionInstance> pendingInstances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(taskId, "PENDING");
+        for (TestCaseExecutionInstance instance : pendingInstances) {
+            testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "RUNNING", null);
+        }
+        log.info("任务启动成功 - 任务ID: {}, 更新例次数量: {}", taskId, pendingInstances.size());
+    }
+
     @PostMapping("/{id}/stop")
     public Result<Boolean> stopTask(@PathVariable @NotNull Long id) {
         log.info("停止任务 - 任务ID: {}", id);
         
         try {
-            CollectTask collectTask = collectTaskService.getById(id);
+            CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
                 return Result.error("任务不存在");
             }
@@ -223,37 +254,13 @@ public class CollectTaskController {
             List<TestCaseExecutionInstance> runningInstances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(id, "RUNNING");
             
             // 按执行机IP分组，相同IP只发起一次停止调用
-            Map<String, List<TestCaseExecutionInstance>> instancesByExecutor = runningInstances.stream()
-                    .filter(instance -> instance.getExecutionTaskId() != null && instance.getExecutorIp() != null)
-                    .collect(Collectors.groupingBy(TestCaseExecutionInstance::getExecutorIp));
+            Map<String, List<TestCaseExecutionInstance>> instancesByExecutor = groupInstancesByExecutor(runningInstances);
             
             // 调用CaseExecuteService取消正在执行的任务
-            for (Map.Entry<String, List<TestCaseExecutionInstance>> entry : instancesByExecutor.entrySet()) {
-                String executorIp = entry.getKey();
-                List<TestCaseExecutionInstance> instances = entry.getValue();
-                
-                // 取第一个实例的executionTaskId作为停止目标（因为同一执行机的任务通常使用相同的taskId）
-                String executionTaskId = instances.get(0).getExecutionTaskId();
-                
-                try {
-                    boolean cancelled = caseExecuteServiceClient.cancelTaskExecution(executorIp, executionTaskId);
-                    if (cancelled) {
-                        log.info("成功取消执行机任务 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 影响例次数: {}", 
-                                id, executorIp, executionTaskId, instances.size());
-                    } else {
-                        log.warn("取消执行机任务失败 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}", 
-                                id, executorIp, executionTaskId);
-                    }
-                } catch (Exception e) {
-                    log.error("调用CaseExecuteService取消任务异常 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 错误: {}", 
-                            id, executorIp, executionTaskId, e.getMessage());
-                }
-            }
+            cancelExecutorTasks(id, instancesByExecutor);
             
             // 更新所有RUNNING状态的例次为STOPPED
-            for (TestCaseExecutionInstance instance : runningInstances) {
-                testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "STOPPED", instance.getExecutionTaskId());
-            }
+            updateRunningInstancesToStopped(runningInstances);
             
             // 更新采集任务和用例执行例次的执行进度
             updateTaskExecutionProgress(id);
@@ -267,12 +274,57 @@ public class CollectTaskController {
         }
     }
 
+    /**
+     * 按执行机分组实例
+     */
+    private Map<String, List<TestCaseExecutionInstance>> groupInstancesByExecutor(List<TestCaseExecutionInstance> runningInstances) {
+        return runningInstances.stream()
+                .filter(instance -> instance.getExecutionTaskId() != null && instance.getExecutorIp() != null)
+                .collect(Collectors.groupingBy(TestCaseExecutionInstance::getExecutorIp));
+    }
+
+    /**
+     * 取消执行机任务
+     */
+    private void cancelExecutorTasks(Long taskId, Map<String, List<TestCaseExecutionInstance>> instancesByExecutor) {
+        for (Map.Entry<String, List<TestCaseExecutionInstance>> entry : instancesByExecutor.entrySet()) {
+            String executorIp = entry.getKey();
+            List<TestCaseExecutionInstance> instances = entry.getValue();
+            
+            // 取第一个实例的executionTaskId作为停止目标（因为同一执行机的任务通常使用相同的taskId）
+            String executionTaskId = instances.get(0).getExecutionTaskId();
+            
+            try {
+                boolean cancelled = caseExecuteServiceClient.cancelTaskExecution(executorIp, executionTaskId);
+                if (cancelled) {
+                    log.info("成功取消执行机任务 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 影响例次数: {}", 
+                            taskId, executorIp, executionTaskId, instances.size());
+                } else {
+                    log.warn("取消执行机任务失败 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}", 
+                            taskId, executorIp, executionTaskId);
+                }
+            } catch (Exception e) {
+                log.error("调用CaseExecuteService取消任务异常 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 错误: {}", 
+                        taskId, executorIp, executionTaskId, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 更新运行实例为停止状态
+     */
+    private void updateRunningInstancesToStopped(List<TestCaseExecutionInstance> runningInstances) {
+        for (TestCaseExecutionInstance instance : runningInstances) {
+            testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "STOPPED", instance.getExecutionTaskId());
+        }
+    }
+
     @PostMapping("/{id}/pause")
     public Result<Boolean> pauseTask(@PathVariable @NotNull Long id) {
         log.info("暂停任务 - 任务ID: {}", id);
         
         try {
-            CollectTask collectTask = collectTaskService.getById(id);
+            CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
                 return Result.error("任务不存在");
             }
@@ -284,18 +336,26 @@ public class CollectTaskController {
             }
             
             // 更新所有RUNNING状态的用例执行例次为PAUSED
-            List<TestCaseExecutionInstance> runningInstances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(id, "RUNNING");
-            for (TestCaseExecutionInstance instance : runningInstances) {
-                testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "PAUSED", instance.getExecutionTaskId());
-            }
+            updateRunningInstancesToPaused(id);
             
-            log.info("任务暂停成功 - 任务ID: {}, 更新例次数量: {}", id, runningInstances.size());
+            log.info("任务暂停成功 - 任务ID: {}", id);
             return Result.success(true);
             
         } catch (Exception e) {
             log.error("暂停任务失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
             return Result.error("暂停任务失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 更新运行实例为暂停状态
+     */
+    private void updateRunningInstancesToPaused(Long taskId) {
+        List<TestCaseExecutionInstance> runningInstances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(taskId, "RUNNING");
+        for (TestCaseExecutionInstance instance : runningInstances) {
+            testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "PAUSED", instance.getExecutionTaskId());
+        }
+        log.info("任务暂停成功 - 任务ID: {}, 更新例次数量: {}", taskId, runningInstances.size());
     }
 
     @GetMapping("/status/{status}")
@@ -319,7 +379,7 @@ public class CollectTaskController {
         log.info("更新任务状态 - 任务ID: {}, 新状态: {}", id, status);
         
         try {
-            CollectTask collectTask = collectTaskService.getById(id);
+            CollectTask collectTask = validateAndGetTask(id);
             if (collectTask == null) {
                 return Result.error("任务不存在");
             }
@@ -380,41 +440,191 @@ public class CollectTaskController {
      */
     private void updateExecutionInstancesStatus(Long taskId, String oldStatus, String newStatus) {
         try {
-            String targetInstanceStatus = null;
-            String sourceInstanceStatus = null;
+            StatusTransitionInfo transitionInfo = getStatusTransitionInfo(oldStatus, newStatus);
             
-            // 根据状态转换确定需要更新的例次状态
-            if ("PENDING".equals(oldStatus) && "RUNNING".equals(newStatus)) {
-                sourceInstanceStatus = "PENDING";
-                targetInstanceStatus = "RUNNING";
-            } else if ("RUNNING".equals(oldStatus) && "STOPPED".equals(newStatus)) {
-                sourceInstanceStatus = "RUNNING";
-                targetInstanceStatus = "STOPPED";
-            } else if ("RUNNING".equals(oldStatus) && "PAUSED".equals(newStatus)) {
-                sourceInstanceStatus = "RUNNING";
-                targetInstanceStatus = "PAUSED";
-            } else if ("PAUSED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
-                sourceInstanceStatus = "PAUSED";
-                targetInstanceStatus = "RUNNING";
-            } else if ("STOPPED".equals(oldStatus) && "PENDING".equals(newStatus)) {
-                sourceInstanceStatus = "STOPPED";
-                targetInstanceStatus = "PENDING";
-            } else if ("STOPPED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
-                sourceInstanceStatus = "STOPPED";
-                targetInstanceStatus = "RUNNING";
-            }
-            
-            if (sourceInstanceStatus != null && targetInstanceStatus != null) {
-                List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(taskId, sourceInstanceStatus);
+            if (transitionInfo != null) {
+                List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskIdAndStatus(taskId, transitionInfo.getSourceStatus());
                 for (TestCaseExecutionInstance instance : instances) {
-                    testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), targetInstanceStatus, null);
+                    testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), transitionInfo.getTargetStatus(), instance.getExecutionTaskId());
                 }
-                log.info("更新用例执行例次状态 - 任务ID: {}, 例次数量: {}, 状态: {} -> {}", 
-                        taskId, instances.size(), sourceInstanceStatus, targetInstanceStatus);
+                log.info("更新用例执行例次状态 - 任务ID: {}, 状态转换: {} -> {}, 影响例次数: {}", 
+                        taskId, transitionInfo.getSourceStatus(), transitionInfo.getTargetStatus(), instances.size());
             }
-            
         } catch (Exception e) {
             log.error("更新用例执行例次状态失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 状态转换信息
+     */
+    private static class StatusTransitionInfo {
+        private String sourceStatus;
+        private String targetStatus;
+        
+        public StatusTransitionInfo(String sourceStatus, String targetStatus) {
+            this.sourceStatus = sourceStatus;
+            this.targetStatus = targetStatus;
+        }
+        
+        public String getSourceStatus() { return sourceStatus; }
+        public String getTargetStatus() { return targetStatus; }
+    }
+
+    /**
+     * 获取状态转换信息
+     */
+    private StatusTransitionInfo getStatusTransitionInfo(String oldStatus, String newStatus) {
+        // 根据状态转换确定需要更新的例次状态
+        if ("PENDING".equals(oldStatus) && "RUNNING".equals(newStatus)) {
+            return new StatusTransitionInfo("PENDING", "RUNNING");
+        } else if ("RUNNING".equals(oldStatus) && "STOPPED".equals(newStatus)) {
+            return new StatusTransitionInfo("RUNNING", "STOPPED");
+        } else if ("RUNNING".equals(oldStatus) && "PAUSED".equals(newStatus)) {
+            return new StatusTransitionInfo("RUNNING", "PAUSED");
+        } else if ("PAUSED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
+            return new StatusTransitionInfo("PAUSED", "RUNNING");
+        } else if ("STOPPED".equals(oldStatus) && "PENDING".equals(newStatus)) {
+            return new StatusTransitionInfo("STOPPED", "PENDING");
+        } else if ("STOPPED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
+            return new StatusTransitionInfo("STOPPED", "PENDING");
+        }
+        
+        return null;
+    }
+
+    /**
+     * 获取任务执行进度
+     */
+    @GetMapping("/{id}/progress")
+    public Result<Map<String, Object>> getTaskProgress(@PathVariable @NotNull Long id) {
+        log.info("获取任务执行进度 - 任务ID: {}", id);
+        
+        try {
+            CollectTask task = collectTaskService.getById(id);
+            if (task == null) {
+                return Result.error("任务不存在");
+            }
+            
+            // 获取执行例次列表，基于真实数据计算进度
+            List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(id);
+            
+            int totalCount = instances.size();
+            int successCount = 0;
+            int failedCount = 0;
+            int blockedCount = 0;
+            int runningCount = 0;
+            
+            for (TestCaseExecutionInstance instance : instances) {
+                String status = instance.getStatus();
+                String result = instance.getResult();
+                
+                // 只要不是执行中，都算作已完成
+                if (!"RUNNING".equals(status)) {
+                    // 根据执行结果统计
+                    if ("SUCCESS".equals(result)) {
+                        successCount++;
+                    } else if ("FAILED".equals(result)) {
+                        failedCount++;
+                    } else if ("BLOCKED".equals(result)) {
+                        blockedCount++;
+                    }
+                } else {
+                    runningCount++;
+                }
+            }
+            
+            Map<String, Object> progress = new HashMap<>();
+            progress.put("totalCount", totalCount);
+            progress.put("successCount", successCount);
+            progress.put("failedCount", failedCount);
+            progress.put("blockedCount", blockedCount);
+            progress.put("runningCount", runningCount);
+            
+            return Result.success(progress);
+        } catch (Exception e) {
+            log.error("获取任务执行进度失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
+            return Result.error("获取任务执行进度失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取任务执行例次列表
+     */
+    @GetMapping("/{id}/execution-instances")
+    public Result<List<Map<String, Object>>> getExecutionInstances(@PathVariable @NotNull Long id) {
+        log.info("获取任务执行例次列表 - 任务ID: {}", id);
+        
+        try {
+            CollectTask task = collectTaskService.getById(id);
+            if (task == null) {
+                return Result.error("任务不存在");
+            }
+            
+            // 获取执行例次列表
+            List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(id);
+            List<Map<String, Object>> result = new ArrayList<>();
+            
+            for (TestCaseExecutionInstance instance : instances) {
+                Map<String, Object> instanceMap = new HashMap<>();
+                instanceMap.put("id", instance.getId());
+                instanceMap.put("testCaseId", instance.getTestCaseId());
+                instanceMap.put("round", instance.getRound());
+                instanceMap.put("logicEnvironmentId", instance.getLogicEnvironmentId());
+                instanceMap.put("executorIp", instance.getExecutorIp());
+                instanceMap.put("status", instance.getStatus());
+                instanceMap.put("result", instance.getResult());
+                instanceMap.put("failureReason", instance.getFailureReason());
+                instanceMap.put("logFilePath", instance.getLogFilePath());
+                instanceMap.put("executionTaskId", instance.getExecutionTaskId());
+                instanceMap.put("createTime", instance.getCreateTime());
+                instanceMap.put("updateTime", instance.getUpdateTime());
+                
+                // 获取用例信息
+                TestCase testCase = testCaseService.getById(instance.getTestCaseId());
+                if (testCase != null) {
+                    instanceMap.put("testCaseNumber", testCase.getNumber());
+                    instanceMap.put("testCaseName", testCase.getName());
+                }
+                
+                // 获取逻辑环境信息
+                LogicEnvironment logicEnvironment = logicEnvironmentService.getById(instance.getLogicEnvironmentId());
+                if (logicEnvironment != null) {
+                    instanceMap.put("logicEnvironmentName", logicEnvironment.getName());
+                }
+                
+                result.add(instanceMap);
+            }
+            
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取任务执行例次列表失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
+            return Result.error("获取任务执行例次列表失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 更新任务执行进度
+     * 
+     * @param taskId 任务ID
+     */
+    private void updateTaskExecutionProgress(Long taskId) {
+        try {
+            // 获取任务的所有用例执行例次
+            List<TestCaseExecutionInstance> allInstances = testCaseExecutionInstanceService.getByCollectTaskId(taskId);
+            
+            // 统计各种状态的例次数量
+            long totalCount = allInstances.size();
+            long completedCount = allInstances.stream().filter(instance -> "COMPLETED".equals(instance.getStatus())).count();
+            long failedCount = allInstances.stream().filter(instance -> "FAILED".equals(instance.getStatus())).count();
+            
+            // 更新任务进度
+            collectTaskService.updateTaskProgress(taskId, (int) totalCount, (int) completedCount, (int) failedCount);
+            
+            log.info("更新任务执行进度 - 任务ID: {}, 总数: {}, 完成: {}, 失败: {}", taskId, totalCount, completedCount, failedCount);
+            
+        } catch (Exception e) {
+            log.error("更新任务执行进度失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
         }
     }
 
@@ -558,185 +768,6 @@ public class CollectTaskController {
         } catch (Exception e) {
             log.error("获取可用逻辑环境列表失败", e);
             return Result.error("获取可用逻辑环境列表失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 获取任务执行进度
-     */
-    @GetMapping("/{id}/progress")
-    public Result<Map<String, Object>> getTaskProgress(@PathVariable @NotNull Long id) {
-        log.info("获取任务执行进度 - 任务ID: {}", id);
-        
-        try {
-            CollectTask task = collectTaskService.getById(id);
-            if (task == null) {
-                return Result.error("任务不存在");
-            }
-            
-            // 获取执行例次列表，基于真实数据计算进度
-            List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(id);
-            
-            int totalCount = instances.size();
-            int successCount = 0;
-            int failedCount = 0;
-            int blockedCount = 0;
-            int runningCount = 0;
-            
-            for (TestCaseExecutionInstance instance : instances) {
-                String status = instance.getStatus();
-                String result = instance.getResult();
-                
-                // 只要不是执行中，都算作已完成
-                if (!"RUNNING".equals(status)) {
-                    // 根据执行结果统计
-                    if ("SUCCESS".equals(result)) {
-                        successCount++;
-                    } else if ("FAILED".equals(result)) {
-                        failedCount++;
-                    } else if ("BLOCKED".equals(result)) {
-                        blockedCount++;
-                    }
-                } else {
-                    runningCount++;
-                }
-            }
-            
-            Map<String, Object> progress = new HashMap<>();
-            progress.put("totalCount", totalCount);
-            progress.put("successCount", successCount);
-            progress.put("failedCount", failedCount);
-            progress.put("blockedCount", blockedCount);
-            progress.put("runningCount", runningCount);
-            
-            return Result.success(progress);
-        } catch (Exception e) {
-            log.error("获取任务执行进度失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
-            return Result.error("获取任务执行进度失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 获取任务执行例次列表
-     */
-    @GetMapping("/{id}/execution-instances")
-    public Result<List<Map<String, Object>>> getExecutionInstances(@PathVariable @NotNull Long id) {
-        log.info("获取任务执行例次列表 - 任务ID: {}", id);
-        
-        try {
-            CollectTask task = collectTaskService.getById(id);
-            if (task == null) {
-                return Result.error("任务不存在");
-            }
-            
-            // 获取执行例次列表
-            List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(id);
-            List<Map<String, Object>> result = new ArrayList<>();
-            
-            for (TestCaseExecutionInstance instance : instances) {
-                Map<String, Object> instanceMap = new HashMap<>();
-                instanceMap.put("id", instance.getId());
-                instanceMap.put("testCaseId", instance.getTestCaseId());
-                instanceMap.put("round", instance.getRound());
-                instanceMap.put("logicEnvironmentId", instance.getLogicEnvironmentId());
-                instanceMap.put("executorIp", instance.getExecutorIp());
-                instanceMap.put("status", instance.getStatus());
-                instanceMap.put("result", instance.getResult());
-                instanceMap.put("failureReason", instance.getFailureReason());
-                instanceMap.put("logFilePath", instance.getLogFilePath());
-                instanceMap.put("executionTaskId", instance.getExecutionTaskId());
-                instanceMap.put("createTime", instance.getCreateTime());
-                instanceMap.put("updateTime", instance.getUpdateTime());
-                
-                // 获取用例信息
-                TestCase testCase = testCaseService.getById(instance.getTestCaseId());
-                if (testCase != null) {
-                    instanceMap.put("testCaseNumber", testCase.getNumber());
-                    instanceMap.put("testCaseName", testCase.getName());
-                }
-                
-                // 获取逻辑环境信息
-                LogicEnvironment logicEnvironment = logicEnvironmentService.getById(instance.getLogicEnvironmentId());
-                if (logicEnvironment != null) {
-                    instanceMap.put("logicEnvironmentName", logicEnvironment.getName());
-                }
-                
-                result.add(instanceMap);
-            }
-            
-            return Result.success(result);
-        } catch (Exception e) {
-            log.error("获取任务执行例次列表失败 - 任务ID: {}, 错误: {}", id, e.getMessage(), e);
-            return Result.error("获取任务执行例次列表失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 更新任务执行进度
-     * 
-     * @param taskId 任务ID
-     */
-    private void updateTaskExecutionProgress(Long taskId) {
-        try {
-            log.info("开始更新任务执行进度 - 任务ID: {}", taskId);
-            
-            // 获取任务的所有用例执行例次
-            List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(taskId);
-            
-            if (instances.isEmpty()) {
-                log.warn("任务没有用例执行例次 - 任务ID: {}", taskId);
-                return;
-            }
-            
-            // 统计各种状态和结果的数量
-            int totalCount = instances.size();
-            int successCount = 0;
-            int failedCount = 0;
-            int blockedCount = 0;
-            int stoppedCount = 0;
-            int runningCount = 0;
-            
-            for (TestCaseExecutionInstance instance : instances) {
-                String status = instance.getStatus();
-                String result = instance.getResult();
-                
-                // 统计状态
-                switch (status) {
-                    case "RUNNING":
-                        runningCount++;
-                        break;
-                    case "STOPPED":
-                        stoppedCount++;
-                        break;
-                    case "COMPLETED":
-                        // 根据执行结果统计
-                        if ("SUCCESS".equals(result)) {
-                            successCount++;
-                        } else if ("FAILED".equals(result)) {
-                            failedCount++;
-                        } else if ("BLOCKED".equals(result)) {
-                            blockedCount++;
-                        }
-                        break;
-                    default:
-                        // 其他状态（如PENDING）不计入统计
-                        break;
-                }
-            }
-            
-            log.info("任务执行进度统计 - 任务ID: {}, 总数: {}, 成功: {}, 失败: {}, 阻塞: {}, 停止: {}, 执行中: {}", 
-                    taskId, totalCount, successCount, failedCount, blockedCount, stoppedCount, runningCount);
-            
-            // 更新采集任务的执行进度
-            boolean progressUpdated = collectTaskService.updateTaskProgress(taskId, totalCount, successCount, failedCount);
-            if (progressUpdated) {
-                log.info("采集任务执行进度更新成功 - 任务ID: {}", taskId);
-            } else {
-                log.error("采集任务执行进度更新失败 - 任务ID: {}", taskId);
-            }
-            
-        } catch (Exception e) {
-            log.error("更新任务执行进度异常 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
         }
     }
 }

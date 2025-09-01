@@ -97,104 +97,47 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
     @Override
     public List<RegionHierarchyDTO> getRegionHierarchy() {
         // 获取所有地域数据
+        List<Region> allRegions = getAllRegions();
+        
+        // 按层级分组
+        Map<Integer, List<Region>> regionsByLevel = groupRegionsByLevel(allRegions);
+        
+        // 构建层级结构
+        return buildHierarchyStructure(regionsByLevel);
+    }
+
+    /**
+     * 获取所有地域数据
+     */
+    private List<Region> getAllRegions() {
         QueryWrapper<Region> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1);
         queryWrapper.orderByAsc("level", "name");
-        List<Region> allRegions = list(queryWrapper);
-        
-        // 按层级分组
+        return list(queryWrapper);
+    }
+
+    /**
+     * 按层级分组地域
+     */
+    private Map<Integer, List<Region>> groupRegionsByLevel(List<Region> allRegions) {
         Map<Integer, List<Region>> regionsByLevel = new HashMap<>();
         for (Region region : allRegions) {
             regionsByLevel.computeIfAbsent(region.getLevel(), k -> new ArrayList<>()).add(region);
         }
-        
+        return regionsByLevel;
+    }
+
+    /**
+     * 构建层级结构
+     */
+    private List<RegionHierarchyDTO> buildHierarchyStructure(Map<Integer, List<Region>> regionsByLevel) {
         List<RegionHierarchyDTO> result = new ArrayList<>();
         
         // 处理level=1的地域（片区）
         List<Region> level1Regions = regionsByLevel.get(1);
         if (level1Regions != null) {
             for (Region region1 : level1Regions) {
-                // 处理level=2的地域（国家/省份）
-                List<Region> level2Regions = regionsByLevel.get(2);
-                if (level2Regions != null) {
-                    for (Region region2 : level2Regions) {
-                        if (region2.getParentId().equals(region1.getId())) {
-                            // 处理level=3的地域（省份/城市）
-                            List<Region> level3Regions = regionsByLevel.get(3);
-                            if (level3Regions != null) {
-                                for (Region region3 : level3Regions) {
-                                    if (region3.getParentId().equals(region2.getId())) {
-                                        // 处理level=4的地域（城市）
-                                        List<Region> level4Regions = regionsByLevel.get(4);
-                                        if (level4Regions != null) {
-                                            for (Region region4 : level4Regions) {
-                                                if (region4.getParentId().equals(region3.getId())) {
-                                                    // 完整的4级层级
-                                                    RegionHierarchyDTO dto = new RegionHierarchyDTO();
-                                                    dto.setId(region4.getId());
-                                                    dto.setRegionName(region1.getName());
-                                                    dto.setCountryName(region2.getName());
-                                                    dto.setProvinceName(region3.getName());
-                                                    dto.setCityName(region4.getName());
-                                                    dto.setStatus(region4.getStatus());
-                                                    dto.setCreateTime(region4.getCreateTime().toString());
-                                                    result.add(dto);
-                                                }
-                                            }
-                                        }
-                                        
-                                        // 只有3级层级（没有城市）
-                                        if (level4Regions == null || level4Regions.stream().noneMatch(r -> r.getParentId().equals(region3.getId()))) {
-                                            RegionHierarchyDTO dto = new RegionHierarchyDTO();
-                                            dto.setId(region3.getId());
-                                            dto.setRegionName(region1.getName());
-                                            dto.setCountryName(region2.getName());
-                                            dto.setProvinceName(region3.getName());
-                                            dto.setCityName("");
-                                            dto.setStatus(region3.getStatus());
-                                            dto.setCreateTime(region3.getCreateTime().toString());
-                                            result.add(dto);
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // 只有2级层级（没有省份）
-                            if (level3Regions == null || level3Regions.stream().noneMatch(r -> r.getParentId().equals(region2.getId()))) {
-                                // 检查是否有直接的城市
-                                List<Region> level4Regions = regionsByLevel.get(4);
-                                if (level4Regions != null) {
-                                    for (Region region4 : level4Regions) {
-                                        if (region4.getParentId().equals(region2.getId())) {
-                                            RegionHierarchyDTO dto = new RegionHierarchyDTO();
-                                            dto.setId(region4.getId());
-                                            dto.setRegionName(region1.getName());
-                                            dto.setCountryName(region2.getName());
-                                            dto.setProvinceName("");
-                                            dto.setCityName(region4.getName());
-                                            dto.setStatus(region4.getStatus());
-                                            dto.setCreateTime(region4.getCreateTime().toString());
-                                            result.add(dto);
-                                        }
-                                    }
-                                }
-                                
-                                // 只有2级层级（没有省份和城市）
-                                if (level4Regions == null || level4Regions.stream().noneMatch(r -> r.getParentId().equals(region2.getId()))) {
-                                    RegionHierarchyDTO dto = new RegionHierarchyDTO();
-                                    dto.setId(region2.getId());
-                                    dto.setRegionName(region1.getName());
-                                    dto.setCountryName(region2.getName());
-                                    dto.setProvinceName("");
-                                    dto.setCityName("");
-                                    dto.setStatus(region2.getStatus());
-                                    dto.setCreateTime(region2.getCreateTime().toString());
-                                    result.add(dto);
-                                }
-                            }
-                        }
-                    }
-                }
+                processLevel1Region(region1, regionsByLevel, result);
             }
         }
         
@@ -202,11 +145,111 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
     }
 
     /**
+     * 处理level=1的地域
+     */
+    private void processLevel1Region(Region region1, Map<Integer, List<Region>> regionsByLevel, List<RegionHierarchyDTO> result) {
+        // 处理level=2的地域（国家/省份）
+        List<Region> level2Regions = regionsByLevel.get(2);
+        if (level2Regions != null) {
+            for (Region region2 : level2Regions) {
+                if (region2.getParentId().equals(region1.getId())) {
+                    processLevel2Region(region1, region2, regionsByLevel, result);
+                }
+            }
+        }
+    }
+
+    /**
+     * 处理level=2的地域
+     */
+    private void processLevel2Region(Region region1, Region region2, Map<Integer, List<Region>> regionsByLevel, List<RegionHierarchyDTO> result) {
+        // 处理level=3的地域（省份/城市）
+        List<Region> level3Regions = regionsByLevel.get(3);
+        if (level3Regions != null) {
+            for (Region region3 : level3Regions) {
+                if (region3.getParentId().equals(region2.getId())) {
+                    processLevel3Region(region1, region2, region3, regionsByLevel, result);
+                }
+            }
+        }
+        
+        // 只有2级层级（没有省份）
+        if (level3Regions == null || level3Regions.stream().noneMatch(r -> r.getParentId().equals(region2.getId()))) {
+            processLevel2OnlyRegion(region1, region2, regionsByLevel, result);
+        }
+    }
+
+    /**
+     * 处理level=3的地域
+     */
+    private void processLevel3Region(Region region1, Region region2, Region region3, Map<Integer, List<Region>> regionsByLevel, List<RegionHierarchyDTO> result) {
+        // 处理level=4的地域（城市）
+        List<Region> level4Regions = regionsByLevel.get(4);
+        if (level4Regions != null) {
+            for (Region region4 : level4Regions) {
+                if (region4.getParentId().equals(region3.getId())) {
+                    // 完整的4级层级
+                    RegionHierarchyDTO dto = createHierarchyDTO(region4.getId(), region1.getName(), region2.getName(), region3.getName(), region4.getName(), region4.getStatus(), region4.getCreateTime().toString());
+                    result.add(dto);
+                }
+            }
+        }
+        
+        // 只有3级层级（没有城市）
+        if (level4Regions == null || level4Regions.stream().noneMatch(r -> r.getParentId().equals(region3.getId()))) {
+            RegionHierarchyDTO dto = createHierarchyDTO(region3.getId(), region1.getName(), region2.getName(), region3.getName(), "", region3.getStatus(), region3.getCreateTime().toString());
+            result.add(dto);
+        }
+    }
+
+    /**
+     * 处理只有2级的地域
+     */
+    private void processLevel2OnlyRegion(Region region1, Region region2, Map<Integer, List<Region>> regionsByLevel, List<RegionHierarchyDTO> result) {
+        // 检查是否有直接的城市
+        List<Region> level4Regions = regionsByLevel.get(4);
+        if (level4Regions != null) {
+            for (Region region4 : level4Regions) {
+                if (region4.getParentId().equals(region2.getId())) {
+                    RegionHierarchyDTO dto = createHierarchyDTO(region4.getId(), region1.getName(), region2.getName(), "", region4.getName(), region4.getStatus(), region4.getCreateTime().toString());
+                    result.add(dto);
+                }
+            }
+        }
+        
+        // 只有2级层级（没有省份和城市）
+        if (level4Regions == null || level4Regions.stream().noneMatch(r -> r.getParentId().equals(region2.getId()))) {
+            RegionHierarchyDTO dto = createHierarchyDTO(region2.getId(), region1.getName(), region2.getName(), "", "", region2.getStatus(), region2.getCreateTime().toString());
+            result.add(dto);
+        }
+    }
+
+    /**
+     * 创建层级DTO
+     */
+    private RegionHierarchyDTO createHierarchyDTO(Long id, String regionName, String countryName, String provinceName, String cityName, Integer status, String createTime) {
+        RegionHierarchyDTO dto = new RegionHierarchyDTO();
+        dto.setId(id);
+        dto.setRegionName(regionName);
+        dto.setCountryName(countryName);
+        dto.setProvinceName(provinceName);
+        dto.setCityName(cityName);
+        dto.setStatus(status);
+        dto.setCreateTime(createTime);
+        return dto;
+    }
+
+    /**
      * 查找或创建地域
      */
     private Region findOrCreateRegion(String name, Integer level, Long parentId, String description) {
+        if (name == null || name.trim().isEmpty()) {
+            return null;
+        }
+        
+        // 查找是否已存在
         QueryWrapper<Region> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("name", name);
+        queryWrapper.eq("name", name.trim());
         queryWrapper.eq("level", level);
         if (parentId != null) {
             queryWrapper.eq("parent_id", parentId);
@@ -219,9 +262,9 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
             return existingRegion;
         }
         
-        // 创建新地域
+        // 创建新的地域
         Region newRegion = new Region();
-        newRegion.setName(name);
+        newRegion.setName(name.trim());
         newRegion.setLevel(level);
         newRegion.setParentId(parentId);
         newRegion.setDescription(description);

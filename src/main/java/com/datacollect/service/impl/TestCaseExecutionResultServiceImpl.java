@@ -39,13 +39,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus());
         
         try {
-            com.datacollect.entity.TestCaseExecutionResult entity = new com.datacollect.entity.TestCaseExecutionResult();
-            BeanUtils.copyProperties(result, entity);
-            
-            // 设置创建和更新时间
-            LocalDateTime now = LocalDateTime.now();
-            entity.setCreateTime(now);
-            entity.setUpdateTime(now);
+            com.datacollect.entity.TestCaseExecutionResult entity = createResultEntity(result);
             
             boolean success = save(entity);
             if (success) {
@@ -69,6 +63,21 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
             return false;
         }
+    }
+
+    /**
+     * 创建结果实体
+     */
+    private com.datacollect.entity.TestCaseExecutionResult createResultEntity(TestCaseExecutionResult result) {
+        com.datacollect.entity.TestCaseExecutionResult entity = new com.datacollect.entity.TestCaseExecutionResult();
+        BeanUtils.copyProperties(result, entity);
+        
+        // 设置创建和更新时间
+        LocalDateTime now = LocalDateTime.now();
+        entity.setCreateTime(now);
+        entity.setUpdateTime(now);
+        
+        return entity;
     }
 
     @Override
@@ -114,22 +123,15 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             }
             
             // 根据执行结果状态确定例次状态和结果
-            String instanceStatus = "COMPLETED";  // 执行状态：已完成
-            String instanceResult = result.getStatus();  // 执行结果：SUCCESS/FAILED/BLOCKED
-            
-            // 获取失败原因
-            String failureReason = null;
-            if ("FAILED".equals(result.getStatus()) || "BLOCKED".equals(result.getStatus())) {
-                failureReason = result.getFailureReason() != null ? result.getFailureReason() : result.getResult();
-            }
+            InstanceStatusInfo statusInfo = determineInstanceStatus(result);
             
             // 更新例次状态、结果、失败原因和日志文件路径
             boolean success = testCaseExecutionInstanceService.updateExecutionStatusAndResultAndFailureReasonAndLogFilePathByTestCaseAndRound(
-                    collectTaskId, result.getTestCaseId(), result.getRound(), instanceStatus, instanceResult, failureReason, result.getLogFilePath());
+                    collectTaskId, result.getTestCaseId(), result.getRound(), statusInfo.getStatus(), statusInfo.getResult(), statusInfo.getFailureReason(), result.getLogFilePath());
             
             if (success) {
                 log.debug("例次状态和结果更新成功 - 任务ID: {}, 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
-                        result.getTaskId(), result.getTestCaseId(), result.getRound(), instanceStatus, instanceResult);
+                        result.getTaskId(), result.getTestCaseId(), result.getRound(), statusInfo.getStatus(), statusInfo.getResult());
             } else {
                 log.warn("例次状态和结果更新失败 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
@@ -139,6 +141,41 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             log.error("更新例次状态和结果异常 - 任务ID: {}, 用例ID: {}, 轮次: {}, 错误: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
         }
+    }
+
+    /**
+     * 实例状态信息
+     */
+    private static class InstanceStatusInfo {
+        private String status;
+        private String result;
+        private String failureReason;
+        
+        public InstanceStatusInfo(String status, String result, String failureReason) {
+            this.status = status;
+            this.result = result;
+            this.failureReason = failureReason;
+        }
+        
+        public String getStatus() { return status; }
+        public String getResult() { return result; }
+        public String getFailureReason() { return failureReason; }
+    }
+
+    /**
+     * 确定实例状态信息
+     */
+    private InstanceStatusInfo determineInstanceStatus(TestCaseExecutionResult result) {
+        String instanceStatus = "COMPLETED";  // 执行状态：已完成
+        String instanceResult = result.getStatus();  // 执行结果：SUCCESS/FAILED/BLOCKED
+        
+        // 获取失败原因
+        String failureReason = null;
+        if ("FAILED".equals(result.getStatus()) || "BLOCKED".equals(result.getStatus())) {
+            failureReason = result.getFailureReason() != null ? result.getFailureReason() : result.getResult();
+        }
+        
+        return new InstanceStatusInfo(instanceStatus, instanceResult, failureReason);
     }
     
     /**
@@ -154,26 +191,32 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
         } catch (NumberFormatException e) {
             // 2. 如果不是数字，则通过execution_task_id查找对应的collect_task_id
             log.debug("taskId不是数字格式，尝试通过execution_task_id查找: {}", taskId);
+            return findCollectTaskIdByExecutionTaskId(taskId);
+        }
+    }
+
+    /**
+     * 通过execution_task_id查找collect_task_id
+     */
+    private Long findCollectTaskIdByExecutionTaskId(String taskId) {
+        try {
+            // 查询test_case_execution_instance表，根据execution_task_id找到collect_task_id
+            QueryWrapper<TestCaseExecutionInstance> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("execution_task_id", taskId);
+            queryWrapper.select("collect_task_id");
+            queryWrapper.last("LIMIT 1");
             
-            try {
-                // 查询test_case_execution_instance表，根据execution_task_id找到collect_task_id
-                QueryWrapper<TestCaseExecutionInstance> queryWrapper = new QueryWrapper<>();
-                queryWrapper.eq("execution_task_id", taskId);
-                queryWrapper.select("collect_task_id");
-                queryWrapper.last("LIMIT 1");
-                
-                TestCaseExecutionInstance instance = testCaseExecutionInstanceService.getOne(queryWrapper);
-                if (instance != null) {
-                    log.debug("通过execution_task_id找到collect_task_id: {} -> {}", taskId, instance.getCollectTaskId());
-                    return instance.getCollectTaskId();
-                } else {
-                    log.warn("未找到execution_task_id对应的collect_task_id: {}", taskId);
-                    return null;
-                }
-            } catch (Exception ex) {
-                log.error("通过execution_task_id查找collect_task_id异常: {}", ex.getMessage(), ex);
+            TestCaseExecutionInstance instance = testCaseExecutionInstanceService.getOne(queryWrapper);
+            if (instance != null) {
+                log.debug("通过execution_task_id找到collect_task_id: {} -> {}", taskId, instance.getCollectTaskId());
+                return instance.getCollectTaskId();
+            } else {
+                log.warn("未找到execution_task_id对应的collect_task_id: {}", taskId);
                 return null;
             }
+        } catch (Exception ex) {
+            log.error("通过execution_task_id查找collect_task_id异常: {}", ex.getMessage(), ex);
+            return null;
         }
     }
     
@@ -200,57 +243,105 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 return;
             }
             
-            // 3. 统计各种状态和结果的数量
-            int totalCount = instances.size();
-            int completedCount = 0;
-            int successCount = 0;
-            int failedCount = 0;
-            int blockedCount = 0;
+            // 3. 检查是否所有例次都已完成
+            boolean allCompleted = checkAllInstancesCompleted(instances);
             
-            for (TestCaseExecutionInstance instance : instances) {
-                String status = instance.getStatus();
-                String result = instance.getResult();
+            if (allCompleted) {
+                // 4. 更新任务状态为已完成
+                updateTaskToCompleted(collectTaskId);
                 
-                // 只要不是执行中，都算作已完成
-                if (!"RUNNING".equals(status)) {
-                    completedCount++;
-                    
-                    // 根据执行结果统计
-                    if ("SUCCESS".equals(result)) {
-                        successCount++;
-                    } else if ("FAILED".equals(result)) {
-                        failedCount++;
-                    } else if ("BLOCKED".equals(result)) {
-                        blockedCount++;
-                    }
-                }
-            }
-            
-            log.debug("任务状态统计 - 任务ID: {}, 总数: {}, 已完成: {}, 成功: {}, 失败: {}, 阻塞: {}", 
-                    taskId, totalCount, completedCount, successCount, failedCount, blockedCount);
-            
-            // 4. 检查是否所有用例例次都已完成
-            if (completedCount == totalCount) {
-                log.info("所有用例例次已完成，更新任务状态为完成 - 任务ID: {}", taskId);
-                
-                // 5. 更新任务状态和进度 - 状态仅表示执行状态，不表示结果状态
-                String finalStatus = "COMPLETED";
-                
-                boolean statusUpdated = collectTaskService.updateTaskStatus(collectTaskId, finalStatus);
-                boolean progressUpdated = collectTaskService.updateTaskProgress(collectTaskId, totalCount, successCount, failedCount);
-                
-                if (statusUpdated && progressUpdated) {
-                    log.info("任务状态更新成功 - 任务ID: {}, 最终状态: {}, 总数: {}, 成功: {}, 失败: {}, 阻塞: {}", 
-                            taskId, finalStatus, totalCount, successCount, failedCount, blockedCount);
-                } else {
-                    log.error("任务状态更新失败 - 任务ID: {}", taskId);
-                }
-            } else {
-                log.debug("任务尚未完成，继续等待 - 任务ID: {}, 已完成: {}/{}", taskId, completedCount, totalCount);
+                // 5. 更新任务执行进度
+                updateTaskExecutionProgress(collectTaskId, instances);
             }
             
         } catch (Exception e) {
             log.error("检查任务完成状态异常 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
         }
+    }
+
+    /**
+     * 检查所有实例是否已完成
+     */
+    private boolean checkAllInstancesCompleted(List<TestCaseExecutionInstance> instances) {
+        for (TestCaseExecutionInstance instance : instances) {
+            if (!"COMPLETED".equals(instance.getStatus()) && !"STOPPED".equals(instance.getStatus())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 更新任务为已完成状态
+     */
+    private void updateTaskToCompleted(Long collectTaskId) {
+        boolean success = collectTaskService.updateTaskStatus(collectTaskId, "COMPLETED");
+        if (success) {
+            log.info("任务状态更新为已完成 - 任务ID: {}", collectTaskId);
+        } else {
+            log.error("任务状态更新失败 - 任务ID: {}", collectTaskId);
+        }
+    }
+
+    /**
+     * 更新任务执行进度
+     */
+    private void updateTaskExecutionProgress(Long collectTaskId, List<TestCaseExecutionInstance> instances) {
+        try {
+            // 统计各种状态的例次数量
+            TaskProgressInfo progressInfo = calculateTaskProgress(instances);
+            
+            // 更新任务进度
+            boolean progressUpdated = collectTaskService.updateTaskProgress(collectTaskId, progressInfo.getTotalCount(), progressInfo.getSuccessCount(), progressInfo.getFailedCount());
+            if (progressUpdated) {
+                log.info("任务执行进度更新成功 - 任务ID: {}, 总数: {}, 成功: {}, 失败: {}", 
+                        collectTaskId, progressInfo.getTotalCount(), progressInfo.getSuccessCount(), progressInfo.getFailedCount());
+            } else {
+                log.error("任务执行进度更新失败 - 任务ID: {}", collectTaskId);
+            }
+            
+        } catch (Exception e) {
+            log.error("更新任务执行进度异常 - 任务ID: {}, 错误: {}", collectTaskId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 任务进度信息
+     */
+    private static class TaskProgressInfo {
+        private int totalCount;
+        private int successCount;
+        private int failedCount;
+        
+        public TaskProgressInfo(int totalCount, int successCount, int failedCount) {
+            this.totalCount = totalCount;
+            this.successCount = successCount;
+            this.failedCount = failedCount;
+        }
+        
+        public int getTotalCount() { return totalCount; }
+        public int getSuccessCount() { return successCount; }
+        public int getFailedCount() { return failedCount; }
+    }
+
+    /**
+     * 计算任务进度
+     */
+    private TaskProgressInfo calculateTaskProgress(List<TestCaseExecutionInstance> instances) {
+        int totalCount = instances.size();
+        int successCount = 0;
+        int failedCount = 0;
+        
+        for (TestCaseExecutionInstance instance : instances) {
+            if ("COMPLETED".equals(instance.getStatus())) {
+                if ("SUCCESS".equals(instance.getResult())) {
+                    successCount++;
+                } else if ("FAILED".equals(instance.getResult()) || "BLOCKED".equals(instance.getResult())) {
+                    failedCount++;
+                }
+            }
+        }
+        
+        return new TaskProgressInfo(totalCount, successCount, failedCount);
     }
 }

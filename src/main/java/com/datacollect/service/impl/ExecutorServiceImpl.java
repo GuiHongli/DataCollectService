@@ -29,7 +29,31 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     @Override
     public Page<ExecutorDTO> getExecutorPageWithRegion(Integer current, Integer size, String name, String ipAddress, Long regionId) {
         // 1. 获取执行机分页数据
+        Page<Executor> executorPage = getExecutorPage(current, size, name, ipAddress, regionId);
+        
+        // 2. 获取所有地域数据并建立层级映射
+        Map<Long, Region> regionMap = buildRegionMap();
+        
+        // 3. 转换为DTO，构建完整的地域路径
+        List<ExecutorDTO> dtoList = convertToExecutorDTOs(executorPage.getRecords(), regionMap);
+        
+        // 4. 创建返回的分页对象
+        return createResultPage(current, size, dtoList, executorPage.getTotal());
+    }
+
+    /**
+     * 获取执行机分页数据
+     */
+    private Page<Executor> getExecutorPage(Integer current, Integer size, String name, String ipAddress, Long regionId) {
         Page<Executor> page = new Page<>(current, size);
+        QueryWrapper<Executor> queryWrapper = buildExecutorQueryWrapper(name, ipAddress, regionId);
+        return page(page, queryWrapper);
+    }
+
+    /**
+     * 构建执行机查询条件
+     */
+    private QueryWrapper<Executor> buildExecutorQueryWrapper(String name, String ipAddress, Long regionId) {
         QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
         
         if (name != null && !name.isEmpty()) {
@@ -43,42 +67,63 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
         }
         
         queryWrapper.orderByDesc("create_time");
-        Page<Executor> executorPage = page(page, queryWrapper);
-        
-        // 2. 获取所有地域数据并建立层级映射
+        return queryWrapper;
+    }
+
+    /**
+     * 构建地域映射
+     */
+    private Map<Long, Region> buildRegionMap() {
         List<Region> allRegions = regionService.list();
         Map<Long, Region> regionMap = new HashMap<>();
         for (Region region : allRegions) {
             regionMap.put(region.getId(), region);
         }
-        
-        // 3. 转换为DTO，构建完整的地域路径
+        return regionMap;
+    }
+
+    /**
+     * 转换为执行机DTO列表
+     */
+    private List<ExecutorDTO> convertToExecutorDTOs(List<Executor> executors, Map<Long, Region> regionMap) {
         List<ExecutorDTO> dtoList = new ArrayList<>();
-        for (Executor executor : executorPage.getRecords()) {
-            ExecutorDTO dto = new ExecutorDTO();
-            dto.setId(executor.getId());
-            dto.setIpAddress(executor.getIpAddress());
-            dto.setName(executor.getName());
-            dto.setRegionId(executor.getRegionId());
-            dto.setDescription(executor.getDescription());
-            dto.setStatus(executor.getStatus());
-            dto.setCreateBy(executor.getCreateBy());
-            dto.setUpdateBy(executor.getUpdateBy());
-            dto.setCreateTime(executor.getCreateTime());
-            dto.setUpdateTime(executor.getUpdateTime());
-            
-            // 构建完整的地域路径
-            String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
-            dto.setRegionName(regionPath);
-            
+        for (Executor executor : executors) {
+            ExecutorDTO dto = createExecutorDTO(executor, regionMap);
             dtoList.add(dto);
         }
+        return dtoList;
+    }
+
+    /**
+     * 创建执行机DTO
+     */
+    private ExecutorDTO createExecutorDTO(Executor executor, Map<Long, Region> regionMap) {
+        ExecutorDTO dto = new ExecutorDTO();
+        dto.setId(executor.getId());
+        dto.setIpAddress(executor.getIpAddress());
+        dto.setName(executor.getName());
+        dto.setRegionId(executor.getRegionId());
+        dto.setDescription(executor.getDescription());
+        dto.setStatus(executor.getStatus());
+        dto.setCreateBy(executor.getCreateBy());
+        dto.setUpdateBy(executor.getUpdateBy());
+        dto.setCreateTime(executor.getCreateTime());
+        dto.setUpdateTime(executor.getUpdateTime());
         
-        // 4. 创建返回的分页对象
+        // 构建完整的地域路径
+        String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
+        dto.setRegionName(regionPath);
+        
+        return dto;
+    }
+
+    /**
+     * 创建结果分页对象
+     */
+    private Page<ExecutorDTO> createResultPage(Integer current, Integer size, List<ExecutorDTO> dtoList, Long total) {
         Page<ExecutorDTO> resultPage = new Page<>(current, size);
         resultPage.setRecords(dtoList);
-        resultPage.setTotal(executorPage.getTotal());
-        
+        resultPage.setTotal(total);
         return resultPage;
     }
     
@@ -95,6 +140,14 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
             return "未知地域";
         }
         
+        List<String> pathParts = buildPathParts(currentRegion, regionMap);
+        return formatRegionPath(pathParts, currentRegion.getLevel());
+    }
+
+    /**
+     * 构建路径部分
+     */
+    private List<String> buildPathParts(Region currentRegion, Map<Long, Region> regionMap) {
         List<String> pathParts = new ArrayList<>();
         pathParts.add(currentRegion.getName());
         
@@ -110,15 +163,21 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
             }
         }
         
-        // 根据层级添加标签
+        return pathParts;
+    }
+
+    /**
+     * 格式化地域路径
+     */
+    private String formatRegionPath(List<String> pathParts, Integer level) {
         String path = String.join(" / ", pathParts);
-        if (currentRegion.getLevel() == 1) {
+        if (level == 1) {
             return path + " (片区)";
-        } else if (currentRegion.getLevel() == 2) {
+        } else if (level == 2) {
             return path + " (国家/直辖市)";
-        } else if (currentRegion.getLevel() == 3) {
+        } else if (level == 3) {
             return path + " (省份)";
-        } else if (currentRegion.getLevel() == 4) {
+        } else if (level == 4) {
             return path + " (城市)";
         }
         
@@ -127,81 +186,143 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     
     @Override
     public List<Map<String, Object>> getRegionOptionsForSelect() {
-        List<Map<String, Object>> options = new ArrayList<>();
-        
         // 获取所有地域数据
         List<Region> allRegions = regionService.list();
-        Map<Long, Region> regionMap = new HashMap<>();
-        for (Region region : allRegions) {
-            regionMap.put(region.getId(), region);
-        }
+        Map<Long, Region> regionMap = buildRegionMap();
         
         // 只显示城市级别（level=4）的地域
+        List<Map<String, Object>> options = buildCityLevelOptions(allRegions, regionMap);
+        
+        // 按名称排序
+        sortOptionsByName(options);
+        
+        return options;
+    }
+
+    /**
+     * 构建城市级别选项
+     */
+    private List<Map<String, Object>> buildCityLevelOptions(List<Region> allRegions, Map<Long, Region> regionMap) {
+        List<Map<String, Object>> options = new ArrayList<>();
+        
         for (Region region : allRegions) {
             if (region.getLevel() == 4) {
-                Map<String, Object> option = new HashMap<>();
-                option.put("id", region.getId());
-                option.put("name", region.getName());
-                option.put("level", region.getLevel());
-                
-                // 构建完整的地域路径
-                String regionPath = buildRegionPath(region.getId(), regionMap);
-                option.put("fullPath", regionPath);
-                
+                Map<String, Object> option = createRegionOption(region, regionMap);
                 options.add(option);
             }
         }
         
-        // 按名称排序
+        return options;
+    }
+
+    /**
+     * 创建地域选项
+     */
+    private Map<String, Object> createRegionOption(Region region, Map<Long, Region> regionMap) {
+        Map<String, Object> option = new HashMap<>();
+        option.put("id", region.getId());
+        option.put("name", region.getName());
+        option.put("level", region.getLevel());
+        
+        // 构建完整的地域路径
+        String regionPath = buildRegionPath(region.getId(), regionMap);
+        option.put("fullPath", regionPath);
+        
+        return option;
+    }
+
+    /**
+     * 按名称排序选项
+     */
+    private void sortOptionsByName(List<Map<String, Object>> options) {
         options.sort((a, b) -> {
             String nameA = (String) a.get("name");
             String nameB = (String) b.get("name");
             return nameA.compareTo(nameB);
         });
-        
-        return options;
     }
     
     @Override
     public List<Map<String, Object>> getExecutorOptionsForSelect() {
-        List<Map<String, Object>> options = new ArrayList<>();
-        
         // 获取所有执行机数据
+        List<Executor> executors = getEnabledExecutors();
+        
+        // 获取所有地域数据并建立层级映射
+        Map<Long, Region> regionMap = buildRegionMap();
+        
+        // 为每个执行机构建选项
+        List<Map<String, Object>> options = buildExecutorOptions(executors, regionMap);
+        
+        // 按显示名称排序
+        sortOptionsByDisplayName(options);
+        
+        return options;
+    }
+
+    /**
+     * 获取启用的执行机
+     */
+    private List<Executor> getEnabledExecutors() {
         QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("status", 1); // 只获取启用的执行机
         queryWrapper.orderByAsc("name");
-        List<Executor> executors = list(queryWrapper);
+        return list(queryWrapper);
+    }
+
+    /**
+     * 构建执行机选项
+     */
+    private List<Map<String, Object>> buildExecutorOptions(List<Executor> executors, Map<Long, Region> regionMap) {
+        List<Map<String, Object>> options = new ArrayList<>();
         
-        // 获取所有地域数据并建立层级映射
-        List<Region> allRegions = regionService.list();
-        Map<Long, Region> regionMap = new HashMap<>();
-        for (Region region : allRegions) {
-            regionMap.put(region.getId(), region);
-        }
-        
-        // 为每个执行机构建选项
         for (Executor executor : executors) {
-            Map<String, Object> option = new HashMap<>();
-            option.put("id", executor.getId());
-            option.put("name", executor.getName());
-            option.put("ipAddress", executor.getIpAddress());
-            option.put("regionId", executor.getRegionId());
-            
-            // 构建完整的地域路径
-            String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
-            option.put("regionName", regionPath);
-            
-            // 构建显示名称：执行机名称 + IP + 所属地域
-            String displayName = String.format("%s (%s) - %s", 
-                executor.getName(), 
-                executor.getIpAddress(), 
-                regionPath);
-            option.put("displayName", displayName);
-            
+            Map<String, Object> option = createExecutorOption(executor, regionMap);
             options.add(option);
         }
         
         return options;
+    }
+
+    /**
+     * 创建执行机选项
+     */
+    private Map<String, Object> createExecutorOption(Executor executor, Map<Long, Region> regionMap) {
+        Map<String, Object> option = new HashMap<>();
+        option.put("id", executor.getId());
+        option.put("name", executor.getName());
+        option.put("ipAddress", executor.getIpAddress());
+        option.put("regionId", executor.getRegionId());
+        
+        // 构建完整的地域路径
+        String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
+        option.put("regionName", regionPath);
+        
+        // 构建显示名称：执行机名称 + IP + 所属地域
+        String displayName = buildDisplayName(executor, regionPath);
+        option.put("displayName", displayName);
+        
+        return option;
+    }
+
+    /**
+     * 构建显示名称
+     */
+    private String buildDisplayName(Executor executor, String regionPath) {
+        return String.format("%s (%s) - %s", 
+            executor.getName(), 
+            executor.getIpAddress(), 
+            regionPath);
+    }
+
+    /**
+     * 按显示名称排序选项
+     */
+    private void sortOptionsByDisplayName(List<Map<String, Object>> options) {
+        options.sort((a, b) -> {
+            String displayNameA = (String) a.get("displayName");
+            String displayNameB = (String) b.get("displayName");
+            return displayNameA.compareTo(displayNameB);
+        });
     }
     
     @Override
