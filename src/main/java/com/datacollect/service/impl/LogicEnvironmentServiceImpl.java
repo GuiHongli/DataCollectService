@@ -14,7 +14,7 @@ import com.datacollect.entity.Executor;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.entity.LogicEnvironmentNetwork;
 import com.datacollect.entity.LogicEnvironmentUe;
-import com.datacollect.entity.LogicNetwork;
+import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.Ue;
 import com.datacollect.entity.dto.LogicEnvironmentDTO;
 import com.datacollect.mapper.LogicEnvironmentMapper;
@@ -22,7 +22,7 @@ import com.datacollect.service.ExecutorService;
 import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.LogicEnvironmentService;
 import com.datacollect.service.LogicEnvironmentUeService;
-import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.UeService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +44,7 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
     private ExecutorService executorService;
     
     @Autowired
-    private LogicNetworkService logicNetworkService;
+    private NetworkTypeService networkTypeService;
     
     @Override
     public Page<LogicEnvironmentDTO> getLogicEnvironmentPageWithDetails(Integer current, Integer size, String name, Long executorId) {
@@ -133,11 +133,11 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
         try {
             List<Long> networkIds = getNetworkIdsByEnvironment(logicEnvironment.getId());
             if (!networkIds.isEmpty()) {
-                List<LogicNetwork> networks = getNetworksByIds(networkIds);
+                List<NetworkType> networks = getNetworksByIds(networkIds);
                 networkInfoList = createNetworkInfoList(networks);
             }
         } catch (Exception e) {
-            log.error("Failed to get logic network information: {}", e.getMessage());
+            log.error("Failed to get network type information: {}", e.getMessage());
         }
         return networkInfoList;
     }
@@ -176,15 +176,15 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
         return logicEnvironmentNetworks.stream().map(LogicEnvironmentNetwork::getLogicNetworkId).collect(Collectors.toList());
     }
 
-    private List<LogicNetwork> getNetworksByIds(List<Long> networkIds) {
-        QueryWrapper<LogicNetwork> networkQuery = new QueryWrapper<>();
+    private List<NetworkType> getNetworksByIds(List<Long> networkIds) {
+        QueryWrapper<NetworkType> networkQuery = new QueryWrapper<>();
         networkQuery.in("id", networkIds);
-        return logicNetworkService.list(networkQuery);
+        return networkTypeService.list(networkQuery);
     }
 
-    private List<LogicEnvironmentDTO.NetworkInfo> createNetworkInfoList(List<LogicNetwork> networks) {
+    private List<LogicEnvironmentDTO.NetworkInfo> createNetworkInfoList(List<NetworkType> networks) {
         List<LogicEnvironmentDTO.NetworkInfo> networkInfoList = new ArrayList<>();
-        for (LogicNetwork network : networks) {
+        for (NetworkType network : networks) {
             LogicEnvironmentDTO.NetworkInfo networkInfo = new LogicEnvironmentDTO.NetworkInfo();
             networkInfo.setId(network.getId());
             networkInfo.setName(network.getName());
