@@ -19,9 +19,9 @@ public class LogicEnvironmentNetwork {
     @TableField("logic_environment_id")
     private Long logicEnvironmentId;
 
-    @NotNull(message = "逻辑组网ID不能为空")
+    @NotNull(message = "网络类型ID不能为空")
     @TableField("logic_network_id")
-    private Long logicNetworkId;
+    private Long logicNetworkId; // 注意：数据库字段名保持不变，但实际引用network_type表的ID
 
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;

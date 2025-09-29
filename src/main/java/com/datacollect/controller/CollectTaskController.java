@@ -32,7 +32,7 @@ import com.datacollect.entity.CollectTask;
 import com.datacollect.entity.Executor;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.entity.LogicEnvironmentNetwork;
-import com.datacollect.entity.LogicNetwork;
+import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.TestCase;
 import com.datacollect.entity.TestCaseExecutionInstance;
 import com.datacollect.entity.dto.LogicEnvironmentDTO;
@@ -43,7 +43,7 @@ import com.datacollect.service.CollectTaskService;
 import com.datacollect.service.ExecutorService;
 import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.LogicEnvironmentService;
-import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.TestCaseExecutionInstanceService;
 import com.datacollect.service.TestCaseService;
 
@@ -74,7 +74,7 @@ public class CollectTaskController {
     private LogicEnvironmentNetworkService logicEnvironmentNetworkService;
 
     @Autowired
-    private LogicNetworkService logicNetworkService;
+    private NetworkTypeService networkTypeService;
 
     @Autowired
     private CollectTaskProcessService collectTaskProcessService;
@@ -848,7 +848,7 @@ public class CollectTaskController {
      */
     private boolean checkMatchingNetworks(List<LogicEnvironmentNetwork> environmentNetworks, Set<String> requiredNetworks) {
         for (LogicEnvironmentNetwork envNetwork : environmentNetworks) {
-            LogicNetwork network = logicNetworkService.getById(envNetwork.getLogicNetworkId());
+            NetworkType network = networkTypeService.getById(envNetwork.getLogicNetworkId());
             if (network != null && requiredNetworks.contains(network.getName())) {
                 log.debug("Found matching environment network: {} (logic environment: {})", network.getName(), network.getName());
                 return true;
@@ -863,7 +863,7 @@ public class CollectTaskController {
     private List<String> extractLogicEnvironmentNetworks(List<LogicEnvironmentNetwork> environmentNetworks) {
         List<String> logicEnvironmentNetworks = new ArrayList<>();
         for (LogicEnvironmentNetwork envNetwork : environmentNetworks) {
-            LogicNetwork network = logicNetworkService.getById(envNetwork.getLogicNetworkId());
+            NetworkType network = networkTypeService.getById(envNetwork.getLogicNetworkId());
             if (network != null) {
                 logicEnvironmentNetworks.add(network.getName());
             }
