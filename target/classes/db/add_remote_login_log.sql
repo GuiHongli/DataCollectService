@@ -21,3 +21,5 @@ CREATE TABLE IF NOT EXISTS `remote_login_log` (
   KEY `idx_connect_time` (`connect_time`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='远程登录日志表';
+
+

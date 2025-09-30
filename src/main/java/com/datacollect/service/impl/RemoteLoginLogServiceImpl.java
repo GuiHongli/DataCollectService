@@ -9,3 +9,5 @@ import org.springframework.stereotype.Service;
 @Service
 public class RemoteLoginLogServiceImpl extends ServiceImpl<RemoteLoginLogMapper, RemoteLoginLog> implements RemoteLoginLogService {
 }
+
+

@@ -101,10 +101,19 @@ public class RemoteLoginController {
             connectionInfo.put("type", "ssh");
             connectionInfo.put("description", "SSH连接命令");
         } else if ("rdp".equals(request.getConnectionType())) {
-            connectionInfo.put("url", String.format("rdp://%s:%d", 
-                    request.getExecutorIp(), request.getPort()));
+            // 生成完整的RDP连接字符串，包含用户名
+            String rdpUrl = String.format("rdp://%s:%d", 
+                    request.getExecutorIp(), request.getPort());
+            if (request.getUsername() != null && !request.getUsername().isEmpty()) {
+                rdpUrl = String.format("rdp://%s@%s:%d", 
+                        request.getUsername(), request.getExecutorIp(), request.getPort());
+            }
+            connectionInfo.put("url", rdpUrl);
             connectionInfo.put("type", "rdp");
             connectionInfo.put("description", "RDP连接URL");
+            // 添加RDP连接文件内容，用于生成.rdp文件
+            String rdpFileContent = generateRdpFileContent(request);
+            connectionInfo.put("rdpFileContent", rdpFileContent);
         } else if ("vnc".equals(request.getConnectionType())) {
             connectionInfo.put("url", String.format("vnc://%s:%d", 
                     request.getExecutorIp(), request.getPort()));
@@ -118,6 +127,63 @@ public class RemoteLoginController {
         connectionInfo.put("osType", request.getOsType());
         
         return connectionInfo;
+    }
+
+    /**
+     * 生成RDP文件内容
+     */
+    private String generateRdpFileContent(RemoteLoginLogRequest request) {
+        StringBuilder rdpContent = new StringBuilder();
+        rdpContent.append("full address:s:").append(request.getExecutorIp()).append(":").append(request.getPort()).append("\n");
+        rdpContent.append("username:s:").append(request.getUsername() != null ? request.getUsername() : "").append("\n");
+        rdpContent.append("screen mode id:i:2\n");
+        rdpContent.append("use multimon:i:0\n");
+        rdpContent.append("desktopwidth:i:1920\n");
+        rdpContent.append("desktopheight:i:1080\n");
+        rdpContent.append("session bpp:i:32\n");
+        rdpContent.append("winposstr:s:0,3,0,0,800,600\n");
+        rdpContent.append("compression:i:1\n");
+        rdpContent.append("keyboardhook:i:2\n");
+        rdpContent.append("audiocapturemode:i:0\n");
+        rdpContent.append("videoplaybackmode:i:1\n");
+        rdpContent.append("connection type:i:7\n");
+        rdpContent.append("networkautodetect:i:1\n");
+        rdpContent.append("bandwidthautodetect:i:1\n");
+        rdpContent.append("displayconnectionbar:i:1\n");
+        rdpContent.append("enableworkspacereconnect:i:0\n");
+        rdpContent.append("disable wallpaper:i:0\n");
+        rdpContent.append("allow font smoothing:i:0\n");
+        rdpContent.append("allow desktop composition:i:0\n");
+        rdpContent.append("disable full window drag:i:1\n");
+        rdpContent.append("disable menu anims:i:1\n");
+        rdpContent.append("disable themes:i:0\n");
+        rdpContent.append("disable cursor setting:i:0\n");
+        rdpContent.append("bitmapcachepersistenable:i:1\n");
+        rdpContent.append("full address:s:").append(request.getExecutorIp()).append(":").append(request.getPort()).append("\n");
+        rdpContent.append("audiomode:i:0\n");
+        rdpContent.append("redirectprinters:i:1\n");
+        rdpContent.append("redirectcomports:i:0\n");
+        rdpContent.append("redirectsmartcards:i:1\n");
+        rdpContent.append("redirectclipboard:i:1\n");
+        rdpContent.append("redirectposdevices:i:0\n");
+        rdpContent.append("autoreconnection enabled:i:1\n");
+        rdpContent.append("authentication level:i:2\n");
+        rdpContent.append("prompt for credentials:i:0\n");
+        rdpContent.append("negotiate security layer:i:1\n");
+        rdpContent.append("remoteapplicationmode:i:0\n");
+        rdpContent.append("alternate shell:s:\n");
+        rdpContent.append("shell working directory:s:\n");
+        rdpContent.append("gatewayhostname:s:\n");
+        rdpContent.append("gatewayusagemethod:i:4\n");
+        rdpContent.append("gatewaycredentialssource:i:4\n");
+        rdpContent.append("gatewayprofileusagemethod:i:0\n");
+        rdpContent.append("promptcredentialonce:i:0\n");
+        rdpContent.append("gatewaybrokeringtype:i:0\n");
+        rdpContent.append("use redirection server name:i:0\n");
+        rdpContent.append("rdgiskdcproxy:i:0\n");
+        rdpContent.append("kdcproxyname:s:\n");
+        
+        return rdpContent.toString();
     }
 
     /**
@@ -155,3 +221,5 @@ public class RemoteLoginController {
         public void setOperationNote(String operationNote) { this.operationNote = operationNote; }
     }
 }
+
+

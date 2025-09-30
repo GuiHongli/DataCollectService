@@ -5,3 +5,5 @@ import com.datacollect.entity.RemoteLoginLog;
 
 public interface RemoteLoginLogService extends IService<RemoteLoginLog> {
 }
+
+

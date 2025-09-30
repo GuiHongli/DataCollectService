@@ -66,3 +66,5 @@ public class RemoteLoginLog {
     @TableField("deleted")
     private Integer deleted;
 }
+
+
