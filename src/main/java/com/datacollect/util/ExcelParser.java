@@ -26,9 +26,12 @@ public class ExcelParser {
     private static final int COL_LOGIC_NETWORK = 2;
     private static final int COL_BUSINESS_CATEGORY = 3;
     private static final int COL_APP = 4;
-    private static final int COL_TEST_STEPS = 5;
-    private static final int COL_EXPECTED_RESULT = 6;
-    private static final int EMPTY_ROW_CHECK_COLUMNS = 7; // 与解析列保持一致
+    private static final int COL_APP_EN = 5;
+    private static final int COL_MODEL_SCENARIO = 6;
+    private static final int COL_PHONE_OS_TYPE = 7;
+    private static final int COL_TEST_STEPS = 8;
+    private static final int COL_EXPECTED_RESULT = 9;
+    private static final int EMPTY_ROW_CHECK_COLUMNS = 10; // 与解析列保持一致
 
     /**
      * 解析Excel文件中的测试用例数据
@@ -93,12 +96,15 @@ public class ExcelParser {
     private TestCase buildTestCaseFromRow(Row row, Long testCaseSetId) {
         TestCase testCase = new TestCase();
         testCase.setTestCaseSetId(testCaseSetId);
-        // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_测试步骤 用例_预期结果
+        // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_AppEn 用例_模型场景 用例_手机OS类 用例_操作步骤 用例_预期结果
         testCase.setName(getCellValue(row.getCell(COL_NAME)));
         testCase.setNumber(getCellValue(row.getCell(COL_NUMBER)));
         testCase.setLogicNetwork(getCellValue(row.getCell(COL_LOGIC_NETWORK)));
         testCase.setBusinessCategory(getCellValue(row.getCell(COL_BUSINESS_CATEGORY)));
         testCase.setApp(getCellValue(row.getCell(COL_APP)));
+        testCase.setAppEn(getCellValue(row.getCell(COL_APP_EN)));
+        testCase.setModelScenario(getCellValue(row.getCell(COL_MODEL_SCENARIO)));
+        testCase.setPhoneOsType(getCellValue(row.getCell(COL_PHONE_OS_TYPE)));
         testCase.setTestSteps(getCellValue(row.getCell(COL_TEST_STEPS)));
         testCase.setExpectedResult(getCellValue(row.getCell(COL_EXPECTED_RESULT)));
         return testCase;

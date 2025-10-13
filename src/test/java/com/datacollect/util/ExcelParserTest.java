@@ -189,9 +189,73 @@ public class ExcelParserTest {
         excelParser.parseTestCaseExcel(filePath, testCaseSetId);
     }
 
+    @Test
+    public void testParseTestCaseExcel_WithNewFields() throws Exception {
+        // 准备测试数据 - 测试新增的三个字段
+        String filePath = "test_with_new_fields.xlsx";
+        Long testCaseSetId = 1L;
+
+        // Mock FileInputStream
+        FileInputStream mockFis = PowerMockito.mock(FileInputStream.class);
+        PowerMockito.whenNew(FileInputStream.class).withArguments(filePath).thenReturn(mockFis);
+
+        // Mock XSSFWorkbook
+        PowerMockito.whenNew(XSSFWorkbook.class).withArguments(mockFis).thenReturn(mockWorkbook);
+
+        // Mock Sheet
+        when(mockWorkbook.getSheetAt(0)).thenReturn(mockSheet);
+        when(mockSheet.getLastRowNum()).thenReturn(1);
+
+        // Mock Row - 包含所有10列数据
+        XSSFRow mockRow1 = createMockRowWithAllFields(
+            "测试用例1", 
+            "TC001", 
+            "逻辑组网1", 
+            "业务大类1", 
+            "App1",
+            "AppEn1",
+            "模型场景1",
+            "Android",
+            "测试步骤1", 
+            "预期结果1"
+        );
+
+        when(mockSheet.getRow(1)).thenReturn(mockRow1);
+
+        // 执行测试
+        List<TestCase> result = excelParser.parseTestCaseExcel(filePath, testCaseSetId);
+
+        // 验证结果
+        assertNotNull(result);
+        assertEquals(1, result.size());
+
+        TestCase testCase = result.get(0);
+        assertEquals("测试用例1", testCase.getName());
+        assertEquals("TC001", testCase.getNumber());
+        assertEquals("逻辑组网1", testCase.getLogicNetwork());
+        assertEquals("业务大类1", testCase.getBusinessCategory());
+        assertEquals("App1", testCase.getApp());
+        // 验证新增字段
+        assertEquals("AppEn1", testCase.getAppEn());
+        assertEquals("模型场景1", testCase.getModelScenario());
+        assertEquals("Android", testCase.getPhoneOsType());
+        assertEquals("测试步骤1", testCase.getTestSteps());
+        assertEquals("预期结果1", testCase.getExpectedResult());
+        assertEquals(testCaseSetId, testCase.getTestCaseSetId());
+    }
+
     // 辅助方法：创建包含数据的 Mock Row
     private XSSFRow createMockRow(String name, String number, String logicNetwork, String businessCategory, 
                                  String app, String testSteps, String expectedResult) {
+        // 调用新的10列方法，新增字段传null以保持向后兼容
+        return createMockRowWithAllFields(name, number, logicNetwork, businessCategory, 
+                                         app, null, null, null, testSteps, expectedResult);
+    }
+
+    // 辅助方法：创建包含所有字段的 Mock Row（10列）
+    private XSSFRow createMockRowWithAllFields(String name, String number, String logicNetwork, String businessCategory, 
+                                              String app, String appEn, String modelScenario, String phoneOsType,
+                                              String testSteps, String expectedResult) {
         XSSFRow mockRow = PowerMockito.mock(XSSFRow.class);
         
         // Mock 单元格
@@ -200,8 +264,11 @@ public class ExcelParserTest {
         XSSFCell mockCell2 = createMockCell(logicNetwork);
         XSSFCell mockCell3 = createMockCell(businessCategory);
         XSSFCell mockCell4 = createMockCell(app);
-        XSSFCell mockCell5 = createMockCell(testSteps);
-        XSSFCell mockCell6 = createMockCell(expectedResult);
+        XSSFCell mockCell5 = createMockCell(appEn);
+        XSSFCell mockCell6 = createMockCell(modelScenario);
+        XSSFCell mockCell7 = createMockCell(phoneOsType);
+        XSSFCell mockCell8 = createMockCell(testSteps);
+        XSSFCell mockCell9 = createMockCell(expectedResult);
 
         when(mockRow.getCell(0)).thenReturn(mockCell0);
         when(mockRow.getCell(1)).thenReturn(mockCell1);
@@ -210,6 +277,9 @@ public class ExcelParserTest {
         when(mockRow.getCell(4)).thenReturn(mockCell4);
         when(mockRow.getCell(5)).thenReturn(mockCell5);
         when(mockRow.getCell(6)).thenReturn(mockCell6);
+        when(mockRow.getCell(7)).thenReturn(mockCell7);
+        when(mockRow.getCell(8)).thenReturn(mockCell8);
+        when(mockRow.getCell(9)).thenReturn(mockCell9);
 
         return mockRow;
     }
@@ -218,8 +288,8 @@ public class ExcelParserTest {
     private XSSFRow createEmptyMockRow() {
         XSSFRow mockRow = PowerMockito.mock(XSSFRow.class);
         
-        // Mock 空单元格
-        for (int i = 0; i < 7; i++) {
+        // Mock 空单元格（10列）
+        for (int i = 0; i < 10; i++) {
             when(mockRow.getCell(i)).thenReturn(null);
         }
 
