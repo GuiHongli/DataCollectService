@@ -93,6 +93,9 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
         dto.setBusinessCategory(strategy.getBusinessCategory());
         dto.setApp(strategy.getApp());
         dto.setIntent(strategy.getIntent());
+        dto.setCustomParams(strategy.getCustomParams());
+        dto.setTestCaseCustomParams(strategy.getTestCaseCustomParams());
+        dto.setTestCaseExecutionCounts(strategy.getTestCaseExecutionCounts());
         dto.setDescription(strategy.getDescription());
         dto.setStatus(strategy.getStatus());
         dto.setCreateBy(strategy.getCreateBy());

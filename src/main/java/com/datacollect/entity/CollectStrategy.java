@@ -40,6 +40,12 @@ public class CollectStrategy {
     @TableField("custom_params")
     private String customParams;
 
+    @TableField("test_case_custom_params")
+    private String testCaseCustomParams;
+
+    @TableField("test_case_execution_counts")
+    private String testCaseExecutionCounts;
+
     @TableField("description")
     private String description;
 
