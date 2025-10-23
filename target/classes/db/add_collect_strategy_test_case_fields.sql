@@ -16,3 +16,13 @@ MODIFY COLUMN test_case_custom_params TEXT COMMENT '用例自定义参数，JSON
 
 ALTER TABLE collect_strategy 
 MODIFY COLUMN test_case_execution_counts TEXT COMMENT '用例执行次数，JSON格式存储，格式: {"testCaseId": 3}';
+
+
+
+
+
+
+
+
+
+

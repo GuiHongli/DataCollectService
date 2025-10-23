@@ -27,7 +27,12 @@ import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.common.exception.CollectTaskException;
 import com.datacollect.util.HttpClientUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
 import java.util.HashSet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +60,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private CollectStrategyService collectStrategyService;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
     
     @Autowired
     private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
@@ -524,19 +532,99 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * 获取任务自定义参数
+     * 获取任务自定义参数（包含用例级别的自定义参数）
      */
     private String getTaskCustomParams(List<TestCaseExecutionInstance> instances) {
-        String taskCustomParams = null;
+        StringBuilder combinedParams = new StringBuilder();
+        
         if (!instances.isEmpty()) {
             Long collectTaskId = instances.get(0).getCollectTaskId();
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
             if (collectTask != null) {
-                taskCustomParams = collectTask.getCustomParams();
-                log.info("Get collect task custom parameters - task ID: {}, custom parameters: {}", collectTaskId, taskCustomParams);
+                // 1. 获取任务级别的自定义参数
+                String taskCustomParams = collectTask.getCustomParams();
+                if (taskCustomParams != null && !taskCustomParams.trim().isEmpty()) {
+                    combinedParams.append(taskCustomParams);
+                    log.info("Get collect task custom parameters - task ID: {}, custom parameters: {}", collectTaskId, taskCustomParams);
+                }
+                
+                // 2. 获取策略级别的自定义参数
+                Long collectStrategyId = collectTask.getCollectStrategyId();
+                if (collectStrategyId != null) {
+                    CollectStrategy collectStrategy = collectStrategyService.getById(collectStrategyId);
+                    if (collectStrategy != null) {
+                        String strategyCustomParams = collectStrategy.getCustomParams();
+                        if (strategyCustomParams != null && !strategyCustomParams.trim().isEmpty()) {
+                            if (combinedParams.length() > 0) {
+                                combinedParams.append(",");
+                            }
+                            combinedParams.append(strategyCustomParams);
+                            log.info("Get collect strategy custom parameters - strategy ID: {}, custom parameters: {}", collectStrategyId, strategyCustomParams);
+                        }
+                        
+                        // 3. 获取用例级别的自定义参数
+                        String testCaseCustomParams = collectStrategy.getTestCaseCustomParams();
+                        if (testCaseCustomParams != null && !testCaseCustomParams.trim().isEmpty()) {
+                            try {
+                                // 解析用例自定义参数，只包含当前执行实例中的用例参数
+                                String filteredTestCaseParams = filterTestCaseCustomParams(testCaseCustomParams, instances);
+                                if (filteredTestCaseParams != null && !filteredTestCaseParams.trim().isEmpty()) {
+                                    if (combinedParams.length() > 0) {
+                                        combinedParams.append(",");
+                                    }
+                                    combinedParams.append(filteredTestCaseParams);
+                                    log.info("Get test case custom parameters - strategy ID: {}, test case custom parameters: {}", collectStrategyId, filteredTestCaseParams);
+                                }
+                            } catch (Exception e) {
+                                log.warn("Failed to parse test case custom parameters - strategy ID: {}, error: {}", collectStrategyId, e.getMessage());
+                            }
+                        }
+                    }
+                }
             }
         }
-        return taskCustomParams;
+        
+        String result = combinedParams.length() > 0 ? combinedParams.toString() : null;
+        log.info("Combined custom parameters for task: {}", result);
+        return result;
+    }
+    
+    /**
+     * 过滤用例自定义参数，只返回当前执行实例中用例的参数
+     */
+    private String filterTestCaseCustomParams(String testCaseCustomParams, List<TestCaseExecutionInstance> instances) {
+        try {
+            // 解析用例自定义参数JSON
+            ObjectMapper objectMapper = new ObjectMapper();
+            Map<String, List<Map<String, String>>> allTestCaseParams = objectMapper.readValue(
+                testCaseCustomParams, 
+                new TypeReference<Map<String, List<Map<String, String>>>>() {}
+            );
+            
+            // 获取当前执行实例中的用例ID
+            Set<Long> currentTestCaseIds = instances.stream()
+                .map(TestCaseExecutionInstance::getTestCaseId)
+                .collect(Collectors.toSet());
+            
+            // 过滤出当前用例的参数
+            Map<String, List<Map<String, String>>> filteredParams = new HashMap<>();
+            for (Map.Entry<String, List<Map<String, String>>> entry : allTestCaseParams.entrySet()) {
+                Long testCaseId = Long.valueOf(entry.getKey());
+                if (currentTestCaseIds.contains(testCaseId)) {
+                    filteredParams.put(entry.getKey(), entry.getValue());
+                }
+            }
+            
+            // 将过滤后的参数转换为JSON字符串
+            if (!filteredParams.isEmpty()) {
+                return objectMapper.writeValueAsString(filteredParams);
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to filter test case custom parameters: {}", e.getMessage(), e);
+        }
+        
+        return null;
     }
 
     /**
