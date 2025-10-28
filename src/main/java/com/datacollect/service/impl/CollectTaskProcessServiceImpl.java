@@ -535,58 +535,164 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      * 获取任务自定义参数（包含用例级别的自定义参数）
      */
     private String getTaskCustomParams(List<TestCaseExecutionInstance> instances) {
-        StringBuilder combinedParams = new StringBuilder();
-        
-        if (!instances.isEmpty()) {
-            Long collectTaskId = instances.get(0).getCollectTaskId();
-            CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
-            if (collectTask != null) {
-                // 1. 获取任务级别的自定义参数
-                String taskCustomParams = collectTask.getCustomParams();
-                if (taskCustomParams != null && !taskCustomParams.trim().isEmpty()) {
-                    combinedParams.append(taskCustomParams);
-                    log.info("Get collect task custom parameters - task ID: {}, custom parameters: {}", collectTaskId, taskCustomParams);
+        if (instances.isEmpty()) {
+            log.info("No instances to build custom params");
+            return null;
+        }
+
+        Long collectTaskId = instances.get(0).getCollectTaskId();
+        CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+        if (collectTask == null) {
+            log.info("Collect task not found when building custom params - task ID: {}", collectTaskId);
+            return null;
+        }
+
+        // 准备用例ID集合
+        java.util.Set<Long> caseIds = instances.stream()
+            .map(TestCaseExecutionInstance::getTestCaseId)
+            .collect(java.util.stream.Collectors.toSet());
+
+        // 任务级参数（最高优先级）
+        String taskCustomParams = collectTask.getCustomParams();
+        List<Map<String, String>> taskParamsList = parseKeyValueArraySafely(taskCustomParams);
+        if (taskCustomParams != null && !taskCustomParams.trim().isEmpty()) {
+            log.info("Get collect task custom parameters - task ID: {}, custom parameters: {}", collectTaskId, taskCustomParams);
+        }
+
+        // 策略级参数（中优先级）
+        List<Map<String, String>> strategyParamsList = new ArrayList<>();
+        String filteredTestCaseParamsJson = null;
+        Long collectStrategyId = collectTask.getCollectStrategyId();
+        if (collectStrategyId != null) {
+            CollectStrategy collectStrategy = collectStrategyService.getById(collectStrategyId);
+            if (collectStrategy != null) {
+                String strategyCustomParams = collectStrategy.getCustomParams();
+                strategyParamsList = parseKeyValueArraySafely(strategyCustomParams);
+                if (strategyCustomParams != null && !strategyCustomParams.trim().isEmpty()) {
+                    log.info("Get collect strategy custom parameters - strategy ID: {}, custom parameters: {}", collectStrategyId, strategyCustomParams);
                 }
-                
-                // 2. 获取策略级别的自定义参数
-                Long collectStrategyId = collectTask.getCollectStrategyId();
-                if (collectStrategyId != null) {
-                    CollectStrategy collectStrategy = collectStrategyService.getById(collectStrategyId);
-                    if (collectStrategy != null) {
-                        String strategyCustomParams = collectStrategy.getCustomParams();
-                        if (strategyCustomParams != null && !strategyCustomParams.trim().isEmpty()) {
-                            if (combinedParams.length() > 0) {
-                                combinedParams.append(",");
-                            }
-                            combinedParams.append(strategyCustomParams);
-                            log.info("Get collect strategy custom parameters - strategy ID: {}, custom parameters: {}", collectStrategyId, strategyCustomParams);
+
+                // 用例级参数（最低优先级，但最具体）- 仅保留当前实例涉及的用例
+                String testCaseCustomParams = collectStrategy.getTestCaseCustomParams();
+                if (testCaseCustomParams != null && !testCaseCustomParams.trim().isEmpty()) {
+                    try {
+                        filteredTestCaseParamsJson = filterTestCaseCustomParams(testCaseCustomParams, instances);
+                        if (filteredTestCaseParamsJson != null && !filteredTestCaseParamsJson.trim().isEmpty()) {
+                            log.info("Get test case custom parameters - strategy ID: {}, test case custom parameters: {}", collectStrategyId, filteredTestCaseParamsJson);
                         }
-                        
-                        // 3. 获取用例级别的自定义参数
-                        String testCaseCustomParams = collectStrategy.getTestCaseCustomParams();
-                        if (testCaseCustomParams != null && !testCaseCustomParams.trim().isEmpty()) {
-                            try {
-                                // 解析用例自定义参数，只包含当前执行实例中的用例参数
-                                String filteredTestCaseParams = filterTestCaseCustomParams(testCaseCustomParams, instances);
-                                if (filteredTestCaseParams != null && !filteredTestCaseParams.trim().isEmpty()) {
-                                    if (combinedParams.length() > 0) {
-                                        combinedParams.append(",");
-                                    }
-                                    combinedParams.append(filteredTestCaseParams);
-                                    log.info("Get test case custom parameters - strategy ID: {}, test case custom parameters: {}", collectStrategyId, filteredTestCaseParams);
-                                }
-                            } catch (Exception e) {
-                                log.warn("Failed to parse test case custom parameters - strategy ID: {}, error: {}", collectStrategyId, e.getMessage());
-                            }
-                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to parse test case custom parameters - strategy ID: {}, error: {}", collectStrategyId, e.getMessage());
                     }
                 }
             }
         }
-        
-        String result = combinedParams.length() > 0 ? combinedParams.toString() : null;
-        log.info("Combined custom parameters for task: {}", result);
-        return result;
+
+        // 将数组形式参数转换为map，便于优先级覆盖
+        Map<String, String> taskParamMap = toKeyValueMap(taskParamsList);
+        Map<String, String> strategyParamMap = toKeyValueMap(strategyParamsList);
+
+        // 解析已过滤的用例级参数对象 {"caseId":[{"key":"k","value":"v"}...]}
+        Map<String, List<Map<String, String>>> testCaseParamsById = parseTestCaseParamsObjectSafely(filteredTestCaseParamsJson);
+
+        // 为每个用例生成合并后的参数数组，并输出为 { caseId: [ {key,value}... ] }
+        Map<String, List<Map<String, String>>> mergedByCase = new HashMap<>();
+        for (Long caseId : caseIds) {
+            String caseIdStr = String.valueOf(caseId);
+            List<Map<String, String>> testCaseList = testCaseParamsById.getOrDefault(caseIdStr, new ArrayList<>());
+            Map<String, String> merged = new java.util.LinkedHashMap<>();
+
+            // 合并顺序：用例(最低) -> 策略 -> 任务(最高)
+            merged.putAll(toKeyValueMap(testCaseList));
+            merged.putAll(strategyParamMap);
+            merged.putAll(taskParamMap);
+
+            mergedByCase.put(caseIdStr, toKeyValueList(merged));
+        }
+
+        try {
+            String result = objectMapper.writeValueAsString(mergedByCase);
+            log.info("Combined custom parameters for task: {}", result);
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to serialize combined custom parameters - error: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    // 解析形如 [{"key":"a","value":"b"}] 的JSON数组
+    private List<Map<String, String>> parseKeyValueArraySafely(String jsonArray) {
+        List<Map<String, String>> list = new ArrayList<>();
+        if (jsonArray == null) {
+            return list;
+        }
+        String trimmed = jsonArray.trim();
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+            return list;
+        }
+        try {
+            List<Map<String, String>> parsed = objectMapper.readValue(trimmed, new TypeReference<List<Map<String, String>>>() {});
+            if (parsed != null) {
+                return parsed;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse key-value array: {}", e.getMessage());
+        }
+        return list;
+    }
+
+    private Map<String, String> toKeyValueMap(List<Map<String, String>> list) {
+        Map<String, String> map = new java.util.LinkedHashMap<>();
+        if (list == null) {
+            return map;
+        }
+        for (Map<String, String> item : list) {
+            if (item == null) {
+                continue;
+            }
+            String key = item.get("key");
+            String value = item.get("value");
+            if (key != null && !key.trim().isEmpty() && value != null) {
+                map.put(key.trim(), value);
+            }
+        }
+        return map;
+    }
+
+    private List<Map<String, String>> toKeyValueList(Map<String, String> map) {
+        List<Map<String, String>> list = new ArrayList<>();
+        if (map == null || map.isEmpty()) {
+            return list;
+        }
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            Map<String, String> kv = new java.util.HashMap<>();
+            kv.put("key", entry.getKey());
+            kv.put("value", entry.getValue());
+            list.add(kv);
+        }
+        return list;
+    }
+
+    private Map<String, List<Map<String, String>>> parseTestCaseParamsObjectSafely(String jsonObject) {
+        Map<String, List<Map<String, String>>> map = new HashMap<>();
+        if (jsonObject == null) {
+            return map;
+        }
+        String trimmed = jsonObject.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            return map;
+        }
+        try {
+            Map<String, List<Map<String, String>>> parsed = objectMapper.readValue(
+                trimmed,
+                new TypeReference<Map<String, List<Map<String, String>>>>() {}
+            );
+            if (parsed != null) {
+                return parsed;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse test case params object: {}", e.getMessage());
+        }
+        return map;
     }
     
     /**
