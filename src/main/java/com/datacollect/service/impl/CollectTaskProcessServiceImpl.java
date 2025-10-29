@@ -982,10 +982,44 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         strategyInfo.setTestCaseSetId(collectStrategy.getTestCaseSetId());
         strategyInfo.setBusinessCategory(collectStrategy.getBusinessCategory());
         strategyInfo.setApp(collectStrategy.getApp());
+        
+        // 设置appen字段：从用例集中查找对应的appen值
+        String appEn = getAppEnFromTestCaseSet(collectStrategy.getTestCaseSetId(), collectStrategy.getApp());
+        strategyInfo.setAppEn(appEn);
+        
         strategyInfo.setIntent(collectStrategy.getIntent());
         strategyInfo.setCustomParams(collectStrategy.getCustomParams());
         strategyInfo.setDescription(collectStrategy.getDescription());
         strategyInfo.setStatus(collectStrategy.getStatus());
         return strategyInfo;
+    }
+    
+    /**
+     * 从用例集中查找对应的appen值
+     */
+    private String getAppEnFromTestCaseSet(Long testCaseSetId, String app) {
+        if (testCaseSetId == null || app == null || app.trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // 获取用例集中的用例列表
+            List<TestCase> testCases = testCaseService.getByTestCaseSetId(testCaseSetId);
+            
+            // 查找匹配的用例
+            for (TestCase testCase : testCases) {
+                if (app.equals(testCase.getApp())) {
+                    return testCase.getAppEn();
+                }
+            }
+            
+            log.warn("No matching test case found for app: {} in test case set: {}", app, testCaseSetId);
+            return null;
+            
+        } catch (Exception e) {
+            log.error("Failed to get appEn from test case set - test case set ID: {}, app: {}, error: {}", 
+                     testCaseSetId, app, e.getMessage(), e);
+            return null;
+        }
     }
 }
