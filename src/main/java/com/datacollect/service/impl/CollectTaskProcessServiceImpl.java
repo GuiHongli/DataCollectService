@@ -27,6 +27,8 @@ import com.datacollect.entity.Executor;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.common.exception.CollectTaskException;
 import com.datacollect.util.HttpClientUtil;
+import com.datacollect.dto.AppCheckRequest;
+import com.datacollect.dto.AppCheckResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -91,6 +93,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private NetworkTypeService networkTypeService;
+    
+    @Autowired
+    private ExternalApiService externalApiService;
     
     @Value("${datacollect.service.base-url:http://localhost:8080}")
     private String dataCollectServiceBaseUrl;
@@ -597,6 +602,10 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
 
         // 为每个用例生成合并后的参数数组，并输出为 { caseId: [ {key,value}... ] }
         Map<String, List<Map<String, String>>> mergedByCase = new HashMap<>();
+        
+        // 获取用例信息并调用checkAppIsNew方法
+        Map<Long, Boolean> appIsNewMap = getAppIsNewMap(instances);
+        
         for (Long caseId : caseIds) {
             String caseIdStr = String.valueOf(caseId);
             List<Map<String, String>> testCaseList = testCaseParamsById.getOrDefault(caseIdStr, new ArrayList<>());
@@ -606,6 +615,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             merged.putAll(toKeyValueMap(testCaseList));
             merged.putAll(strategyParamMap);
             merged.putAll(taskParamMap);
+            
+            // 添加isnew参数
+            Boolean isNew = appIsNewMap.get(caseId);
+            if (isNew != null) {
+                merged.put("isnew", isNew ? "1" : "0");
+            }
 
             mergedByCase.put(caseIdStr, toKeyValueList(merged));
         }
@@ -1022,5 +1037,73 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                      testCaseSetId, app, e.getMessage(), e);
             return null;
         }
+    }
+    
+    /**
+     * 获取用例的is_new状态映射
+     * 
+     * @param instances 用例执行实例列表
+     * @return 用例ID到is_new状态的映射
+     */
+    private Map<Long, Boolean> getAppIsNewMap(List<TestCaseExecutionInstance> instances) {
+        Map<Long, Boolean> appIsNewMap = new HashMap<>();
+        
+        if (instances == null || instances.isEmpty()) {
+            return appIsNewMap;
+        }
+        
+        try {
+            // 收集所有唯一的APP信息
+            Map<String, Boolean> appToIsNewMap = new HashMap<>();
+            List<AppCheckRequest> appCheckRequests = new ArrayList<>();
+            
+            for (TestCaseExecutionInstance instance : instances) {
+                TestCase testCase = testCaseService.getById(instance.getTestCaseId());
+                if (testCase != null && testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
+                    String appName = testCase.getApp();
+                    String testCaseName = testCase.getName();
+                    
+                    // 判断是否为iOS应用：用例名称包含_ios_
+                    boolean isIos = testCaseName != null && testCaseName.contains("_ios_");
+                    
+                    // 检查是否已经处理过这个APP
+                    if (!appToIsNewMap.containsKey(appName)) {
+                        AppCheckRequest request = new AppCheckRequest(appName, isIos);
+                        appCheckRequests.add(request);
+                    }
+                }
+            }
+            
+            if (!appCheckRequests.isEmpty()) {
+                log.info("调用checkAppIsNew方法 - 请求参数: {}", appCheckRequests);
+                
+                AppCheckResponse response = externalApiService.checkAppIsNew(appCheckRequests);
+                
+                if (response != null && response.getData() != null) {
+                    for (AppCheckResponse.AppCheckData data : response.getData()) {
+                        if (data.getApp_name() != null) {
+                            appToIsNewMap.put(data.getApp_name(), data.getIs_new());
+                        }
+                    }
+                }
+            }
+            
+            // 为每个用例设置is_new状态
+            for (TestCaseExecutionInstance instance : instances) {
+                TestCase testCase = testCaseService.getById(instance.getTestCaseId());
+                if (testCase != null && testCase.getApp() != null) {
+                    Boolean isNew = appToIsNewMap.get(testCase.getApp());
+                    if (isNew != null) {
+                        appIsNewMap.put(instance.getTestCaseId(), isNew);
+                        log.info("用例 {} 的APP {} is_new状态: {}", testCase.getName(), testCase.getApp(), isNew);
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("获取APP is_new状态失败 - 错误信息: {}", e.getMessage(), e);
+        }
+        
+        return appIsNewMap;
     }
 }
