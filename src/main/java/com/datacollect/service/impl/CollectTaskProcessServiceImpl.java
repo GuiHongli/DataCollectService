@@ -1053,24 +1053,25 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         try {
-            // 收集所有唯一的APP信息
-            Map<String, Boolean> appToIsNewMap = new HashMap<>();
+            // 收集用例信息并创建请求
             List<AppCheckRequest> appCheckRequests = new ArrayList<>();
+            Map<Integer, TestCaseExecutionInstance> requestIndexToInstanceMap = new HashMap<>();
+            int requestIndex = 0;
             
             for (TestCaseExecutionInstance instance : instances) {
                 TestCase testCase = testCaseService.getById(instance.getTestCaseId());
                 if (testCase != null && testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
                     String appName = testCase.getApp();
-                    String testCaseName = testCase.getName();
+                    String testCaseNumber = testCase.getNumber();
                     
-                    // 判断是否为iOS应用：用例名称包含_ios_
-                    boolean isIos = testCaseName != null && testCaseName.contains("_ios_");
+                    // 判断是否为iOS应用：用例编号包含_ios_
+                    boolean isIos = testCaseNumber != null && testCaseNumber.contains("_ios_");
                     
-                    // 检查是否已经处理过这个APP
-                    if (!appToIsNewMap.containsKey(appName)) {
-                        AppCheckRequest request = new AppCheckRequest(appName, isIos);
-                        appCheckRequests.add(request);
-                    }
+                    // 为每个用例单独创建请求，因为同一个APP可能有iOS和非iOS版本
+                    AppCheckRequest request = new AppCheckRequest(appName, isIos);
+                    appCheckRequests.add(request);
+                    requestIndexToInstanceMap.put(requestIndex, instance);
+                    requestIndex++;
                 }
             }
             
@@ -1079,24 +1080,24 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 
                 AppCheckResponse response = externalApiService.checkAppIsNew(appCheckRequests);
                 
-                if (response != null && response.getData() != null) {
-                    for (AppCheckResponse.AppCheckData data : response.getData()) {
-                        if (data.getApp_name() != null) {
-                            appToIsNewMap.put(data.getApp_name(), data.getIs_new());
+                if (response != null && response.getData() != null && response.getData().size() == appCheckRequests.size()) {
+                    // 根据请求顺序匹配响应结果
+                    for (int i = 0; i < response.getData().size(); i++) {
+                        AppCheckResponse.AppCheckData data = response.getData().get(i);
+                        TestCaseExecutionInstance instance = requestIndexToInstanceMap.get(i);
+                        
+                        if (instance != null && data.getIs_new() != null) {
+                            appIsNewMap.put(instance.getTestCaseId(), data.getIs_new());
+                            TestCase testCase = testCaseService.getById(instance.getTestCaseId());
+                            if (testCase != null) {
+                                log.info("用例 {} (编号: {}) 的APP {} is_new状态: {}", 
+                                    testCase.getName(), testCase.getNumber(), testCase.getApp(), data.getIs_new());
+                            }
                         }
                     }
-                }
-            }
-            
-            // 为每个用例设置is_new状态
-            for (TestCaseExecutionInstance instance : instances) {
-                TestCase testCase = testCaseService.getById(instance.getTestCaseId());
-                if (testCase != null && testCase.getApp() != null) {
-                    Boolean isNew = appToIsNewMap.get(testCase.getApp());
-                    if (isNew != null) {
-                        appIsNewMap.put(instance.getTestCaseId(), isNew);
-                        log.info("用例 {} 的APP {} is_new状态: {}", testCase.getName(), testCase.getApp(), isNew);
-                    }
+                } else {
+                    log.warn("外部接口响应数据不完整 - 请求数量: {}, 响应数量: {}", 
+                        appCheckRequests.size(), response != null && response.getData() != null ? response.getData().size() : 0);
                 }
             }
             
