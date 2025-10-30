@@ -47,3 +47,4 @@ public class AppCheckResponse {
         private Boolean is_new;
     }
 }
+

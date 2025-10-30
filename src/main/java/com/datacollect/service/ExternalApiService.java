@@ -21,3 +21,4 @@ public interface ExternalApiService {
      */
     AppCheckResponse checkAppIsNew(List<AppCheckRequest> appCheckRequests);
 }
+
