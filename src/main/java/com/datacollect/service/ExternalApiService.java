@@ -2,6 +2,8 @@ package com.datacollect.service;
 
 import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
+import com.datacollect.dto.UpdateProbedStatusRequest;
+import com.datacollect.dto.UpdateProbedStatusResponse;
 
 import java.util.List;
 
@@ -20,5 +22,13 @@ public interface ExternalApiService {
      * @return 应用检查响应
      */
     AppCheckResponse checkAppIsNew(List<AppCheckRequest> appCheckRequests);
+    
+    /**
+     * 更新探测状态
+     * 
+     * @param appNames 应用名称列表
+     * @return 更新探测状态响应
+     */
+    UpdateProbedStatusResponse updateProbedStatus(List<String> appNames);
 }
 

@@ -2,6 +2,8 @@ package com.datacollect.controller;
 
 import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
+import com.datacollect.dto.UpdateProbedStatusRequest;
+import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.ExternalApiService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +56,38 @@ public class ExternalApiController {
             
             response.put("code", 500);
             response.put("message", "检查应用是否为新应用失败: " + e.getMessage());
+            response.put("data", null);
+            
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+    
+    /**
+     * 更新探测状态
+     * 
+     * @param appNames 应用名称列表
+     * @return 更新探测状态响应
+     */
+    @PostMapping("/update-probed-status")
+    public ResponseEntity<Map<String, Object>> updateProbedStatus(@RequestBody List<String> appNames) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            log.info("接收到更新探测状态的请求 - 参数: {}", appNames);
+            
+            UpdateProbedStatusResponse result = externalApiService.updateProbedStatus(appNames);
+            
+            response.put("code", 200);
+            response.put("message", "success");
+            response.put("data", result);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("更新探测状态失败", e);
+            
+            response.put("code", 500);
+            response.put("message", "更新探测状态失败: " + e.getMessage());
             response.put("data", null);
             
             return ResponseEntity.status(500).body(response);
