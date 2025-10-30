@@ -61,8 +61,13 @@ public class TestCaseExecutionResultController {
             boolean success = testCaseExecutionResultService.saveTestCaseExecutionResult(result);
             
             if (success) {
-                // 用例结构上报成功后，调用updateProbedStatus接口
-                updateProbedStatusForTestCase(result.getTestCaseId());
+                // 只有用例采集状态为成功时，才调用updateProbedStatus接口
+                if ("SUCCESS".equalsIgnoreCase(result.getStatus()) || "COMPLETED".equalsIgnoreCase(result.getStatus())) {
+                    updateProbedStatusForTestCase(result.getTestCaseId());
+                } else {
+                    log.info("用例采集状态不是成功状态，跳过updateProbedStatus调用 - 用例ID: {}, 状态: {}", 
+                            result.getTestCaseId(), result.getStatus());
+                }
                 
                 Map<String, Object> data = new HashMap<>();
                 data.put("taskId", result.getTaskId());
@@ -73,8 +78,8 @@ public class TestCaseExecutionResultController {
                 data.put("message", "Test case execution result received successfully");
                 data.put("timestamp", System.currentTimeMillis());
                 
-                log.info("Test case execution result received successfully - task ID: {}, test case ID: {}, round: {}, log file: {}", 
-                        result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getLogFilePath());
+                log.info("Test case execution result received successfully - task ID: {}, test case ID: {}, round: {}, status: {}, log file: {}", 
+                        result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus(), result.getLogFilePath());
                 
                 return Result.success(data);
             } else {
@@ -217,7 +222,7 @@ public class TestCaseExecutionResultController {
     }
     
     /**
-     * 为用例更新探测状态
+     * 为用例更新探测状态（仅当用例采集状态为成功时调用）
      * 
      * @param testCaseId 用例ID
      */
@@ -228,7 +233,7 @@ public class TestCaseExecutionResultController {
             if (testCase != null && testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
                 String appName = testCase.getApp();
                 
-                log.info("调用updateProbedStatus接口 - 用例ID: {}, APP: {}", testCaseId, appName);
+                log.info("用例采集成功，调用updateProbedStatus接口 - 用例ID: {}, APP: {}", testCaseId, appName);
                 
                 // 调用外部接口更新探测状态
                 UpdateProbedStatusResponse response = externalApiService.updateProbedStatus(java.util.Arrays.asList(appName));
