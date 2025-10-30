@@ -3,7 +3,11 @@ package com.datacollect.controller;
 import com.datacollect.common.Result;
 import com.datacollect.dto.TestCaseExecutionResult;
 import com.datacollect.dto.TestCaseLogRequest;
+import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.TestCaseExecutionResultService;
+import com.datacollect.service.ExternalApiService;
+import com.datacollect.service.TestCaseService;
+import com.datacollect.entity.TestCase;
 import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +32,12 @@ public class TestCaseExecutionResultController {
 
     @Autowired
     private TestCaseExecutionResultService testCaseExecutionResultService;
+    
+    @Autowired
+    private ExternalApiService externalApiService;
+    
+    @Autowired
+    private TestCaseService testCaseService;
 
     /**
      * 接收用例执行结果
@@ -51,6 +61,9 @@ public class TestCaseExecutionResultController {
             boolean success = testCaseExecutionResultService.saveTestCaseExecutionResult(result);
             
             if (success) {
+                // 用例结构上报成功后，调用updateProbedStatus接口
+                updateProbedStatusForTestCase(result.getTestCaseId());
+                
                 Map<String, Object> data = new HashMap<>();
                 data.put("taskId", result.getTaskId());
                 data.put("testCaseId", result.getTestCaseId());
@@ -200,6 +213,39 @@ public class TestCaseExecutionResultController {
         } catch (Exception e) {
             log.error("Failed to query test case execution results - test case ID: {}, error: {}", testCaseId, e.getMessage(), e);
             return Result.error("Failed to query test case execution results: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 为用例更新探测状态
+     * 
+     * @param testCaseId 用例ID
+     */
+    private void updateProbedStatusForTestCase(Long testCaseId) {
+        try {
+            // 获取用例信息
+            TestCase testCase = testCaseService.getById(testCaseId);
+            if (testCase != null && testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
+                String appName = testCase.getApp();
+                
+                log.info("调用updateProbedStatus接口 - 用例ID: {}, APP: {}", testCaseId, appName);
+                
+                // 调用外部接口更新探测状态
+                UpdateProbedStatusResponse response = externalApiService.updateProbedStatus(java.util.Arrays.asList(appName));
+                
+                if (response != null && response.getData() != null) {
+                    log.info("updateProbedStatus调用成功 - 用例ID: {}, APP: {}, 更新数量: {}", 
+                            testCaseId, appName, response.getData().getUpdataCount());
+                } else {
+                    log.warn("updateProbedStatus调用失败 - 用例ID: {}, APP: {}, 响应为空", testCaseId, appName);
+                }
+            } else {
+                log.warn("用例APP字段为空，跳过updateProbedStatus调用 - 用例ID: {}", testCaseId);
+            }
+            
+        } catch (Exception e) {
+            log.error("调用updateProbedStatus接口异常 - 用例ID: {}, 错误信息: {}", testCaseId, e.getMessage(), e);
+            // 不抛出异常，避免影响用例执行结果上报的主流程
         }
     }
 }
