@@ -1080,9 +1080,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     // 创建APP+is_ios到is_new的映射
                     Map<String, Boolean> appIosToIsNewMap = new HashMap<>();
                     for (AppCheckResponse.AppCheckData data : response.getData()) {
-                        if (data.getApp_name() != null && data.getIs_ios() != null && data.getIs_new() != null) {
-                            String key = data.getApp_name() + "_" + data.getIs_ios();
-                            appIosToIsNewMap.put(key, data.getIs_new());
+                        if (data.getAppName() != null && data.getIsIos() != null && data.getIsNew() != null) {
+                            String key = data.getAppName() + "_" + data.getIsIos();
+                            appIosToIsNewMap.put(key, data.getIsNew());
                         }
                     }
                     

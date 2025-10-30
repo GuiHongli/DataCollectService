@@ -1,10 +1,9 @@
 package com.datacollect.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-
-import java.util.List;
 
 /**
  * 应用检查请求DTO
@@ -20,11 +19,13 @@ public class AppCheckRequest {
     /**
      * 应用名称
      */
-    private String app_name;
+    @JsonProperty("app_name")
+    private String appName;
     
     /**
      * 是否为iOS应用
      */
-    private Boolean is_ios;
+    @JsonProperty("is_ios")
+    private Boolean isIos;
 }
 

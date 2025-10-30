@@ -1,5 +1,6 @@
 package com.datacollect.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -34,17 +35,20 @@ public class AppCheckResponse {
         /**
          * 应用名称
          */
-        private String app_name;
+        @JsonProperty("app_name")
+        private String appName;
         
         /**
          * 是否为iOS应用
          */
-        private Boolean is_ios;
+        @JsonProperty("is_ios")
+        private Boolean isIos;
         
         /**
          * 是否为新应用
          */
-        private Boolean is_new;
+        @JsonProperty("is_new")
+        private Boolean isNew;
     }
 }
 
