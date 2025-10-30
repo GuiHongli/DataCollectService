@@ -25,8 +25,6 @@ import com.datacollect.entity.Ue;
 import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.Executor;
 import com.datacollect.entity.LogicEnvironment;
-import com.datacollect.dto.AppCheckRequest;
-import com.datacollect.dto.AppCheckResponse;
 import com.datacollect.common.exception.CollectTaskException;
 import com.datacollect.util.HttpClientUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -93,9 +91,6 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private NetworkTypeService networkTypeService;
-    
-    @Autowired
-    private ExternalApiService externalApiService;
     
     @Value("${datacollect.service.base-url:http://localhost:8080}")
     private String dataCollectServiceBaseUrl;
@@ -520,72 +515,20 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private List<TestCaseExecutionRequest.TestCaseInfo> buildTestCaseList(List<TestCaseExecutionInstance> instances) {
         List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = new ArrayList<>();
-        
-        // 收集需要检查的应用信息
-        List<AppCheckRequest> appCheckRequests = new ArrayList<>();
-        Map<Long, TestCase> testCaseMap = new HashMap<>();
-        
         for (TestCaseExecutionInstance instance : instances) {
+            // 获取用例编号
             TestCase testCase = testCaseService.getById(instance.getTestCaseId());
-            if (testCase != null) {
-                testCaseMap.put(instance.getTestCaseId(), testCase);
-                
-                // 构建应用检查请求
-                if (testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
-                    boolean isIos = testCase.getName() != null && testCase.getName().contains("_ios_");
-                    AppCheckRequest appCheckRequest = new AppCheckRequest(testCase.getApp(), isIos);
-                    appCheckRequests.add(appCheckRequest);
-                }
-            } else {
-                log.warn("Test case not found - test case ID: {}", instance.getTestCaseId());
-            }
-        }
-        
-        // 调用外部接口检查应用是否为新应用
-        Map<String, Boolean> appIsNewMap = new HashMap<>();
-        if (!appCheckRequests.isEmpty()) {
-            try {
-                AppCheckResponse response = externalApiService.checkAppIsNew(appCheckRequests);
-                if (response != null && response.getData() != null) {
-                    for (AppCheckResponse.AppCheckData data : response.getData()) {
-                        String key = data.getApp_name() + "_" + data.getIs_ios();
-                        appIsNewMap.put(key, data.getIs_new());
-                    }
-                }
-                log.info("App check result: {}", appIsNewMap);
-            } catch (Exception e) {
-                log.error("Failed to check app is new, using default values: {}", e.getMessage(), e);
-            }
-        }
-        
-        // 构建用例信息列表
-        for (TestCaseExecutionInstance instance : instances) {
-            TestCase testCase = testCaseMap.get(instance.getTestCaseId());
             if (testCase != null) {
                 TestCaseExecutionRequest.TestCaseInfo testCaseInfo = 
                     new TestCaseExecutionRequest.TestCaseInfo();
                 testCaseInfo.setTestCaseId(instance.getTestCaseId());
                 testCaseInfo.setTestCaseNumber(testCase.getNumber());
                 testCaseInfo.setRound(instance.getRound());
-                
-                // 根据应用检查结果添加自定义参数
-                if (testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
-                    boolean isIos = testCase.getName() != null && testCase.getName().contains("_ios_");
-                    String key = testCase.getApp() + "_" + isIos;
-                    Boolean isNew = appIsNewMap.get(key);
-                    
-                    if (isNew != null) {
-                        String isNewValue = isNew ? "1" : "0";
-                        testCaseInfo.setCustomParams("{\"isnew\":\"" + isNewValue + "\"}");
-                        log.info("Added isnew parameter for test case {} - app: {}, is_ios: {}, is_new: {}", 
-                                testCase.getNumber(), testCase.getApp(), isIos, isNew);
-                    }
-                }
-                
                 testCaseList.add(testCaseInfo);
+            } else {
+                log.warn("Test case not found - test case ID: {}", instance.getTestCaseId());
             }
         }
-        
         return testCaseList;
     }
 

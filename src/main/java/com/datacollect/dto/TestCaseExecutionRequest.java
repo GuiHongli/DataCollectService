@@ -95,11 +95,6 @@ public class TestCaseExecutionRequest {
          */
         @NotNull(message = "轮次不能为空")
         private Integer round;
-        
-        /**
-         * 自定义参数
-         */
-        private String customParams;
     }
     
     /**
