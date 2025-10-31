@@ -37,3 +37,4 @@ public class UpdateProbedStatusResponse {
         private Integer updataCount;
     }
 }
+

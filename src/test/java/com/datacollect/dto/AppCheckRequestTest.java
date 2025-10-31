@@ -46,3 +46,4 @@ public class AppCheckRequestTest {
         System.out.println("反序列化结果: " + request);
     }
 }
+

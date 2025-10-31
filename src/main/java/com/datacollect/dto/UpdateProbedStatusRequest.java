@@ -24,3 +24,4 @@ public class UpdateProbedStatusRequest {
     @JsonProperty("app_names")
     private List<String> appNames;
 }
+
