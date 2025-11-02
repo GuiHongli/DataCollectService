@@ -49,9 +49,14 @@ public class CollectStrategyController {
     }
 
     @GetMapping("/{id}")
-    public Result<CollectStrategy> getById(@PathVariable @NotNull Long id) {
+    public Result<CollectStrategyDTO> getById(@PathVariable @NotNull Long id) {
         CollectStrategy collectStrategy = collectStrategyService.getById(id);
-        return Result.success(collectStrategy);
+        if (collectStrategy == null) {
+            return Result.error("采集策略不存在");
+        }
+        // 转换为DTO（包含筛选后的用例列表）
+        CollectStrategyDTO dto = collectStrategyService.convertToDTO(collectStrategy);
+        return Result.success(dto);
     }
 
     @GetMapping("/page")
