@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -159,65 +160,87 @@ public class DashboardController {
             stats.put("executorCount", executorCount);
             log.info("Executor count for region {}: {}", regionId, executorCount);
             
-            // 2. 获取这些执行机的所有执行例次
+            // 2. 获取这些执行机的IP地址列表
             List<String> executorIps = executors.stream()
                     .map(Executor::getIpAddress)
                     .collect(Collectors.toList());
             
-            // 3. 统计APP详细信息及采集次数（基于执行例次）
+            // 3. 通过执行机IP查询所有相关的执行例次，获取采集任务信息，再获取用例信息
             Map<String, AppStatInfo> appStatsMap = new LinkedHashMap<>();
             int totalCollectCount = 0;
             
-            // 获取该地域下所有任务的执行例次
-            List<CollectTask> tasks = collectTaskService.list(taskQuery);
-            log.info("Found {} tasks for region {}", tasks.size(), regionId);
-            
-            if (!executorIps.isEmpty() && !tasks.isEmpty()) {
-                List<Long> taskIds = tasks.stream()
-                        .map(CollectTask::getId)
-                        .collect(Collectors.toList());
-                
-                // 获取这些任务的所有执行例次，并筛选出属于该地域执行机的
+            if (!executorIps.isEmpty()) {
+                // 第一步：根据执行机IP查询所有执行例次
                 QueryWrapper<TestCaseExecutionInstance> instanceQuery = new QueryWrapper<>();
-                instanceQuery.in("collect_task_id", taskIds);
                 instanceQuery.in("executor_ip", executorIps);
                 List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.list(instanceQuery);
                 
-                log.info("Found {} execution instances for region {} executors (executor IPs: {})", 
+                log.info("Found {} execution instances for executors in region {} (executor IPs: {})", 
                         instances.size(), regionId, executorIps);
                 
-                // 统计每个APP的采集次数
-                int instanceWithAppCount = 0;
-                for (TestCaseExecutionInstance instance : instances) {
-                    // 获取用例信息
-                    TestCase testCase = testCaseService.getById(instance.getTestCaseId());
-                    if (testCase != null) {
-                        String appName = testCase.getApp();
-                        if (appName != null && !appName.trim().isEmpty()) {
-                            appName = appName.trim();
-                            AppStatInfo appStat = appStatsMap.getOrDefault(appName, new AppStatInfo(appName));
-                            // 每个执行例次算一次采集
-                            appStat.addCollectCount(1);
-                            appStatsMap.put(appName, appStat);
-                            totalCollectCount++;
-                            instanceWithAppCount++;
+                if (!instances.isEmpty()) {
+                    // 第二步：从执行例次中获取采集任务ID（去重）
+                    Set<Long> collectTaskIds = instances.stream()
+                            .map(TestCaseExecutionInstance::getCollectTaskId)
+                            .filter(taskId -> taskId != null)
+                            .collect(Collectors.toSet());
+                    
+                    log.info("Found {} unique collect tasks from execution instances", collectTaskIds.size());
+                    
+                    // 第三步：遍历每个采集任务，获取用例信息
+                    for (Long taskId : collectTaskIds) {
+                        CollectTask task = collectTaskService.getById(taskId);
+                        if (task != null && task.getTestCaseSetId() != null) {
+                            log.debug("Processing task {} with test case set ID {}", taskId, task.getTestCaseSetId());
+                            
+                            // 第四步：通过采集任务的用例集ID获取所有用例
+                            List<TestCase> testCases = testCaseService.getByTestCaseSetId(task.getTestCaseSetId());
+                            log.debug("Task {} has {} test cases in test case set", taskId, testCases.size());
+                            
+                            // 第五步：统计该任务下每个用例的执行例次数（只统计属于该地域执行机的）
+                            Map<Long, Integer> testCaseInstanceCountMap = new HashMap<>();
+                            for (TestCaseExecutionInstance instance : instances) {
+                                if (taskId.equals(instance.getCollectTaskId())) {
+                                    Long testCaseId = instance.getTestCaseId();
+                                    testCaseInstanceCountMap.put(testCaseId, 
+                                            testCaseInstanceCountMap.getOrDefault(testCaseId, 0) + 1);
+                                }
+                            }
+                            
+                            // 第六步：遍历用例，统计APP信息和采集次数
+                            for (TestCase testCase : testCases) {
+                                String appName = testCase.getApp();
+                                if (appName != null && !appName.trim().isEmpty()) {
+                                    appName = appName.trim();
+                                    // 获取该用例在该任务下的执行例次数（该地域执行机执行的）
+                                    int instanceCount = testCaseInstanceCountMap.getOrDefault(testCase.getId(), 0);
+                                    
+                                    if (instanceCount > 0) {
+                                        AppStatInfo appStat = appStatsMap.getOrDefault(appName, new AppStatInfo(appName));
+                                        // 累加该用例的执行例次数
+                                        appStat.addCollectCount(instanceCount);
+                                        appStatsMap.put(appName, appStat);
+                                        totalCollectCount += instanceCount;
+                                        
+                                        log.debug("APP {} in task {} has {} execution instances", 
+                                                appName, taskId, instanceCount);
+                                    }
+                                }
+                            }
                         } else {
-                            log.debug("TestCase {} has no app name", instance.getTestCaseId());
+                            if (task == null) {
+                                log.warn("Collect task not found - task ID: {}", taskId);
+                            } else {
+                                log.warn("Collect task {} has no test case set ID", taskId);
+                            }
                         }
-                    } else {
-                        log.warn("TestCase not found for instance {}, testCaseId: {}", instance.getId(), instance.getTestCaseId());
                     }
                 }
                 
-                log.info("Statistics: {} instances with app name out of {} total instances", 
-                        instanceWithAppCount, instances.size());
+                log.info("Statistics: {} unique apps found with total {} execution instances", 
+                        appStatsMap.size(), totalCollectCount);
             } else {
-                if (executorIps.isEmpty()) {
-                    log.info("No executors found for region {}", regionId);
-                }
-                if (tasks.isEmpty()) {
-                    log.info("No tasks found for region {}", regionId);
-                }
+                log.info("No executors found for region {}", regionId);
             }
             
             // 转换为列表，按采集次数降序排序
