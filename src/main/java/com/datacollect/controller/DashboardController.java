@@ -7,9 +7,11 @@ import com.datacollect.entity.Executor;
 import com.datacollect.entity.Region;
 import com.datacollect.entity.TestCase;
 import com.datacollect.entity.Ue;
+import com.datacollect.entity.TestCaseExecutionInstance;
 import com.datacollect.service.CollectTaskService;
 import com.datacollect.service.ExecutorService;
 import com.datacollect.service.RegionService;
+import com.datacollect.service.TestCaseExecutionInstanceService;
 import com.datacollect.service.TestCaseService;
 import com.datacollect.service.UeService;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +54,9 @@ public class DashboardController {
 
     @Autowired
     private TestCaseService testCaseService;
+
+    @Autowired
+    private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
 
     /**
      * 获取仪表盘统计数据
@@ -145,47 +150,77 @@ public class DashboardController {
                 return Result.error("Unsupported region level: " + level + ". Only city (level=4) and country (level=2) are supported.");
             }
             
-            // 获取该地域下的所有采集任务
-            List<CollectTask> tasks = collectTaskService.list(taskQuery);
-            
-            // 1. 统计执行机数量
+            // 1. 获取该地域下的所有执行机
             QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
             executorQuery.eq("region_id", regionId);
             executorQuery.eq("deleted", 0);
-            long executorCount = executorService.count(executorQuery);
+            List<Executor> executors = executorService.list(executorQuery);
+            long executorCount = executors.size();
             stats.put("executorCount", executorCount);
             log.info("Executor count for region {}: {}", regionId, executorCount);
             
-            // 2. 统计APP详细信息及采集次数
-            // 使用LinkedHashMap保持插入顺序
+            // 2. 获取这些执行机的所有执行例次
+            List<String> executorIps = executors.stream()
+                    .map(Executor::getIpAddress)
+                    .collect(Collectors.toList());
+            
+            // 3. 统计APP详细信息及采集次数（基于执行例次）
             Map<String, AppStatInfo> appStatsMap = new LinkedHashMap<>();
             int totalCollectCount = 0;
             
-            for (CollectTask task : tasks) {
-                int taskCollectCount = task.getCollectCount() != null ? task.getCollectCount() : 0;
+            // 获取该地域下所有任务的执行例次
+            List<CollectTask> tasks = collectTaskService.list(taskQuery);
+            log.info("Found {} tasks for region {}", tasks.size(), regionId);
+            
+            if (!executorIps.isEmpty() && !tasks.isEmpty()) {
+                List<Long> taskIds = tasks.stream()
+                        .map(CollectTask::getId)
+                        .collect(Collectors.toList());
                 
-                // 获取用例集关联的用例，统计每个APP的采集次数
-                if (task.getTestCaseSetId() != null) {
-                    List<TestCase> testCases = testCaseService.getByTestCaseSetId(task.getTestCaseSetId());
-                    for (TestCase testCase : testCases) {
+                // 获取这些任务的所有执行例次，并筛选出属于该地域执行机的
+                QueryWrapper<TestCaseExecutionInstance> instanceQuery = new QueryWrapper<>();
+                instanceQuery.in("collect_task_id", taskIds);
+                instanceQuery.in("executor_ip", executorIps);
+                List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.list(instanceQuery);
+                
+                log.info("Found {} execution instances for region {} executors (executor IPs: {})", 
+                        instances.size(), regionId, executorIps);
+                
+                // 统计每个APP的采集次数
+                int instanceWithAppCount = 0;
+                for (TestCaseExecutionInstance instance : instances) {
+                    // 获取用例信息
+                    TestCase testCase = testCaseService.getById(instance.getTestCaseId());
+                    if (testCase != null) {
                         String appName = testCase.getApp();
                         if (appName != null && !appName.trim().isEmpty()) {
                             appName = appName.trim();
-                            // 每个用例的采集次数 = 任务的采集次数
-                            int caseCollectCount = taskCollectCount;
-                            
                             AppStatInfo appStat = appStatsMap.getOrDefault(appName, new AppStatInfo(appName));
-                            appStat.addCollectCount(caseCollectCount);
+                            // 每个执行例次算一次采集
+                            appStat.addCollectCount(1);
                             appStatsMap.put(appName, appStat);
+                            totalCollectCount++;
+                            instanceWithAppCount++;
+                        } else {
+                            log.debug("TestCase {} has no app name", instance.getTestCaseId());
                         }
+                    } else {
+                        log.warn("TestCase not found for instance {}, testCaseId: {}", instance.getId(), instance.getTestCaseId());
                     }
                 }
                 
-                // 累计总采集次数（任务的采集次数）
-                totalCollectCount += taskCollectCount;
+                log.info("Statistics: {} instances with app name out of {} total instances", 
+                        instanceWithAppCount, instances.size());
+            } else {
+                if (executorIps.isEmpty()) {
+                    log.info("No executors found for region {}", regionId);
+                }
+                if (tasks.isEmpty()) {
+                    log.info("No tasks found for region {}", regionId);
+                }
             }
             
-            // 转换为列表
+            // 转换为列表，按采集次数降序排序
             List<Map<String, Object>> appList = new ArrayList<>();
             for (AppStatInfo appStat : appStatsMap.values()) {
                 Map<String, Object> appInfo = new HashMap<>();
@@ -193,6 +228,13 @@ public class DashboardController {
                 appInfo.put("collectCount", appStat.getCollectCount());
                 appList.add(appInfo);
             }
+            
+            // 按采集次数降序排序
+            appList.sort((a, b) -> {
+                Integer countA = (Integer) a.get("collectCount");
+                Integer countB = (Integer) b.get("collectCount");
+                return countB.compareTo(countA);
+            });
             
             stats.put("appCount", appStatsMap.size());
             stats.put("collectCount", totalCollectCount);
