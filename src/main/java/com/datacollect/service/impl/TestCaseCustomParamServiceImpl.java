@@ -9,3 +9,4 @@ import org.springframework.stereotype.Service;
 @Service
 public class TestCaseCustomParamServiceImpl extends ServiceImpl<TestCaseCustomParamMapper, TestCaseCustomParam> implements TestCaseCustomParamService {
 }
+

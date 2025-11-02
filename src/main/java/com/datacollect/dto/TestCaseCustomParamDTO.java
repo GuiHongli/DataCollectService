@@ -22,3 +22,4 @@ public class TestCaseCustomParamDTO {
     @NotEmpty(message = "自定义参数值不能为空")
     private List<String> paramValues;
 }
+

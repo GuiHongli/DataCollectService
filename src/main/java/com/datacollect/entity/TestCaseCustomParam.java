@@ -44,3 +44,4 @@ public class TestCaseCustomParam {
     @TableField("deleted")
     private Integer deleted;
 }
+
