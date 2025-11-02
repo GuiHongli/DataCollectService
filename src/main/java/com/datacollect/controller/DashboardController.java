@@ -20,11 +20,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.validation.constraints.NotNull;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -156,38 +156,81 @@ public class DashboardController {
             stats.put("executorCount", executorCount);
             log.info("Executor count for region {}: {}", regionId, executorCount);
             
-            // 2. 统计app数量（去重）
-            Set<String> appSet = new HashSet<>();
+            // 2. 统计APP详细信息及采集次数
+            // 使用LinkedHashMap保持插入顺序
+            Map<String, AppStatInfo> appStatsMap = new LinkedHashMap<>();
             int totalCollectCount = 0;
             
             for (CollectTask task : tasks) {
-                // 累计采集次数
-                if (task.getCollectCount() != null) {
-                    totalCollectCount += task.getCollectCount();
-                }
+                int taskCollectCount = task.getCollectCount() != null ? task.getCollectCount() : 0;
                 
-                // 获取用例集关联的用例，统计app
+                // 获取用例集关联的用例，统计每个APP的采集次数
                 if (task.getTestCaseSetId() != null) {
                     List<TestCase> testCases = testCaseService.getByTestCaseSetId(task.getTestCaseSetId());
                     for (TestCase testCase : testCases) {
-                        if (testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
-                            appSet.add(testCase.getApp().trim());
+                        String appName = testCase.getApp();
+                        if (appName != null && !appName.trim().isEmpty()) {
+                            appName = appName.trim();
+                            // 每个用例的采集次数 = 任务的采集次数
+                            int caseCollectCount = taskCollectCount;
+                            
+                            AppStatInfo appStat = appStatsMap.getOrDefault(appName, new AppStatInfo(appName));
+                            appStat.addCollectCount(caseCollectCount);
+                            appStatsMap.put(appName, appStat);
                         }
                     }
                 }
+                
+                // 累计总采集次数（任务的采集次数）
+                totalCollectCount += taskCollectCount;
             }
             
-            stats.put("appCount", appSet.size());
+            // 转换为列表
+            List<Map<String, Object>> appList = new ArrayList<>();
+            for (AppStatInfo appStat : appStatsMap.values()) {
+                Map<String, Object> appInfo = new HashMap<>();
+                appInfo.put("appName", appStat.getAppName());
+                appInfo.put("collectCount", appStat.getCollectCount());
+                appList.add(appInfo);
+            }
+            
+            stats.put("appCount", appStatsMap.size());
             stats.put("collectCount", totalCollectCount);
+            stats.put("appList", appList);
             
             log.info("Region statistics - region ID: {}, app count: {}, collect count: {}, executor count: {}", 
-                    regionId, appSet.size(), totalCollectCount, executorCount);
+                    regionId, appStatsMap.size(), totalCollectCount, executorCount);
             
             return Result.success(stats);
             
         } catch (Exception e) {
             log.error("Failed to get region statistics - region ID: {}, error: {}", regionId, e.getMessage(), e);
             return Result.error("Failed to get region statistics: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * APP统计信息内部类
+     */
+    private static class AppStatInfo {
+        private String appName;
+        private int collectCount;
+        
+        public AppStatInfo(String appName) {
+            this.appName = appName;
+            this.collectCount = 0;
+        }
+        
+        public void addCollectCount(int count) {
+            this.collectCount += count;
+        }
+        
+        public String getAppName() {
+            return appName;
+        }
+        
+        public int getCollectCount() {
+            return collectCount;
         }
     }
 }
