@@ -716,12 +716,47 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private String filterTestCaseCustomParams(String testCaseCustomParams, List<TestCaseExecutionInstance> instances) {
         try {
-            // 解析用例自定义参数JSON
+            // 解析用例自定义参数JSON（先解析为Object类型，兼容value可能是数组或字符串）
             ObjectMapper objectMapper = new ObjectMapper();
-            Map<String, List<Map<String, String>>> allTestCaseParams = objectMapper.readValue(
+            Map<String, List<Map<String, Object>>> allTestCaseParamsRaw = objectMapper.readValue(
                 testCaseCustomParams, 
-                new TypeReference<Map<String, List<Map<String, String>>>>() {}
+                new TypeReference<Map<String, List<Map<String, Object>>>>() {}
             );
+            
+            // 转换参数，将value统一转换为字符串格式（如果value是数组，转换为逗号分隔的字符串）
+            Map<String, List<Map<String, String>>> allTestCaseParams = new HashMap<>();
+            for (Map.Entry<String, List<Map<String, Object>>> entry : allTestCaseParamsRaw.entrySet()) {
+                List<Map<String, String>> convertedParams = new ArrayList<>();
+                for (Map<String, Object> param : entry.getValue()) {
+                    Map<String, String> convertedParam = new HashMap<>();
+                    String key = param.get("key") != null ? String.valueOf(param.get("key")) : "";
+                    Object valueObj = param.get("value");
+                    String value = "";
+                    
+                    if (valueObj != null) {
+                        if (valueObj instanceof List) {
+                            // 如果value是数组，转换为逗号分隔的字符串
+                            List<?> valueList = (List<?>) valueObj;
+                            value = valueList.stream()
+                                .filter(v -> v != null && !String.valueOf(v).trim().isEmpty())
+                                .map(v -> String.valueOf(v).trim())
+                                .collect(java.util.stream.Collectors.joining(","));
+                        } else {
+                            // 如果value是字符串，直接使用
+                            value = String.valueOf(valueObj);
+                        }
+                    }
+                    
+                    if (!key.isEmpty() && !value.isEmpty()) {
+                        convertedParam.put("key", key);
+                        convertedParam.put("value", value);
+                        convertedParams.add(convertedParam);
+                    }
+                }
+                if (!convertedParams.isEmpty()) {
+                    allTestCaseParams.put(entry.getKey(), convertedParams);
+                }
+            }
             
             // 获取当前执行实例中的用例ID
             Set<Long> currentTestCaseIds = instances.stream()
