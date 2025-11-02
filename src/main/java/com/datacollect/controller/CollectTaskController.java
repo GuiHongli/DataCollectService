@@ -870,4 +870,100 @@ public class CollectTaskController {
         }
         return logicEnvironmentNetworks;
     }
+
+    /**
+     * Ping执行机IP和端口，检查连通性
+     * 
+     * @param ip 执行机IP地址
+     * @param port 执行机端口
+     * @return ping结果
+     */
+    @GetMapping("/ping-executor")
+    public Result<Map<String, Object>> pingExecutor(
+            @RequestParam @NotNull String ip,
+            @RequestParam(required = false, defaultValue = "8081") Integer port) {
+        log.info("Ping executor - IP: {}, Port: {}", ip, port);
+        
+        try {
+            // 先检测IP连通性
+            boolean ipReachable = pingHost(ip, 3000); // 3秒超时
+            
+            if (!ipReachable) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("ip", ip);
+                result.put("port", port);
+                result.put("reachable", false);
+                result.put("message", "IP不可达");
+                log.info("Ping executor result - IP: {}, Port: {}, reachable: false (IP不可达)", ip, port);
+                return Result.success(result);
+            }
+            
+            // IP可达，检测端口连通性
+            boolean portReachable = checkPortReachable(ip, port, 3000); // 3秒超时
+            boolean reachable = ipReachable && portReachable;
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("ip", ip);
+            result.put("port", port);
+            result.put("reachable", reachable);
+            result.put("message", reachable ? "IP和端口均可达" : "IP可达但端口不可达");
+            
+            log.info("Ping executor result - IP: {}, Port: {}, reachable: {}", ip, port, reachable);
+            return Result.success(result);
+            
+        } catch (Exception e) {
+            log.error("Failed to ping executor - IP: {}, Port: {}, error: {}", ip, port, e.getMessage(), e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("ip", ip);
+            result.put("port", port);
+            result.put("reachable", false);
+            result.put("message", "Ping异常: " + e.getMessage());
+            return Result.success(result);
+        }
+    }
+
+    /**
+     * Ping主机IP
+     * 
+     * @param host IP地址或主机名
+     * @param timeoutMillis 超时时间（毫秒）
+     * @return 是否可达
+     */
+    private boolean pingHost(String host, int timeoutMillis) {
+        try {
+            java.net.InetAddress address = java.net.InetAddress.getByName(host);
+            return address.isReachable(timeoutMillis);
+        } catch (Exception e) {
+            log.error("Ping host exception - host: {}, error: {}", host, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 检测端口是否可达
+     * 
+     * @param host IP地址或主机名
+     * @param port 端口号
+     * @param timeoutMillis 超时时间（毫秒）
+     * @return 端口是否可达
+     */
+    private boolean checkPortReachable(String host, int port, int timeoutMillis) {
+        java.net.Socket socket = null;
+        try {
+            socket = new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress(host, port), timeoutMillis);
+            return true;
+        } catch (Exception e) {
+            log.debug("Port check failed - host: {}, port: {}, error: {}", host, port, e.getMessage());
+            return false;
+        } finally {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close socket - host: {}, port: {}", host, port);
+                }
+            }
+        }
+    }
 }
