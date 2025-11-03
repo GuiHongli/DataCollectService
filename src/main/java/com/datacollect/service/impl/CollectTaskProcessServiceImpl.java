@@ -20,6 +20,7 @@ import com.datacollect.service.LogicEnvironmentUeService;
 import com.datacollect.service.UeService;
 import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.ExternalApiService;
+import com.datacollect.service.ExecutorWebSocketService;
 import com.datacollect.entity.LogicEnvironmentUe;
 import com.datacollect.entity.Ue;
 import com.datacollect.entity.NetworkType;
@@ -96,6 +97,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private ExternalApiService externalApiService;
+    
+    @Autowired
+    private ExecutorWebSocketService executorWebSocketService;
     
     @Value("${datacollect.service.base-url:http://localhost:8080}")
     private String dataCollectServiceBaseUrl;
@@ -835,8 +839,24 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      * 发送执行请求
      */
     private boolean sendExecutionRequest(TestCaseExecutionRequest request, List<TestCaseExecutionInstance> instances, String taskId, String executorIp) {
+        // 优先使用WebSocket发送任务
+        if (executorWebSocketService.isExecutorOnline(executorIp)) {
+            log.info("执行机在线，通过WebSocket发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+            boolean sent = executorWebSocketService.sendTaskToExecutor(executorIp, request);
+            if (sent) {
+                // 更新例次状态
+                updateInstanceStatus(instances, taskId);
+                return true;
+            } else {
+                log.warn("WebSocket发送任务失败，尝试使用HTTP发送 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+            }
+        } else {
+            log.info("执行机不在线，使用HTTP发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+        }
+        
+        // 如果WebSocket不可用，回退到HTTP请求
         String caseExecuteServiceUrl = "http://" + executorIp + ":8081/api/test-case-execution/receive";
-        log.info("Calling CaseExecuteService - URL: {}, task ID: {}", caseExecuteServiceUrl, taskId);
+        log.info("Calling CaseExecuteService via HTTP - URL: {}, task ID: {}", caseExecuteServiceUrl, taskId);
         
         try {
             org.springframework.http.ResponseEntity<Map> response = 
@@ -847,7 +867,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 Integer code = (Integer) result.get("code");
                 
                 if (code != null && code == 200) {
-                    log.info("CaseExecuteService call successful - task ID: {}, executor IP: {}", taskId, executorIp);
+                    log.info("CaseExecuteService call successful via HTTP - task ID: {}, executor IP: {}", taskId, executorIp);
                     
                     // 更新例次状态
                     updateInstanceStatus(instances, taskId);

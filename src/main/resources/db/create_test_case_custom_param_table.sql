@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS `test_case_custom_param` (
   KEY `idx_param_name` (`param_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用例自定义参数表';
 
+

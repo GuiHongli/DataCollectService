@@ -77,3 +77,4 @@ CREATE TABLE IF NOT EXISTS `dashboard_cache` (
 3. **可扩展**: 可以方便地查看历史缓存数据
 4. **可靠性**: 数据库事务保证数据一致性
 
+

@@ -6,3 +6,4 @@ import com.datacollect.entity.TestCaseCustomParam;
 public interface TestCaseCustomParamService extends IService<TestCaseCustomParam> {
 }
 
+
