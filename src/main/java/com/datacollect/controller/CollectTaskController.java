@@ -872,98 +872,47 @@ public class CollectTaskController {
     }
 
     /**
-     * Ping执行机IP和端口，检查连通性
+     * 批量检查执行机在线状态（通过WebSocket检查）
      * 
-     * @param ip 执行机IP地址
-     * @param port 执行机端口
-     * @return ping结果
+     * @param executorIps 执行机IP地址列表
+     * @return 执行机在线状态映射，key为IP地址，value为是否在线
      */
-    @GetMapping("/ping-executor")
-    public Result<Map<String, Object>> pingExecutor(
-            @RequestParam @NotNull String ip,
-            @RequestParam(required = false, defaultValue = "8081") Integer port) {
-        log.info("Ping executor - IP: {}, Port: {}", ip, port);
+    @PostMapping("/check-executors-online")
+    public Result<Map<String, Boolean>> checkExecutorsOnline(@RequestBody List<String> executorIps) {
+        log.info("Checking executors online status - IPs: {}", executorIps);
         
         try {
-            // 先检测IP连通性
-            boolean ipReachable = pingHost(ip, 3000); // 3秒超时
+            Map<String, Boolean> onlineStatusMap = new HashMap<>();
             
-            if (!ipReachable) {
-                Map<String, Object> result = new HashMap<>();
-                result.put("ip", ip);
-                result.put("port", port);
-                result.put("reachable", false);
-                result.put("message", "IP不可达");
-                log.info("Ping executor result - IP: {}, Port: {}, reachable: false (IP不可达)", ip, port);
-                return Result.success(result);
-            }
-            
-            // IP可达，检测端口连通性
-            boolean portReachable = checkPortReachable(ip, port, 3000); // 3秒超时
-            boolean reachable = ipReachable && portReachable;
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("ip", ip);
-            result.put("port", port);
-            result.put("reachable", reachable);
-            result.put("message", reachable ? "IP和端口均可达" : "IP可达但端口不可达");
-            
-            log.info("Ping executor result - IP: {}, Port: {}, reachable: {}", ip, port, reachable);
-            return Result.success(result);
-            
-        } catch (Exception e) {
-            log.error("Failed to ping executor - IP: {}, Port: {}, error: {}", ip, port, e.getMessage(), e);
-            Map<String, Object> result = new HashMap<>();
-            result.put("ip", ip);
-            result.put("port", port);
-            result.put("reachable", false);
-            result.put("message", "Ping异常: " + e.getMessage());
-            return Result.success(result);
-        }
-    }
-
-    /**
-     * Ping主机IP
-     * 
-     * @param host IP地址或主机名
-     * @param timeoutMillis 超时时间（毫秒）
-     * @return 是否可达
-     */
-    private boolean pingHost(String host, int timeoutMillis) {
-        try {
-            java.net.InetAddress address = java.net.InetAddress.getByName(host);
-            return address.isReachable(timeoutMillis);
-        } catch (Exception e) {
-            log.error("Ping host exception - host: {}, error: {}", host, e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * 检测端口是否可达
-     * 
-     * @param host IP地址或主机名
-     * @param port 端口号
-     * @param timeoutMillis 超时时间（毫秒）
-     * @return 端口是否可达
-     */
-    private boolean checkPortReachable(String host, int port, int timeoutMillis) {
-        java.net.Socket socket = null;
-        try {
-            socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress(host, port), timeoutMillis);
-            return true;
-        } catch (Exception e) {
-            log.debug("Port check failed - host: {}, port: {}, error: {}", host, port, e.getMessage());
-            return false;
-        } finally {
-            if (socket != null) {
-                try {
-                    socket.close();
-                } catch (Exception e) {
-                    log.warn("Failed to close socket - host: {}, port: {}", host, port);
+            for (String ip : executorIps) {
+                // 通过执行机IP查找执行机
+                QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("ip_address", ip);
+                queryWrapper.eq("deleted", 0);
+                Executor executor = executorService.getOne(queryWrapper);
+                
+                if (executor != null) {
+                    // 检查执行机状态：status=1表示在线（通过WebSocket连接活跃）
+                    // 这里可以根据实际的WebSocket服务来检查连接状态
+                    // 目前先使用数据库中的status字段，如果WebSocket服务已实现，可以改为检查WebSocket连接状态
+                    boolean isOnline = executor.getStatus() != null && executor.getStatus() == 1;
+                    onlineStatusMap.put(ip, isOnline);
+                    log.debug("Executor online status - IP: {}, status: {}, isOnline: {}", 
+                            ip, executor.getStatus(), isOnline);
+                } else {
+                    // 执行机不存在，认为不在线
+                    onlineStatusMap.put(ip, false);
+                    log.warn("Executor not found - IP: {}", ip);
                 }
             }
+            
+            log.info("Checked executors online status - result: {}", onlineStatusMap);
+            return Result.success(onlineStatusMap);
+            
+        } catch (Exception e) {
+            log.error("Failed to check executors online status", e);
+            return Result.error("Failed to check executors online status: " + e.getMessage());
         }
     }
+
 }
