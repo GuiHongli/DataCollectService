@@ -27,8 +27,46 @@ public class ExecutorController {
 
     @PostMapping
     public Result<Executor> create(@Valid @RequestBody Executor executor) {
-        executorService.save(executor);
-        return Result.success(executor);
+        try {
+            log.info("Create executor - name: {}, IP address: {}", executor.getName(), executor.getIpAddress());
+            
+            // 根据IP地址查找已存在的执行机（未删除的）
+            QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("ip_address", executor.getIpAddress());
+            queryWrapper.eq("deleted", 0); // 只查找未删除的记录
+            Executor existingExecutor = executorService.getOne(queryWrapper);
+            
+            if (existingExecutor != null) {
+                // 如果存在，则更新（replace）
+                log.info("Executor with IP {} already exists (ID: {}), performing update instead of insert", 
+                        executor.getIpAddress(), existingExecutor.getId());
+                executor.setId(existingExecutor.getId());
+                boolean success = executorService.updateById(executor);
+                if (success) {
+                    log.info("Executor updated successfully via IP replace - ID: {}, IP: {}", 
+                            executor.getId(), executor.getIpAddress());
+                    return Result.success(executor);
+                } else {
+                    log.error("Executor update failed via IP replace - IP: {}", executor.getIpAddress());
+                    return Result.error("Update failed via IP replace");
+                }
+            } else {
+                // 如果不存在，则插入
+                boolean success = executorService.save(executor);
+                if (success) {
+                    log.info("Executor created successfully - ID: {}, IP: {}", 
+                            executor.getId(), executor.getIpAddress());
+                    return Result.success(executor);
+                } else {
+                    log.error("Executor creation failed - IP: {}", executor.getIpAddress());
+                    return Result.error("Creation failed");
+                }
+            }
+        } catch (Exception e) {
+            log.error("Exception creating/updating executor - IP: {}, error: {}", 
+                    executor.getIpAddress(), e.getMessage(), e);
+            return Result.error("Create/Update failed: " + e.getMessage());
+        }
     }
 
     @PutMapping("/{id}")
