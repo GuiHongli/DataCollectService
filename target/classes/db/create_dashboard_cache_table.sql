@@ -12,3 +12,4 @@ CREATE TABLE IF NOT EXISTS `dashboard_cache` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仪表盘统计数据缓存表';
 
 
+
