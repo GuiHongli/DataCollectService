@@ -142,6 +142,56 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
     }
     
     @Override
+    public boolean sendCancelCommand(String executorIp, String taskId) {
+        Set<String> sessionIds = executorSessions.get(executorIp);
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            log.warn("执行机不在线，无法发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+            return false;
+        }
+        
+        try {
+            WebSocketMessage message = new WebSocketMessage();
+            message.setType("CANCEL");
+            Map<String, Object> cancelData = new java.util.HashMap<>();
+            cancelData.put("taskId", taskId);
+            message.setData(cancelData);
+            message.setTimestamp(System.currentTimeMillis());
+            message.setExecutorIp(executorIp);
+            
+            String messageJson = JSON.toJSONString(message);
+            
+            // 发送到所有该执行机的会话
+            boolean sent = false;
+            for (String sessionId : sessionIds) {
+                WebSocketSession session = sessions.get(sessionId);
+                if (session != null && session.isOpen()) {
+                    try {
+                        session.sendMessage(new TextMessage(messageJson));
+                        sent = true;
+                        log.info("停止命令已通过WebSocket发送到执行机 - 执行机IP: {}, 任务ID: {}, 会话ID: {}", 
+                                executorIp, taskId, sessionId);
+                    } catch (IOException e) {
+                        log.error("发送停止命令到会话失败 - 会话ID: {}, 错误: {}", sessionId, e.getMessage(), e);
+                        // 如果发送失败，移除该会话
+                        unregisterSession(sessionId);
+                        unregisterExecutor(executorIp, sessionId);
+                    }
+                } else {
+                    log.warn("会话不存在或已关闭 - 会话ID: {}", sessionId);
+                    unregisterExecutor(executorIp, sessionId);
+                }
+            }
+            
+            return sent;
+            
+        } catch (Exception e) {
+            log.error("通过WebSocket发送停止命令失败 - 执行机IP: {}, 任务ID: {}, 错误: {}", 
+                    executorIp, taskId, e.getMessage(), e);
+            return false;
+        }
+    }
+    
+    @Override
     public Set<String> getOnlineExecutors() {
         return executorSessions.keySet();
     }

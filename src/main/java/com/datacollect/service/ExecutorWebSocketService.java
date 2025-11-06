@@ -2,8 +2,6 @@ package com.datacollect.service;
 
 import com.datacollect.dto.TestCaseExecutionRequest;
 
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * 执行机WebSocket连接管理服务
  * 
@@ -44,6 +42,15 @@ public interface ExecutorWebSocketService {
      * @return 是否发送成功
      */
     boolean sendTaskToExecutor(String executorIp, TestCaseExecutionRequest request);
+    
+    /**
+     * 通过WebSocket发送停止命令到执行机
+     * 
+     * @param executorIp 执行机IP
+     * @param taskId 任务ID
+     * @return 是否发送成功
+     */
+    boolean sendCancelCommand(String executorIp, String taskId);
     
     /**
      * 获取所有在线的执行机IP列表

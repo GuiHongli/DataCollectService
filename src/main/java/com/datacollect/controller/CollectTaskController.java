@@ -84,6 +84,9 @@ public class CollectTaskController {
     
     @Autowired
     private CaseExecuteServiceClient caseExecuteServiceClient;
+    
+    @Autowired
+    private com.datacollect.service.ExecutorWebSocketService executorWebSocketService;
 
     @PostMapping
     public Result<CollectTask> create(@Valid @RequestBody CollectTask collectTask) {
@@ -304,17 +307,36 @@ public class CollectTaskController {
             String executionTaskId = instances.get(0).getExecutionTaskId();
             
             try {
-                boolean cancelled = caseExecuteServiceClient.cancelTaskExecution(executorIp, executionTaskId);
-                if (cancelled) {
-                    log.info("Successfully cancelled executor task - task ID: {}, executor IP: {}, execution task ID: {}, affected instance count: {}", 
-                            taskId, executorIp, executionTaskId, instances.size());
+                boolean cancelled = false;
+                
+                // 优先使用WebSocket发送停止命令
+                if (executorWebSocketService.isExecutorOnline(executorIp)) {
+                    log.info("执行机在线，通过WebSocket发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+                    cancelled = executorWebSocketService.sendCancelCommand(executorIp, executionTaskId);
+                    if (cancelled) {
+                        log.info("停止命令已通过WebSocket发送成功 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 受影响例次数: {}", 
+                                taskId, executorIp, executionTaskId, instances.size());
+                    } else {
+                        log.warn("WebSocket发送停止命令失败，尝试使用HTTP发送 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+                    }
                 } else {
-                    log.warn("Failed to cancel executor task - task ID: {}, executor IP: {}, execution task ID: {}", 
-                            taskId, executorIp, executionTaskId);
+                    log.info("执行机不在线，使用HTTP发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+                }
+                
+                // 如果WebSocket不可用或发送失败，回退到HTTP请求
+                if (!cancelled) {
+                    cancelled = caseExecuteServiceClient.cancelTaskExecution(executorIp, executionTaskId);
+                    if (cancelled) {
+                        log.info("通过HTTP成功取消执行机任务 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 受影响例次数: {}", 
+                                taskId, executorIp, executionTaskId, instances.size());
+                    } else {
+                        log.warn("通过HTTP取消执行机任务失败 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}", 
+                                taskId, executorIp, executionTaskId);
+                    }
                 }
             } catch (Exception e) {
-                log.error("Exception calling CaseExecuteService to cancel task - task ID: {}, executor IP: {}, execution task ID: {}, error: {}", 
-                        taskId, executorIp, executionTaskId, e.getMessage());
+                log.error("取消执行机任务异常 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 错误: {}", 
+                        taskId, executorIp, executionTaskId, e.getMessage(), e);
             }
         }
     }
