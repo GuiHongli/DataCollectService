@@ -165,14 +165,45 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             Executor executor = executorService.getOne(queryWrapper);
             
             if (executor == null) {
-                log.warn("执行机不存在 - 执行机IP: {}, 会话ID: {}", executorIp, sessionId);
-                sendErrorResponse(session, "执行机不存在: " + executorIp);
-                return;
+                // 执行机不存在，自动创建
+                log.info("执行机不存在，自动创建 - 执行机IP: {}, 会话ID: {}", executorIp, sessionId);
+                
+                executor = new Executor();
+                executor.setIpAddress(executorIp);
+                
+                // 设置执行机名称，如果注册消息中有则使用，否则使用默认值
+                String executorName = registerMsg.getExecutorName();
+                if (executorName == null || executorName.trim().isEmpty()) {
+                    executorName = "执行机-" + executorIp;
+                }
+                executor.setName(executorName);
+                
+                // 设置默认地域ID为1（中国片区），如果后续需要可以配置化
+                executor.setRegionId(1L);
+                
+                // 设置描述
+                if (registerMsg.getDescription() != null && !registerMsg.getDescription().trim().isEmpty()) {
+                    executor.setDescription(registerMsg.getDescription());
+                } else {
+                    executor.setDescription("通过WebSocket自动注册的执行机");
+                }
+                
+                // 设置状态为在线
+                executor.setStatus(registerMsg.getStatus() != null ? registerMsg.getStatus() : 1);
+                
+                // 保存执行机
+                executorService.save(executor);
+                
+                log.info("执行机已自动创建 - 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                        executorIp, executorName, executor.getId(), sessionId);
+            } else {
+                // 执行机已存在，更新状态为在线
+                executor.setStatus(1);
+                executorService.updateById(executor);
+                
+                log.info("执行机已存在，更新状态为在线 - 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
+                        executorIp, executor.getName(), sessionId);
             }
-            
-            // 更新执行机状态为在线
-            executor.setStatus(1);
-            executorService.updateById(executor);
             
             // 注册执行机连接
             executorWebSocketService.registerExecutor(executorIp, sessionId);
@@ -186,12 +217,14 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             data.put("status", "SUCCESS");
             data.put("message", "执行机注册成功");
             data.put("executorIp", executorIp);
+            data.put("executorId", executor.getId());
+            data.put("executorName", executor.getName());
             response.setData(data);
             
             sendMessage(session, response);
             
-            log.info("执行机注册成功 - 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
-                    executorIp, executor.getName(), sessionId);
+            log.info("执行机注册成功 - 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                    executorIp, executor.getName(), executor.getId(), sessionId);
             
         } catch (Exception e) {
             log.error("处理注册消息异常 - 会话ID: {}, 错误: {}", sessionId, e.getMessage(), e);
