@@ -156,6 +156,22 @@ CREATE TABLE IF NOT EXISTS `collect_task` (
   KEY `idx_strategy_id` (`strategy_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采集任务表';
 
+-- 用户表
+CREATE TABLE IF NOT EXISTS `user` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `username` varchar(50) NOT NULL COMMENT '用户名',
+  `password` varchar(255) NOT NULL COMMENT '密码（BCrypt加密）',
+  `role` varchar(20) NOT NULL DEFAULT 'user' COMMENT '角色：admin-管理员，user-普通用户',
+  `status` tinyint(4) DEFAULT '1' COMMENT '状态：0-禁用，1-启用',
+  `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+  `update_by` varchar(50) DEFAULT NULL COMMENT '修改人',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  `deleted` tinyint(4) DEFAULT '0' COMMENT '逻辑删除：0-未删除，1-已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
 -- 插入测试数据
 
 -- 插入地域数据
@@ -197,6 +213,17 @@ INSERT INTO `logic_environment` (`name`, `executor_id`, `description`, `status`)
 ('北京-iOS环境', 1, '北京地区iOS测试环境', 1),
 ('上海-Android环境', 3, '上海地区Android测试环境', 1),
 ('沈阳-Android环境', 4, '沈阳地区Android测试环境', 1);
+
+-- 插入用户数据
+-- 注意：以下密码是示例，实际部署时需要重新生成BCrypt密码
+-- 密码为：admin123
+-- 生成BCrypt密码的方法：
+-- 1. 使用Java代码：BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(); String encoded = encoder.encode("admin123");
+-- 2. 使用在线工具：https://bcrypt-generator.com/
+-- 3. 系统启动后通过API创建用户（需要先手动插入一个admin用户）
+INSERT INTO `user` (`username`, `password`, `role`, `status`, `create_by`) VALUES
+('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iwK8pJ5C', 'admin', 1, 'system'),
+('user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iwK8pJ5C', 'user', 1, 'system');
 
 -- 插入逻辑环境UE关联数据
 INSERT INTO `logic_environment_ue` (`logic_environment_id`, `ue_id`) VALUES
