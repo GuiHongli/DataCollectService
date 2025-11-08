@@ -77,18 +77,53 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     /**
      * 验证密码（使用BCrypt加密比较）
      * 
+     * BCryptPasswordEncoder.matches() 方法的工作原理：
+     * 1. 接收用户输入的明文密码和数据库中存储的BCrypt加密密码
+     * 2. 从加密密码中提取盐值（salt）
+     * 3. 使用相同的盐值对明文密码进行BCrypt加密
+     * 4. 比较加密结果是否一致
+     * 
      * @param rawPassword 用户输入的明文密码
-     * @param encodedPassword 数据库中存储的BCrypt加密密码
+     * @param encodedPassword 数据库中存储的BCrypt加密密码（格式：$2a$10$...）
      * @return true-密码匹配，false-密码不匹配
      */
     @Override
     public boolean matchesPassword(String rawPassword, String encodedPassword) {
         if (rawPassword == null || encodedPassword == null) {
+            log.warn("密码验证失败：密码为空 - rawPassword: {}, encodedPassword: {}", 
+                    rawPassword != null, encodedPassword != null);
             return false;
         }
-        // 使用BCrypt算法比较明文密码和加密密码
-        // BCrypt会自动处理加密和比较，确保安全性
-        return passwordEncoder.matches(rawPassword, encodedPassword);
+        
+        // 检查加密密码格式是否正确（BCrypt密码以 $2a$、$2b$ 或 $2y$ 开头）
+        if (!encodedPassword.startsWith("$2a$") && 
+            !encodedPassword.startsWith("$2b$") && 
+            !encodedPassword.startsWith("$2y$")) {
+            log.error("密码格式错误：不是有效的BCrypt格式 - encodedPassword: {}", 
+                    encodedPassword.length() > 20 ? encodedPassword.substring(0, 20) + "..." : encodedPassword);
+            return false;
+        }
+        
+        try {
+            // 使用BCrypt算法比较明文密码和加密密码
+            // BCryptPasswordEncoder.matches() 会自动：
+            // 1. 从加密密码中提取盐值
+            // 2. 使用相同盐值加密明文密码
+            // 3. 比较加密结果
+            boolean matches = passwordEncoder.matches(rawPassword, encodedPassword);
+            
+            if (!matches) {
+                log.debug("密码验证失败：密码不匹配 - 用户名: {}, 密码长度: {}", 
+                        rawPassword.length(), encodedPassword.length());
+            } else {
+                log.debug("密码验证成功");
+            }
+            
+            return matches;
+        } catch (Exception e) {
+            log.error("密码验证异常: {}", e.getMessage(), e);
+            return false;
+        }
     }
     
     /**

@@ -56,12 +56,28 @@ public class AuthController {
             }
             
             // 验证密码（使用BCrypt加密比较）
-            // 注意：这里使用BCrypt算法比较用户输入的明文密码和数据库中存储的加密密码
-            // BCryptPasswordEncoder.matches() 方法会自动处理加密和比较，确保安全性
-            if (!userService.matchesPassword(request.getPassword(), user.getPassword())) {
-                log.warn("密码错误 - 用户名: {}", request.getUsername());
+            // 说明：
+            // 1. request.getPassword() 是用户输入的明文密码（如：admin123）
+            // 2. user.getPassword() 是数据库中存储的BCrypt加密密码（如：$2a$10$...）
+            // 3. BCryptPasswordEncoder.matches() 方法会：
+            //    - 从加密密码中提取盐值
+            //    - 使用相同盐值对明文密码进行加密
+            //    - 比较加密结果是否一致
+            String rawPassword = request.getPassword();
+            String encodedPassword = user.getPassword();
+            
+            log.debug("开始验证密码 - 用户名: {}, 明文密码长度: {}, 加密密码长度: {}, 加密密码前缀: {}", 
+                    request.getUsername(), 
+                    rawPassword != null ? rawPassword.length() : 0,
+                    encodedPassword != null ? encodedPassword.length() : 0,
+                    encodedPassword != null && encodedPassword.length() > 4 ? encodedPassword.substring(0, 4) : "null");
+            
+            if (!userService.matchesPassword(rawPassword, encodedPassword)) {
+                log.warn("密码验证失败 - 用户名: {}", request.getUsername());
                 return Result.error("用户名或密码错误");
             }
+            
+            log.debug("密码验证成功 - 用户名: {}", request.getUsername());
             
             // 生成JWT Token
             String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
