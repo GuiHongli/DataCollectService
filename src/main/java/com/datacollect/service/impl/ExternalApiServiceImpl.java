@@ -2,6 +2,8 @@ package com.datacollect.service.impl;
 
 import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
+import com.datacollect.dto.GetDailyRankRequest;
+import com.datacollect.dto.GetDailyRankResponse;
 import com.datacollect.dto.UpdateProbedStatusRequest;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.ExternalApiService;
@@ -69,6 +71,31 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 UpdateProbedStatusResponse result = response.getBody();
+                log.info("外部接口调用成功 - 响应: {}", result);
+                return result;
+            } else {
+                log.error("外部接口调用失败 - HTTP状态码: {}", response.getStatusCode());
+                throw new RuntimeException("外部接口调用失败，HTTP状态码: " + response.getStatusCode());
+            }
+            
+        } catch (Exception e) {
+            log.error("调用外部接口异常 - URL: {}, 错误信息: {}", url, e.getMessage(), e);
+            throw new RuntimeException("调用外部接口异常: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public GetDailyRankResponse getDailyRank(GetDailyRankRequest request) {
+        String url = externalApiHost + "/api/apps/get_daily_rank";
+        
+        log.info("调用外部接口获取每日排名 - URL: {}, 请求参数: {}", url, request);
+        
+        try {
+            ResponseEntity<GetDailyRankResponse> response = 
+                httpClientUtil.post(url, request, GetDailyRankResponse.class);
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                GetDailyRankResponse result = response.getBody();
                 log.info("外部接口调用成功 - 响应: {}", result);
                 return result;
             } else {

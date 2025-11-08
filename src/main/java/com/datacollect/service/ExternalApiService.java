@@ -2,6 +2,8 @@ package com.datacollect.service;
 
 import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
+import com.datacollect.dto.GetDailyRankRequest;
+import com.datacollect.dto.GetDailyRankResponse;
 import com.datacollect.dto.UpdateProbedStatusRequest;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 
@@ -30,5 +32,13 @@ public interface ExternalApiService {
      * @return 更新探测状态响应
      */
     UpdateProbedStatusResponse updateProbedStatus(List<String> appNames);
+    
+    /**
+     * 获取每日排名
+     * 
+     * @param request 获取每日排名请求
+     * @return 获取每日排名响应
+     */
+    GetDailyRankResponse getDailyRank(GetDailyRankRequest request);
 }
 

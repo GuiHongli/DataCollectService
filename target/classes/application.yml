@@ -80,3 +80,8 @@ file:
     base-dir: ./uploads
     testcase-dir: testcase
     temp-dir: temp
+
+# 外部API配置
+external:
+  api:
+    host: http://localhost:9000
