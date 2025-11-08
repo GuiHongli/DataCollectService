@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -68,15 +67,38 @@ public class UserController {
     
     /**
      * 分页查询用户
+     * 非管理员只能查看自己的信息
      */
     @GetMapping("/page")
     public Result<Page<User>> getUserPage(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String username,
-            @RequestParam(required = false) String role) {
+            @RequestParam(required = false) String role,
+            HttpServletRequest httpRequest) {
         try {
-            Page<User> page = userService.getUserPage(current, size, username, role);
+            String currentRole = (String) httpRequest.getAttribute("role");
+            String currentUsername = (String) httpRequest.getAttribute("username");
+            
+            Page<User> page;
+            
+            // 非管理员只能查看自己的信息
+            if (currentRole == null || !"admin".equals(currentRole)) {
+                log.info("非管理员用户查询自己的信息 - 用户名: {}", currentUsername);
+                // 查询当前用户
+                User currentUser = userService.findByUsername(currentUsername);
+                if (currentUser == null) {
+                    return Result.error("用户不存在");
+                }
+                
+                // 创建只包含当前用户的页面结果
+                page = new Page<>(1, 1);
+                page.setTotal(1);
+                page.setRecords(java.util.Arrays.asList(currentUser));
+            } else {
+                // 管理员可以查看所有用户
+                page = userService.getUserPage(current, size, username, role);
+            }
             
             // 清除所有用户的密码字段
             page.getRecords().forEach(user -> user.setPassword(null));
@@ -90,14 +112,28 @@ public class UserController {
     
     /**
      * 根据ID查询用户
+     * 非管理员只能查询自己的信息
      */
     @GetMapping("/{id}")
-    public Result<User> getUserById(@PathVariable Long id) {
+    public Result<User> getUserById(@PathVariable Long id, HttpServletRequest httpRequest) {
         try {
+            String currentRole = (String) httpRequest.getAttribute("role");
+            String currentUsername = (String) httpRequest.getAttribute("username");
+            
             User user = userService.getById(id);
             if (user == null) {
                 return Result.error("用户不存在");
             }
+            
+            // 非管理员只能查询自己的信息
+            if (currentRole == null || !"admin".equals(currentRole)) {
+                if (!user.getUsername().equals(currentUsername)) {
+                    log.warn("非管理员用户尝试查询其他用户信息 - 当前用户: {}, 查询用户: {}", 
+                            currentUsername, user.getUsername());
+                    return Result.error("无权查看其他用户信息");
+                }
+            }
+            
             user.setPassword(null);
             return Result.success(user);
         } catch (Exception e) {
@@ -171,6 +207,7 @@ public class UserController {
     
     /**
      * 修改密码
+     * 非管理员只能修改自己的密码，且需要验证旧密码
      */
     @PostMapping("/{id}/password")
     public Result<Void> updatePassword(@PathVariable Long id, @RequestBody UpdatePasswordRequest request, HttpServletRequest httpRequest) {
@@ -185,18 +222,35 @@ public class UserController {
             
             // 只有admin可以修改其他用户密码，普通用户只能修改自己的密码
             if (!"admin".equals(currentRole) && !user.getUsername().equals(currentUsername)) {
+                log.warn("非管理员用户尝试修改其他用户密码 - 当前用户: {}, 目标用户: {}", 
+                        currentUsername, user.getUsername());
                 return Result.error("无权修改其他用户密码");
             }
             
             // 如果不是admin，需要验证旧密码
             if (!"admin".equals(currentRole)) {
-                // 这里需要验证旧密码，但UserServiceImpl没有提供验证方法，需要添加
-                // 暂时跳过验证，实际应该验证
+                if (request.getOldPassword() == null || request.getOldPassword().trim().isEmpty()) {
+                    return Result.error("请输入旧密码");
+                }
+                
+                // 验证旧密码
+                if (!userService.matchesPassword(request.getOldPassword(), user.getPassword())) {
+                    log.warn("修改密码失败：旧密码错误 - 用户名: {}", currentUsername);
+                    return Result.error("旧密码错误");
+                }
+            }
+            
+            if (request.getNewPassword() == null || request.getNewPassword().trim().isEmpty()) {
+                return Result.error("新密码不能为空");
+            }
+            
+            if (request.getNewPassword().length() < 6) {
+                return Result.error("新密码长度不能少于6位");
             }
             
             boolean success = userService.updatePassword(id, request.getNewPassword());
             if (success) {
-                log.info("修改密码成功 - 用户ID: {}", id);
+                log.info("修改密码成功 - 用户ID: {}, 用户名: {}", id, user.getUsername());
                 return Result.success(null);
             } else {
                 return Result.error("修改密码失败");
