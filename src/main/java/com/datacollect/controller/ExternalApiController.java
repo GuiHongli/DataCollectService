@@ -4,7 +4,6 @@ import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
 import com.datacollect.dto.GetDailyRankRequest;
 import com.datacollect.dto.GetDailyRankResponse;
-import com.datacollect.dto.UpdateProbedStatusRequest;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.ExternalApiService;
 
@@ -43,7 +42,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("接收到检查应用是否为新应用的请求 - 参数: {}", appCheckRequests);
+            log.info("Received request to check if app is new - parameters: {}", appCheckRequests);
             
             AppCheckResponse result = externalApiService.checkAppIsNew(appCheckRequests);
             
@@ -54,10 +53,10 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("检查应用是否为新应用失败", e);
+            log.error("Failed to check if app is new", e);
             
             response.put("code", 500);
-            response.put("message", "检查应用是否为新应用失败: " + e.getMessage());
+            response.put("message", "Failed to check if app is new: " + e.getMessage());
             response.put("data", null);
             
             return ResponseEntity.status(500).body(response);
@@ -75,7 +74,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("接收到更新探测状态的请求 - 参数: {}", appNames);
+            log.info("Received request to update probed status - parameters: {}", appNames);
             
             UpdateProbedStatusResponse result = externalApiService.updateProbedStatus(appNames);
             
@@ -86,10 +85,10 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("更新探测状态失败", e);
+            log.error("Failed to update probed status", e);
             
             response.put("code", 500);
-            response.put("message", "更新探测状态失败: " + e.getMessage());
+            response.put("message", "Failed to update probed status: " + e.getMessage());
             response.put("data", null);
             
             return ResponseEntity.status(500).body(response);
@@ -107,7 +106,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("接收到获取每日排名的请求 - 参数: {}", request);
+            log.info("Received request to get daily rank - parameters: {}", request);
             
             GetDailyRankResponse result = externalApiService.getDailyRank(request);
             
@@ -118,10 +117,10 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("获取每日排名失败", e);
+            log.error("Failed to get daily rank", e);
             
             response.put("code", 500);
-            response.put("message", "获取每日排名失败: " + e.getMessage());
+            response.put("message", "Failed to get daily rank: " + e.getMessage());
             response.put("data", null);
             
             return ResponseEntity.status(500).body(response);

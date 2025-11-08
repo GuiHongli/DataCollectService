@@ -37,7 +37,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     public AppCheckResponse checkAppIsNew(List<AppCheckRequest> appCheckRequests) {
         String url = externalApiHost + "/api/apps/check_is_new";
         
-        log.info("调用外部接口检查应用是否为新应用 - URL: {}, 请求参数: {}", url, appCheckRequests);
+        log.info("Calling external API to check if app is new - URL: {}, request parameters: {}", url, appCheckRequests);
         
         try {
             ResponseEntity<AppCheckResponse> response = 
@@ -45,16 +45,16 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 AppCheckResponse result = response.getBody();
-                log.info("外部接口调用成功 - 响应: {}", result);
+                log.info("External API call successful - response: {}", result);
                 return result;
             } else {
-                log.error("外部接口调用失败 - HTTP状态码: {}", response.getStatusCode());
-                throw new RuntimeException("外部接口调用失败，HTTP状态码: " + response.getStatusCode());
+                log.error("External API call failed - HTTP status code: {}", response.getStatusCode());
+                throw new RuntimeException("External API call failed, HTTP status code: " + response.getStatusCode());
             }
             
         } catch (Exception e) {
-            log.error("调用外部接口异常 - URL: {}, 错误信息: {}", url, e.getMessage(), e);
-            throw new RuntimeException("调用外部接口异常: " + e.getMessage(), e);
+            log.error("Exception calling external API - URL: {}, error message: {}", url, e.getMessage(), e);
+            throw new RuntimeException("Exception calling external API: " + e.getMessage(), e);
         }
     }
     
@@ -62,7 +62,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     public UpdateProbedStatusResponse updateProbedStatus(List<String> appNames) {
         String url = externalApiHost + "/api/apps/updata_probed_status";
         
-        log.info("调用外部接口更新探测状态 - URL: {}, 请求参数: {}", url, appNames);
+        log.info("Calling external API to update probed status - URL: {}, request parameters: {}", url, appNames);
         
         try {
             UpdateProbedStatusRequest request = new UpdateProbedStatusRequest(appNames);
@@ -71,16 +71,16 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 UpdateProbedStatusResponse result = response.getBody();
-                log.info("外部接口调用成功 - 响应: {}", result);
+                log.info("External API call successful - response: {}", result);
                 return result;
             } else {
-                log.error("外部接口调用失败 - HTTP状态码: {}", response.getStatusCode());
-                throw new RuntimeException("外部接口调用失败，HTTP状态码: " + response.getStatusCode());
+                log.error("External API call failed - HTTP status code: {}", response.getStatusCode());
+                throw new RuntimeException("External API call failed, HTTP status code: " + response.getStatusCode());
             }
             
         } catch (Exception e) {
-            log.error("调用外部接口异常 - URL: {}, 错误信息: {}", url, e.getMessage(), e);
-            throw new RuntimeException("调用外部接口异常: " + e.getMessage(), e);
+            log.error("Exception calling external API - URL: {}, error message: {}", url, e.getMessage(), e);
+            throw new RuntimeException("Exception calling external API: " + e.getMessage(), e);
         }
     }
     
@@ -88,7 +88,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     public GetDailyRankResponse getDailyRank(GetDailyRankRequest request) {
         String url = externalApiHost + "/api/apps/get_daily_rank";
         
-        log.info("调用外部接口获取每日排名 - URL: {}, 请求参数: {}", url, request);
+        log.info("Calling external API to get daily rank - URL: {}, request parameters: {}", url, request);
         
         try {
             ResponseEntity<GetDailyRankResponse> response = 
@@ -96,16 +96,16 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 GetDailyRankResponse result = response.getBody();
-                log.info("外部接口调用成功 - 响应: {}", result);
+                log.info("External API call successful - response: {}", result);
                 return result;
             } else {
-                log.error("外部接口调用失败 - HTTP状态码: {}", response.getStatusCode());
-                throw new RuntimeException("外部接口调用失败，HTTP状态码: " + response.getStatusCode());
+                log.error("External API call failed - HTTP status code: {}", response.getStatusCode());
+                throw new RuntimeException("External API call failed, HTTP status code: " + response.getStatusCode());
             }
             
         } catch (Exception e) {
-            log.error("调用外部接口异常 - URL: {}, 错误信息: {}", url, e.getMessage(), e);
-            throw new RuntimeException("调用外部接口异常: " + e.getMessage(), e);
+            log.error("Exception calling external API - URL: {}, error message: {}", url, e.getMessage(), e);
+            throw new RuntimeException("Exception calling external API: " + e.getMessage(), e);
         }
     }
 }
