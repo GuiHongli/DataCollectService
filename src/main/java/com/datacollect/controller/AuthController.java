@@ -4,7 +4,6 @@ import com.datacollect.common.Result;
 import com.datacollect.entity.User;
 import com.datacollect.service.UserActivityService;
 import com.datacollect.service.UserService;
-import com.datacollect.service.impl.UserServiceImpl;
 import com.datacollect.util.JwtUtil;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -21,9 +20,6 @@ public class AuthController {
     
     @Autowired
     private UserService userService;
-    
-    @Autowired
-    private UserServiceImpl userServiceImpl;
     
     @Autowired
     private JwtUtil jwtUtil;
@@ -59,8 +55,10 @@ public class AuthController {
                 return Result.error("用户已被禁用");
             }
             
-            // 验证密码
-            if (!userServiceImpl.matches(request.getPassword(), user.getPassword())) {
+            // 验证密码（使用BCrypt加密比较）
+            // 注意：这里使用BCrypt算法比较用户输入的明文密码和数据库中存储的加密密码
+            // BCryptPasswordEncoder.matches() 方法会自动处理加密和比较，确保安全性
+            if (!userService.matchesPassword(request.getPassword(), user.getPassword())) {
                 log.warn("密码错误 - 用户名: {}", request.getUsername());
                 return Result.error("用户名或密码错误");
             }

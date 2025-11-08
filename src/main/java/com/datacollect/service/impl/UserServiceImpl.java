@@ -75,10 +75,31 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
     
     /**
-     * 验证密码
+     * 验证密码（使用BCrypt加密比较）
+     * 
+     * @param rawPassword 用户输入的明文密码
+     * @param encodedPassword 数据库中存储的BCrypt加密密码
+     * @return true-密码匹配，false-密码不匹配
      */
-    public boolean matches(String rawPassword, String encodedPassword) {
+    @Override
+    public boolean matchesPassword(String rawPassword, String encodedPassword) {
+        if (rawPassword == null || encodedPassword == null) {
+            return false;
+        }
+        // 使用BCrypt算法比较明文密码和加密密码
+        // BCrypt会自动处理加密和比较，确保安全性
         return passwordEncoder.matches(rawPassword, encodedPassword);
     }
+    
+    /**
+     * 验证密码（兼容旧方法，已废弃，请使用matchesPassword）
+     * @deprecated 请使用 matchesPassword 方法
+     */
+    @Deprecated
+    public boolean matches(String rawPassword, String encodedPassword) {
+        return matchesPassword(rawPassword, encodedPassword);
+    }
 }
+
+
 

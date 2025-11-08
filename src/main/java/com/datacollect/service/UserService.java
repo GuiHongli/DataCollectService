@@ -25,5 +25,16 @@ public interface UserService extends IService<User> {
      * 分页查询用户
      */
     Page<User> getUserPage(Integer current, Integer size, String username, String role);
+    
+    /**
+     * 验证密码（使用BCrypt加密比较）
+     * 
+     * @param rawPassword 用户输入的明文密码
+     * @param encodedPassword 数据库中存储的BCrypt加密密码
+     * @return true-密码匹配，false-密码不匹配
+     */
+    boolean matchesPassword(String rawPassword, String encodedPassword);
 }
+
+
 
