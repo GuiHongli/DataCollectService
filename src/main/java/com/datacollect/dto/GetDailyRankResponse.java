@@ -67,6 +67,43 @@ public class GetDailyRankResponse {
          */
         @JsonProperty("app_description")
         private String appDescription;
+        
+        /**
+         * 应用排名
+         */
+        @JsonProperty("rank")
+        private Integer rank;
+        
+        /**
+         * 应用图标（base64编码的字符串）
+         */
+        @JsonProperty("icon")
+        private String icon;
+        
+        /**
+         * 应用类型
+         */
+        @JsonProperty("app_category")
+        private String appCategory;
+        
+        /**
+         * 版本更新日期
+         */
+        @JsonProperty("version_update_date")
+        private String versionUpdateDate;
+        
+        /**
+         * 应用评分
+         */
+        @JsonProperty("score")
+        private Double score;
+        
+        /**
+         * 拨测版本
+         */
+        @JsonProperty("dial_version")
+        private String dialVersion;
     }
 }
+
 

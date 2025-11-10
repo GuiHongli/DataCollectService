@@ -27,5 +27,12 @@ public class GetDailyRankRequest {
      */
     @JsonProperty("market_brand")
     private String marketBrand;
+    
+    /**
+     * 应用类别：application（应用）, game（游戏）
+     */
+    @JsonProperty("category")
+    private String category;
 }
+
 

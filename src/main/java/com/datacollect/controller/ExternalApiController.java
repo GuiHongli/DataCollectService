@@ -25,7 +25,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/external")
-@CrossOrigin(origins = "*")
 public class ExternalApiController {
     
     @Autowired
