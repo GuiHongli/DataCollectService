@@ -143,6 +143,7 @@ public class ExternalApiController {
             
             GetVersionHistoryResponse result = externalApiService.getVersionHistory(request);
             
+            response.put("code", 200);
             response.put("message", "success");
             response.put("data", result.getData());
             
@@ -151,6 +152,7 @@ public class ExternalApiController {
         } catch (Exception e) {
             log.error("Failed to get version history", e);
             
+            response.put("code", 500);
             response.put("message", "Failed to get version history: " + e.getMessage());
             response.put("data", null);
             
