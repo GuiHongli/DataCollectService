@@ -91,6 +91,7 @@ public class CollectStrategyController {
                     dto.setName(strategy.getName());
                     dto.setCollectCount(strategy.getCollectCount());
                     dto.setTestCaseSetId(strategy.getTestCaseSetId());
+                    dto.setSelectedTestCaseIds(strategy.getSelectedTestCaseIds());
                     dto.setDescription(strategy.getDescription());
                     dto.setStatus(strategy.getStatus());
                     dto.setCreateBy(strategy.getCreateBy());
