@@ -4,6 +4,8 @@ import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
 import com.datacollect.dto.GetDailyRankRequest;
 import com.datacollect.dto.GetDailyRankResponse;
+import com.datacollect.dto.GetVersionHistoryRequest;
+import com.datacollect.dto.GetVersionHistoryResponse;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.ExternalApiService;
 
@@ -120,6 +122,36 @@ public class ExternalApiController {
             
             response.put("code", 500);
             response.put("message", "Failed to get daily rank: " + e.getMessage());
+            response.put("data", null);
+            
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+    
+    /**
+     * 获取版本历史
+     * 
+     * @param request 获取版本历史请求
+     * @return 获取版本历史响应
+     */
+    @PostMapping("/apps/get_version_history")
+    public ResponseEntity<Map<String, Object>> getVersionHistory(@RequestBody GetVersionHistoryRequest request) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            log.info("Received request to get version history - parameters: {}", request);
+            
+            GetVersionHistoryResponse result = externalApiService.getVersionHistory(request);
+            
+            response.put("message", "success");
+            response.put("data", result.getData());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Failed to get version history", e);
+            
+            response.put("message", "Failed to get version history: " + e.getMessage());
             response.put("data", null);
             
             return ResponseEntity.status(500).body(response);

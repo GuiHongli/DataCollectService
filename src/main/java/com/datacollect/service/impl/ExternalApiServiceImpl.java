@@ -4,6 +4,8 @@ import com.datacollect.dto.AppCheckRequest;
 import com.datacollect.dto.AppCheckResponse;
 import com.datacollect.dto.GetDailyRankRequest;
 import com.datacollect.dto.GetDailyRankResponse;
+import com.datacollect.dto.GetVersionHistoryRequest;
+import com.datacollect.dto.GetVersionHistoryResponse;
 import com.datacollect.dto.UpdateProbedStatusRequest;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.ExternalApiService;
@@ -96,6 +98,31 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 GetDailyRankResponse result = response.getBody();
+                log.info("External API call successful - response: {}", result);
+                return result;
+            } else {
+                log.error("External API call failed - HTTP status code: {}", response.getStatusCode());
+                throw new RuntimeException("External API call failed, HTTP status code: " + response.getStatusCode());
+            }
+            
+        } catch (Exception e) {
+            log.error("Exception calling external API - URL: {}, error message: {}", url, e.getMessage(), e);
+            throw new RuntimeException("Exception calling external API: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public GetVersionHistoryResponse getVersionHistory(GetVersionHistoryRequest request) {
+        String url = externalApiHost + "/api/apps/get_version_history";
+        
+        log.info("Calling external API to get version history - URL: {}, request parameters: {}", url, request);
+        
+        try {
+            ResponseEntity<GetVersionHistoryResponse> response = 
+                httpClientUtil.post(url, request, GetVersionHistoryResponse.class);
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                GetVersionHistoryResponse result = response.getBody();
                 log.info("External API call successful - response: {}", result);
                 return result;
             } else {
