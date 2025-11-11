@@ -46,6 +46,9 @@ public class CollectStrategy {
     @TableField("test_case_execution_counts")
     private String testCaseExecutionCounts;
 
+    @TableField("selected_test_case_ids")
+    private String selectedTestCaseIds;
+
     @TableField("description")
     private String description;
 
