@@ -10,3 +10,10 @@ ADD COLUMN selected_test_case_ids TEXT COMMENT '选中的用例ID列表，JSON�
 ALTER TABLE collect_strategy 
 MODIFY COLUMN selected_test_case_ids TEXT COMMENT '选中的用例ID列表，JSON数组格式，如：[1, 2, 3]';
 
+
+
+
+
+
+
+
