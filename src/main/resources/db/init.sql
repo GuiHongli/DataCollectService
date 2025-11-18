@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS `network_type` (
 CREATE TABLE IF NOT EXISTS `executor` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `ip_address` varchar(50) NOT NULL COMMENT '执行机IP地址',
+  `mac_address` varchar(20) DEFAULT NULL COMMENT '执行机MAC地址',
   `name` varchar(100) NOT NULL COMMENT '执行机名称',
   `region_id` bigint(20) NOT NULL COMMENT '执行机所属地域ID',
   `description` text COMMENT '描述',

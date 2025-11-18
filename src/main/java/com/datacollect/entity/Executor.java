@@ -20,6 +20,9 @@ public class Executor {
     @TableField("ip_address")
     private String ipAddress;
 
+    @TableField("mac_address")
+    private String macAddress;
+
     @NotBlank(message = "执行机名称不能为空")
     @TableField("name")
     private String name;

@@ -158,6 +158,10 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             }
             
             String executorIp = registerMsg.getExecutorIp();
+            String executorMac = registerMsg.getExecutorMac();
+            
+            log.info("收到执行机注册消息 - 执行机IP: {}, MAC地址: {}, 会话ID: {}", 
+                    executorIp, executorMac != null ? executorMac : "未提供", sessionId);
             
             // 验证执行机是否存在
             QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
@@ -170,6 +174,11 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                 
                 executor = new Executor();
                 executor.setIpAddress(executorIp);
+                
+                // 设置MAC地址
+                if (executorMac != null && !executorMac.trim().isEmpty()) {
+                    executor.setMacAddress(executorMac);
+                }
                 
                 // 设置执行机名称，如果注册消息中有则使用，否则使用默认值
                 String executorName = registerMsg.getExecutorName();
@@ -194,15 +203,24 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                 // 保存执行机
                 executorService.save(executor);
                 
-                log.info("执行机已自动创建 - 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
-                        executorIp, executorName, executor.getId(), sessionId);
+                log.info("执行机已自动创建 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                        executorIp, executorMac != null ? executorMac : "未提供", 
+                        executorName, executor.getId(), sessionId);
             } else {
                 // 执行机已存在，更新状态为在线
                 executor.setStatus(1);
+                
+                // 如果提供了MAC地址且与现有不同，则更新MAC地址
+                if (executorMac != null && !executorMac.trim().isEmpty() && 
+                    (executor.getMacAddress() == null || !executorMac.equals(executor.getMacAddress()))) {
+                    executor.setMacAddress(executorMac);
+                }
+                
                 executorService.updateById(executor);
                 
-                log.info("执行机已存在，更新状态为在线 - 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
-                        executorIp, executor.getName(), sessionId);
+                log.info("执行机已存在，更新状态为在线 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 会话ID: {}", 
+                        executorIp, executorMac != null ? executorMac : "未提供", 
+                        executor.getName(), sessionId);
             }
             
             // 注册执行机连接
@@ -223,8 +241,9 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             
             sendMessage(session, response);
             
-            log.info("执行机注册成功 - 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
-                    executorIp, executor.getName(), executor.getId(), sessionId);
+            log.info("执行机注册成功 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                    executorIp, executorMac != null ? executorMac : "未提供", 
+                    executor.getName(), executor.getId(), sessionId);
             
         } catch (Exception e) {
             log.error("处理注册消息异常 - 会话ID: {}, 错误: {}", sessionId, e.getMessage(), e);
