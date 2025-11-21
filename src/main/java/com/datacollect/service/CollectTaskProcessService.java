@@ -18,9 +18,10 @@ public interface CollectTaskProcessService {
      * 处理采集任务创建
      * 
      * @param request 采集任务请求
+     * @param createBy 创建人（下发人）
      * @return 采集任务ID
      */
-    Long processCollectTaskCreation(CollectTaskRequest request);
+    Long processCollectTaskCreation(CollectTaskRequest request, String createBy);
     
     /**
      * 组装用例执行例次列表

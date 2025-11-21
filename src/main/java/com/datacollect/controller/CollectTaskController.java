@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.HttpServletRequest;
+
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
@@ -98,19 +100,24 @@ public class CollectTaskController {
      * 创建采集任务（新接口）
      * 
      * @param request 采集任务请求
+     * @param httpRequest HTTP请求对象，用于获取当前用户信息
      * @return 采集任务ID
      */
     @PostMapping("/create")
-    public Result<Map<String, Object>> createCollectTask(@Valid @RequestBody CollectTaskRequest request) {
+    public Result<Map<String, Object>> createCollectTask(@Valid @RequestBody CollectTaskRequest request, HttpServletRequest httpRequest) {
         log.info("Received create collect task request - task name: {}, collect strategy ID: {}", request.getName(), request.getCollectStrategyId());
         
         try {
+            // 从请求中获取当前用户名（下发人）
+            String createBy = (String) httpRequest.getAttribute("username");
+            log.info("Create collect task - createBy: {}", createBy);
+            
             // 调用处理服务创建采集任务
-            Long collectTaskId = collectTaskProcessService.processCollectTaskCreation(request);
+            Long collectTaskId = collectTaskProcessService.processCollectTaskCreation(request, createBy);
             
             Map<String, Object> result = createSuccessResult(collectTaskId);
             
-            log.info("Collect task created successfully - task ID: {}", collectTaskId);
+            log.info("Collect task created successfully - task ID: {}, createBy: {}", collectTaskId, createBy);
             return Result.success(result);
             
         } catch (Exception e) {
@@ -155,10 +162,11 @@ public class CollectTaskController {
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) Long strategyId,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            HttpServletRequest httpRequest) {
         
         Page<CollectTask> page = new Page<>(current, size);
-        QueryWrapper<CollectTask> queryWrapper = buildPageQueryWrapper(name, strategyId, status);
+        QueryWrapper<CollectTask> queryWrapper = buildPageQueryWrapper(name, strategyId, status, httpRequest);
         Page<CollectTask> result = collectTaskService.page(page, queryWrapper);
         return Result.success(result);
     }
@@ -166,8 +174,21 @@ public class CollectTaskController {
     /**
      * 构建分页查询条件
      */
-    private QueryWrapper<CollectTask> buildPageQueryWrapper(String name, Long strategyId, String status) {
+    private QueryWrapper<CollectTask> buildPageQueryWrapper(String name, Long strategyId, String status, HttpServletRequest httpRequest) {
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
+        
+        // 获取当前用户信息
+        String role = (String) httpRequest.getAttribute("role");
+        String username = (String) httpRequest.getAttribute("username");
+        
+        // 根据用户角色过滤数据
+        // admin 可以查看全部任务，普通用户只能查看自己下发的任务
+        if (role != null && !"admin".equals(role) && username != null) {
+            queryWrapper.eq("create_by", username);
+            log.debug("普通用户查询采集任务 - 用户名: {}, 只能查看自己下发的任务", username);
+        } else {
+            log.debug("管理员查询采集任务 - 角色: {}, 可以查看全部任务", role);
+        }
         
         if (name != null && !name.isEmpty()) {
             queryWrapper.like("name", name);
@@ -184,8 +205,22 @@ public class CollectTaskController {
     }
 
     @GetMapping("/list")
-    public Result<List<CollectTask>> list() {
+    public Result<List<CollectTask>> list(HttpServletRequest httpRequest) {
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
+        
+        // 获取当前用户信息
+        String role = (String) httpRequest.getAttribute("role");
+        String username = (String) httpRequest.getAttribute("username");
+        
+        // 根据用户角色过滤数据
+        // admin 可以查看全部任务，普通用户只能查看自己下发的任务
+        if (role != null && !"admin".equals(role) && username != null) {
+            queryWrapper.eq("create_by", username);
+            log.debug("普通用户查询采集任务列表 - 用户名: {}, 只能查看自己下发的任务", username);
+        } else {
+            log.debug("管理员查询采集任务列表 - 角色: {}, 可以查看全部任务", role);
+        }
+        
         queryWrapper.orderByDesc("create_time");
         List<CollectTask> list = collectTaskService.list(queryWrapper);
         return Result.success(list);

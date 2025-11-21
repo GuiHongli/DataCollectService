@@ -31,9 +31,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     private CollectStrategyService collectStrategyService;
 
     @Override
-    public Long createCollectTask(CollectTaskRequest request) {
-        log.info("Create collect task - task name: {}, collect strategy ID: {}, collect count: {}", 
-                request.getName(), request.getCollectStrategyId(), request.getCollectCount());
+    public Long createCollectTask(CollectTaskRequest request, String createBy) {
+        log.info("Create collect task - task name: {}, collect strategy ID: {}, collect count: {}, createBy: {}", 
+                request.getName(), request.getCollectStrategyId(), request.getCollectCount(), createBy);
         
         // 获取采集策略信息
         CollectStrategy strategy = collectStrategyService.getById(request.getCollectStrategyId());
@@ -62,13 +62,16 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         // 设置自定义参数
         collectTask.setCustomParams(request.getCustomParams());
         
+        // 设置创建人（下发人）
+        collectTask.setCreateBy(createBy);
+        
         LocalDateTime now = LocalDateTime.now();
         collectTask.setCreateTime(now);
         collectTask.setUpdateTime(now);
         
         boolean success = save(collectTask);
         if (success) {
-            log.info("Collect task created successfully - task ID: {}", collectTask.getId());
+            log.info("Collect task created successfully - task ID: {}, createBy: {}", collectTask.getId(), createBy);
             return collectTask.getId();
         } else {
             log.error("Failed to create collect task - task name: {}", request.getName());

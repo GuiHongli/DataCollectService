@@ -105,12 +105,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private String dataCollectServiceBaseUrl;
 
     @Override
-    public Long processCollectTaskCreation(CollectTaskRequest request) {
-        log.info("Start processing collect task creation - task name: {}", request.getName());
+    public Long processCollectTaskCreation(CollectTaskRequest request, String createBy) {
+        log.info("Start processing collect task creation - task name: {}, createBy: {}", request.getName(), createBy);
         
         try {
             // 1. 记录采集任务本身的信息
-            Long collectTaskId = collectTaskService.createCollectTask(request);
+            Long collectTaskId = collectTaskService.createCollectTask(request, createBy);
             log.info("Collect task created successfully - task ID: {}", collectTaskId);
             
             // 2. 获取采集策略关联的测试用例（基于筛选条件）

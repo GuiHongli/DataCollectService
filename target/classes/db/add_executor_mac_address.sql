@@ -30,3 +30,7 @@ WHERE TABLE_SCHEMA = @dbname
   AND TABLE_NAME = @tablename
   AND COLUMN_NAME = @columnname;
 
+
+
+
+

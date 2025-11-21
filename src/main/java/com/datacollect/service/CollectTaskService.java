@@ -16,9 +16,10 @@ public interface CollectTaskService extends IService<CollectTask> {
      * 创建采集任务
      * 
      * @param request 采集任务请求
+     * @param createBy 创建人（下发人）
      * @return 采集任务ID
      */
-    Long createCollectTask(CollectTaskRequest request);
+    Long createCollectTask(CollectTaskRequest request, String createBy);
     
     /**
      * 根据ID获取采集任务
