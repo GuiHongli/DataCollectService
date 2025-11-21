@@ -129,12 +129,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             Long collectTaskId = collectTaskService.createCollectTask(request, createBy);
             log.info("Collect task created successfully - task ID: {}", collectTaskId);
             
-            // 2. 获取采集策略关联的测试用例（基于筛选条件）
-            CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
-            List<Long> testCaseIds = getFilteredTestCaseIds(collectTask, request);
-            
-            // 3. 解析用例配置（如果提供）
+            // 2. 解析用例配置（如果提供）
             Map<Long, TestCaseConfig> testCaseConfigMap = parseTestCaseConfigs(request.getCustomParams());
+            
+            // 3. 获取要下发的用例ID列表（优先使用customParams中的用例，如果没有则从策略筛选）
+            CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+            List<Long> testCaseIds = getTestCaseIds(collectTask, request, testCaseConfigMap);
             
             // 4. 组装用例执行例次列表（根据用例配置中的执行次数）
             List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount(), testCaseConfigMap);
@@ -166,7 +166,30 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * 获取筛选后的测试用例ID列表
+     * 获取要下发的测试用例ID列表
+     * 优先使用customParams中配置的用例ID，如果没有提供则从策略中筛选
+     * 
+     * @param collectTask 采集任务
+     * @param request 采集任务请求
+     * @param testCaseConfigMap 用例配置Map
+     * @return 用例ID列表
+     */
+    private List<Long> getTestCaseIds(CollectTask collectTask, CollectTaskRequest request, Map<Long, TestCaseConfig> testCaseConfigMap) {
+        // 如果提供了用例配置，则使用配置中的用例ID
+        if (testCaseConfigMap != null && !testCaseConfigMap.isEmpty()) {
+            List<Long> testCaseIds = new ArrayList<>(testCaseConfigMap.keySet());
+            log.info("Using test case IDs from customParams config - task ID: {}, test case count: {}", 
+                    collectTask.getId(), testCaseIds.size());
+            return testCaseIds;
+        }
+        
+        // 如果没有提供用例配置，则从策略中筛选（兼容旧逻辑）
+        log.info("No customParams config provided, falling back to strategy filtering - task ID: {}", collectTask.getId());
+        return getFilteredTestCaseIds(collectTask, request);
+    }
+    
+    /**
+     * 获取筛选后的测试用例ID列表（从策略中筛选）
      */
     private List<Long> getFilteredTestCaseIds(CollectTask collectTask, CollectTaskRequest request) {
         // 获取策略信息
