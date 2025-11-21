@@ -459,37 +459,54 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 通过MAC地址查找执行机IP
+     * 通过MAC地址查找执行机IP（支持一个MAC地址关联多个IP，优先使用在线状态的IP）
      * 
      * @param executorId 执行机ID
      * @return 执行机IP地址
      */
     private String getExecutorIpByMacAddress(Long executorId) {
         try {
-            // 获取执行机关联的MAC地址
+            // 获取执行机关联的MAC地址列表
             List<ExecutorMacAddress> macAddresses = executorMacAddressService.getByExecutorId(executorId);
             if (macAddresses != null && !macAddresses.isEmpty()) {
                 // 使用第一个MAC地址（如果有多个，使用第一个）
                 ExecutorMacAddress macAddress = macAddresses.get(0);
                 String macAddressStr = macAddress.getMacAddress();
                 
-                // 通过MAC地址查找执行机（优先查找关联的执行机）
-                if (macAddress.getExecutorId() != null) {
-                    Executor executor = executorService.getById(macAddress.getExecutorId());
-                    if (executor != null) {
-                        log.info("通过MAC地址查找执行机IP - MAC地址: {}, 执行机ID: {}, IP: {}", 
-                                macAddressStr, executorId, executor.getIpAddress());
-                        return executor.getIpAddress();
+                // 通过MAC地址查找所有关联的IP地址
+                List<ExecutorMacAddress> allMacAddressRecords = executorMacAddressService.getAllByMacAddress(macAddressStr);
+                if (allMacAddressRecords != null && !allMacAddressRecords.isEmpty()) {
+                    // 优先选择在线状态的IP，如果没有在线状态，则使用第一个
+                    String selectedIp = null;
+                    for (ExecutorMacAddress record : allMacAddressRecords) {
+                        if (record.getIpAddress() != null && !record.getIpAddress().trim().isEmpty()) {
+                            // 检查该IP对应的执行机是否在线（通过WebSocket）
+                            if (executorWebSocketService.isExecutorOnline(record.getIpAddress())) {
+                                selectedIp = record.getIpAddress();
+                                log.info("通过MAC地址找到在线执行机IP - MAC地址: {}, IP: {}", macAddressStr, selectedIp);
+                                break;
+                            }
+                            // 如果没有找到在线IP，使用第一个IP
+                            if (selectedIp == null) {
+                                selectedIp = record.getIpAddress();
+                            }
+                        }
+                    }
+                    
+                    if (selectedIp != null) {
+                        log.info("通过MAC地址查找执行机IP - MAC地址: {}, 执行机ID: {}, 选择的IP: {}", 
+                                macAddressStr, executorId, selectedIp);
+                        return selectedIp;
                     }
                 }
                 
-                // 如果没有关联执行机，通过MAC地址查找执行机（通过executor表的mac_address字段）
+                // 如果没有找到MAC地址记录，尝试通过executor表的mac_address字段查找（兼容旧逻辑）
                 QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
                 queryWrapper.eq("mac_address", macAddressStr);
                 queryWrapper.eq("deleted", 0);
                 Executor executor = executorService.getOne(queryWrapper);
                 if (executor != null) {
-                    log.info("通过MAC地址查找执行机IP - MAC地址: {}, 执行机ID: {}, IP: {}", 
+                    log.info("通过MAC地址查找执行机IP（兼容旧逻辑） - MAC地址: {}, 执行机ID: {}, IP: {}", 
                             macAddressStr, executor.getId(), executor.getIpAddress());
                     return executor.getIpAddress();
                 }

@@ -14,12 +14,20 @@ import java.util.List;
 public interface ExecutorMacAddressService extends IService<ExecutorMacAddress> {
     
     /**
-     * 根据MAC地址查找记录
+     * 根据MAC地址查找记录（返回第一条，兼容旧逻辑）
      * 
      * @param macAddress MAC地址
      * @return MAC地址记录
      */
     ExecutorMacAddress getByMacAddress(String macAddress);
+    
+    /**
+     * 根据MAC地址查找所有记录（支持一个MAC地址关联多个IP）
+     * 
+     * @param macAddress MAC地址
+     * @return MAC地址记录列表
+     */
+    List<ExecutorMacAddress> getAllByMacAddress(String macAddress);
     
     /**
      * 根据执行机ID查找MAC地址列表

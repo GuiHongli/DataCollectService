@@ -46,5 +46,14 @@ public class ExecutorMacAddressController {
         List<ExecutorMacAddress> macAddresses = executorMacAddressService.getByExecutorId(executorId);
         return Result.success(macAddresses);
     }
+    
+    /**
+     * 根据MAC地址获取所有关联的IP地址列表
+     */
+    @GetMapping("/mac/{macAddress}/ips")
+    public Result<List<ExecutorMacAddress>> getIpsByMacAddress(@PathVariable String macAddress) {
+        List<ExecutorMacAddress> macAddresses = executorMacAddressService.getAllByMacAddress(macAddress);
+        return Result.success(macAddresses);
+    }
 }
 
