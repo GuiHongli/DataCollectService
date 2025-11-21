@@ -103,6 +103,22 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Value("${datacollect.service.base-url:http://localhost:8080}")
     private String dataCollectServiceBaseUrl;
+    
+    /**
+     * 用例配置缓存（key: collectTaskId, value: Map<testCaseId, TestCaseConfig>）
+     * 用于存储任务级别的用例配置（执行次数和自定义参数）
+     */
+    private final java.util.concurrent.ConcurrentHashMap<Long, Map<Long, TestCaseConfig>> testCaseConfigCache = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    /**
+     * 用例配置内部类
+     */
+    @lombok.Data
+    private static class TestCaseConfig {
+        private Long testCaseId;
+        private Integer executionCount;
+        private List<Map<String, Object>> customParams; // [{"key": "k", "value": ["v1", "v2"]}]
+    }
 
     @Override
     public Long processCollectTaskCreation(CollectTaskRequest request, String createBy) {
@@ -117,21 +133,28 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
             List<Long> testCaseIds = getFilteredTestCaseIds(collectTask, request);
             
-            // 3. 组装用例执行例次列表
-            List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount());
+            // 3. 解析用例配置（如果提供）
+            Map<Long, TestCaseConfig> testCaseConfigMap = parseTestCaseConfigs(request.getCustomParams());
+            
+            // 4. 组装用例执行例次列表（根据用例配置中的执行次数）
+            List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount(), testCaseConfigMap);
             log.info("Test case execution instances assembled - instance count: {} - task ID: {}", instances.size(), collectTaskId);
             
-            // 4. 分配用例执行例次到逻辑环境
+            // 5. 分配用例执行例次到逻辑环境
             List<TestCaseExecutionInstance> distributedInstances = distributeInstancesToEnvironments(instances, request.getLogicEnvironmentIds());
             log.info("Test case execution instances distribution completed - task ID: {}", collectTaskId);
             
-            // 5. 保存用例执行例次
+            // 6. 保存用例执行例次
             saveTestCaseInstances(distributedInstances, collectTaskId);
             
-            // 6. 更新任务总用例数
+            // 7. 更新任务总用例数
             collectTaskService.updateTaskProgress(collectTaskId, instances.size(), 0, 0);
             
-            // 7. 异步调用执行机服务
+            // 8. 保存用例配置到任务中（用于后续获取用例自定义参数）
+            // 将用例配置存储到CollectTask中，以便后续使用
+            storeTestCaseConfigs(collectTaskId, testCaseConfigMap);
+            
+            // 9. 异步调用执行机服务
             callExecutorServicesAsync(distributedInstances, collectTaskId);
             
             return collectTaskId;
@@ -196,6 +219,86 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
+     * 解析用例配置JSON字符串
+     * 
+     * @param testCaseConfigsJson 用例配置JSON字符串
+     * @return 用例配置Map（key: testCaseId, value: TestCaseConfig）
+     */
+    private Map<Long, TestCaseConfig> parseTestCaseConfigs(String testCaseConfigsJson) {
+        Map<Long, TestCaseConfig> configMap = new HashMap<>();
+        
+        if (testCaseConfigsJson == null || testCaseConfigsJson.trim().isEmpty()) {
+            log.debug("TestCase configs is empty, using default configuration");
+            return configMap;
+        }
+        
+        try {
+            // 解析JSON数组：[{"testCaseId": 1, "executionCount": 2, "customParams": [...]}]
+            List<Map<String, Object>> configList = objectMapper.readValue(
+                testCaseConfigsJson, 
+                new TypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            for (Map<String, Object> configObj : configList) {
+                TestCaseConfig config = new TestCaseConfig();
+                
+                // 解析testCaseId
+                Object testCaseIdObj = configObj.get("testCaseId");
+                if (testCaseIdObj != null) {
+                    Long testCaseId = testCaseIdObj instanceof Number 
+                        ? ((Number) testCaseIdObj).longValue() 
+                        : Long.parseLong(String.valueOf(testCaseIdObj));
+                    config.setTestCaseId(testCaseId);
+                    
+                    // 解析executionCount
+                    Object executionCountObj = configObj.get("executionCount");
+                    if (executionCountObj != null) {
+                        Integer executionCount = executionCountObj instanceof Number 
+                            ? ((Number) executionCountObj).intValue() 
+                            : Integer.parseInt(String.valueOf(executionCountObj));
+                        config.setExecutionCount(executionCount);
+                    }
+                    
+                    // 解析customParams
+                    Object customParamsObj = configObj.get("customParams");
+                    if (customParamsObj != null) {
+                        // customParams 应该是 List<Map<String, Object>> 格式
+                        if (customParamsObj instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, Object>> customParamsList = (List<Map<String, Object>>) customParamsObj;
+                            config.setCustomParams(customParamsList);
+                        }
+                    }
+                    
+                    configMap.put(testCaseId, config);
+                    log.debug("Parsed test case config - testCaseId: {}, executionCount: {}, customParams: {}", 
+                            testCaseId, config.getExecutionCount(), config.getCustomParams());
+                }
+            }
+            
+            log.info("Parsed test case configs - config count: {}", configMap.size());
+        } catch (Exception e) {
+            log.error("Failed to parse test case configs JSON: {}", e.getMessage(), e);
+            // 解析失败时返回空Map，使用默认配置
+        }
+        
+        return configMap;
+    }
+    
+    /**
+     * 存储用例配置到缓存
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param testCaseConfigMap 用例配置Map
+     */
+    private void storeTestCaseConfigs(Long collectTaskId, Map<Long, TestCaseConfig> testCaseConfigMap) {
+        if (testCaseConfigMap != null && !testCaseConfigMap.isEmpty()) {
+            testCaseConfigCache.put(collectTaskId, testCaseConfigMap);
+            log.info("Stored test case configs to cache - task ID: {}, config count: {}", collectTaskId, testCaseConfigMap.size());
+        }
+    }
+    
+    /**
      * 保存测试用例执行实例
      */
     private void saveTestCaseInstances(List<TestCaseExecutionInstance> distributedInstances, Long collectTaskId) {
@@ -230,12 +333,31 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
 
     @Override
     public List<TestCaseExecutionInstance> assembleTestCaseInstances(Long collectTaskId, List<Long> testCaseIds, Integer collectCount) {
-        log.info("Start assembling test case execution instances - task ID: {}, test case count: {}, collect count: {}", collectTaskId, testCaseIds.size(), collectCount);
+        // 兼容旧接口，使用默认配置
+        return assembleTestCaseInstances(collectTaskId, testCaseIds, collectCount, new HashMap<>());
+    }
+    
+    /**
+     * 组装用例执行例次列表（支持用例配置）
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param testCaseIds 测试用例ID列表
+     * @param collectCount 默认采集次数（如果用例配置中没有指定，则使用此值）
+     * @param testCaseConfigMap 用例配置Map（key: testCaseId, value: TestCaseConfig）
+     * @return 用例执行例次列表
+     */
+    private List<TestCaseExecutionInstance> assembleTestCaseInstances(Long collectTaskId, List<Long> testCaseIds, Integer collectCount, Map<Long, TestCaseConfig> testCaseConfigMap) {
+        log.info("Start assembling test case execution instances - task ID: {}, test case count: {}, default collect count: {}, config count: {}", 
+                collectTaskId, testCaseIds.size(), collectCount, testCaseConfigMap.size());
         
         List<TestCaseExecutionInstance> instances = new ArrayList<>();
         
         for (Long testCaseId : testCaseIds) {
-            for (int round = 1; round <= collectCount; round++) {
+            // 从用例配置中获取执行次数，如果没有配置则使用默认值
+            TestCaseConfig config = testCaseConfigMap.get(testCaseId);
+            int executionCount = (config != null && config.getExecutionCount() != null) ? config.getExecutionCount() : collectCount;
+            
+            for (int round = 1; round <= executionCount; round++) {
                 TestCaseExecutionInstance instance = new TestCaseExecutionInstance();
                 instance.setCollectTaskId(collectTaskId);
                 instance.setTestCaseId(testCaseId);
@@ -243,6 +365,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 instance.setStatus("RUNNING");
                 instances.add(instance);
             }
+            
+            log.debug("Assembled instances for test case {} - execution count: {}", testCaseId, executionCount);
         }
         
         log.info("Test case execution instances assembly completed - instance count: {} - task ID: {}", instances.size(), collectTaskId);
@@ -604,6 +728,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         // 解析已过滤的用例级参数对象 {"caseId":[{"key":"k","value":"v"}...]}
         Map<String, List<Map<String, String>>> testCaseParamsById = parseTestCaseParamsObjectSafely(filteredTestCaseParamsJson);
 
+        // 获取任务级别的用例自定义参数（从testCaseConfigs中）
+        Map<String, List<Map<String, String>>> taskTestCaseParamsById = getTaskTestCaseCustomParams(collectTaskId, caseIds);
+
         // 为每个用例生成合并后的参数数组，并输出为 { caseId: [ {key,value}... ] }
         Map<String, List<Map<String, String>>> mergedByCase = new HashMap<>();
         
@@ -612,13 +739,20 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         
         for (Long caseId : caseIds) {
             String caseIdStr = String.valueOf(caseId);
-            List<Map<String, String>> testCaseList = testCaseParamsById.getOrDefault(caseIdStr, new ArrayList<>());
+            
+            // 策略级用例参数（从策略的testCaseCustomParams中获取）
+            List<Map<String, String>> strategyTestCaseList = testCaseParamsById.getOrDefault(caseIdStr, new ArrayList<>());
+            
+            // 任务级用例参数（从testCaseConfigs中获取，最高优先级）
+            List<Map<String, String>> taskTestCaseList = taskTestCaseParamsById.getOrDefault(caseIdStr, new ArrayList<>());
+            
             Map<String, String> merged = new java.util.LinkedHashMap<>();
 
-            // 合并顺序：用例(最低) -> 策略 -> 任务(最高)
-            merged.putAll(toKeyValueMap(testCaseList));
+            // 合并顺序：策略级用例参数(最低) -> 策略级参数 -> 任务级参数 -> 任务级用例参数(最高)
+            merged.putAll(toKeyValueMap(strategyTestCaseList));
             merged.putAll(strategyParamMap);
             merged.putAll(taskParamMap);
+            merged.putAll(toKeyValueMap(taskTestCaseList)); // 任务级用例参数最后合并，覆盖前面的
             
             // 添加isnew参数
             Boolean isNew = appIsNewMap.get(caseId);
@@ -639,6 +773,72 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
     }
 
+    /**
+     * 获取任务级别的用例自定义参数
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param caseIds 用例ID集合
+     * @return 用例自定义参数Map（key: caseId字符串, value: 参数列表）
+     */
+    private Map<String, List<Map<String, String>>> getTaskTestCaseCustomParams(Long collectTaskId, java.util.Set<Long> caseIds) {
+        Map<String, List<Map<String, String>>> result = new HashMap<>();
+        
+        // 从缓存中获取用例配置
+        Map<Long, TestCaseConfig> configMap = testCaseConfigCache.get(collectTaskId);
+        if (configMap == null || configMap.isEmpty()) {
+            log.debug("No task-level test case configs found - task ID: {}", collectTaskId);
+            return result;
+        }
+        
+        // 转换格式：从 TestCaseConfig 的 customParams 转换为 List<Map<String, String>>
+        for (Long caseId : caseIds) {
+            TestCaseConfig config = configMap.get(caseId);
+            if (config != null && config.getCustomParams() != null && !config.getCustomParams().isEmpty()) {
+                List<Map<String, String>> paramList = new ArrayList<>();
+                
+                for (Map<String, Object> paramObj : config.getCustomParams()) {
+                    Map<String, String> param = new HashMap<>();
+                    
+                    // 处理key
+                    Object keyObj = paramObj.get("key");
+                    if (keyObj != null) {
+                        param.put("key", String.valueOf(keyObj));
+                    }
+                    
+                    // 处理value（可能是数组或字符串）
+                    Object valueObj = paramObj.get("value");
+                    if (valueObj != null) {
+                        if (valueObj instanceof List) {
+                            // 如果是数组，转换为逗号分隔的字符串
+                            @SuppressWarnings("unchecked")
+                            List<Object> valueList = (List<Object>) valueObj;
+                            String valueStr = valueList.stream()
+                                .filter(v -> v != null && !String.valueOf(v).trim().isEmpty())
+                                .map(v -> String.valueOf(v).trim())
+                                .collect(Collectors.joining(","));
+                            param.put("value", valueStr);
+                        } else {
+                            // 如果是字符串，直接使用
+                            param.put("value", String.valueOf(valueObj));
+                        }
+                    }
+                    
+                    if (param.containsKey("key") && param.containsKey("value")) {
+                        paramList.add(param);
+                    }
+                }
+                
+                if (!paramList.isEmpty()) {
+                    result.put(String.valueOf(caseId), paramList);
+                    log.debug("Got task-level custom params for test case {} - param count: {}", caseId, paramList.size());
+                }
+            }
+        }
+        
+        log.info("Got task-level test case custom params - task ID: {}, case count: {}", collectTaskId, result.size());
+        return result;
+    }
+    
     // 解析形如 [{"key":"a","value":"b"}] 的JSON数组
     private List<Map<String, String>> parseKeyValueArraySafely(String jsonArray) {
         List<Map<String, String>> list = new ArrayList<>();

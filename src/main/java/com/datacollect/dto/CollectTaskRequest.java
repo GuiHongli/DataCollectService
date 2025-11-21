@@ -65,7 +65,13 @@ public class CollectTaskRequest {
     private List<Long> logicEnvironmentIds;
     
     /**
-     * 自定义参数列表（JSON格式）
+     * 任务级别自定义参数列表（JSON格式）
+     */
+    private String taskCustomParams;
+    
+    /**
+     * 用例配置列表（JSON格式）
+     * 格式：[{"testCaseId": 1, "executionCount": 2, "customParams": [{"key": "k", "value": ["v1", "v2"]}]}]
      */
     private String customParams;
 }

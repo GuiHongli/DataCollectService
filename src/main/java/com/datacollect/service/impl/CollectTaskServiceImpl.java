@@ -59,8 +59,8 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         collectTask.setSuccessTestCaseCount(0);
         collectTask.setFailedTestCaseCount(0);
         
-        // 设置自定义参数
-        collectTask.setCustomParams(request.getCustomParams());
+        // 设置任务级别自定义参数
+        collectTask.setCustomParams(request.getTaskCustomParams());
         
         // 设置创建人（下发人）
         collectTask.setCreateBy(createBy);
