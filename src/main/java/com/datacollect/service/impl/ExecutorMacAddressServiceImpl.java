@@ -24,7 +24,7 @@ public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddres
         queryWrapper.last("LIMIT 1");
         return getOne(queryWrapper);
     }
-    
+
     @Override
     public List<ExecutorMacAddress> getAllByMacAddress(String macAddress) {
         QueryWrapper<ExecutorMacAddress> queryWrapper = new QueryWrapper<>();

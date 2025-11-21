@@ -13,10 +13,12 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.entity.Region;
 import com.datacollect.entity.dto.ExecutorDTO;
 import com.datacollect.mapper.ExecutorMapper;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.RegionService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,9 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
 
     @Autowired
     private RegionService regionService;
+    
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
 
     @Override
     public Page<ExecutorDTO> getExecutorPageWithRegion(Integer current, Integer size, String name, String ipAddress, Long regionId) {
@@ -115,6 +120,17 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
         // 构建完整的地域路径
         String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
         dto.setRegionName(regionPath);
+        
+        // 查询执行机关联的MAC地址（如果有多个，显示第一个）
+        List<ExecutorMacAddress> macAddresses = executorMacAddressService.getByExecutorId(executor.getId());
+        if (macAddresses != null && !macAddresses.isEmpty()) {
+            // 如果有多个MAC地址，用逗号分隔显示
+            String macAddressStr = macAddresses.stream()
+                    .map(ExecutorMacAddress::getMacAddress)
+                    .distinct()
+                    .collect(Collectors.joining(", "));
+            dto.setMacAddress(macAddressStr);
+        }
         
         return dto;
     }

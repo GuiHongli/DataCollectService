@@ -49,6 +49,8 @@ public class ExecutorController {
             executor.setMacAddress(request.getMacAddress());
             executor.setRegionId(request.getRegionId());
             executor.setDescription(request.getDescription());
+            // 如果请求中没有提供status，默认设置为1（在线）
+            executor.setStatus(request.getStatus() != null ? request.getStatus() : 1);
             
             if (existingExecutor != null) {
                 // 如果存在，则更新（replace）
@@ -120,6 +122,10 @@ public class ExecutorController {
             executor.setMacAddress(request.getMacAddress());
             executor.setRegionId(request.getRegionId());
             executor.setDescription(request.getDescription());
+            // 如果请求中提供了status，则更新；否则保持原值
+            if (request.getStatus() != null) {
+                executor.setStatus(request.getStatus());
+            }
             
             Result<Executor> result = performUpdate(id, executor);
             

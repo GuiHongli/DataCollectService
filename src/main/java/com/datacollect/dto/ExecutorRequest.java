@@ -33,5 +33,10 @@ public class ExecutorRequest {
     private Long regionId;
     
     private String description;
+    
+    /**
+     * 执行机状态（0: 离线, 1: 在线, 2: 故障）
+     */
+    private Integer status;
 }
 

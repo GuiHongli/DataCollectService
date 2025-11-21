@@ -14,6 +14,7 @@ public class ExecutorDTO {
     private String regionName;      // 地域名称（完整路径：地域+国家+省份+城市）
     private String description;
     private Integer status;
+    private String macAddress;      // MAC地址（从executor_mac_address表获取）
     private String createBy;
     private String updateBy;
     private LocalDateTime createTime;
