@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.entity.dto.ExecutorDTO;
+import com.datacollect.dto.ExecutorRequest;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.ExecutorMacAddressService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -24,63 +27,108 @@ public class ExecutorController {
 
     @Autowired
     private ExecutorService executorService;
+    
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
 
     @PostMapping
-    public Result<Executor> create(@Valid @RequestBody Executor executor) {
+    public Result<Executor> create(@Valid @RequestBody ExecutorRequest request) {
         try {
-            log.info("Create executor - name: {}, IP address: {}", executor.getName(), executor.getIpAddress());
+            log.info("Create executor - name: {}, IP address: {}, MAC address ID: {}", 
+                    request.getName(), request.getIpAddress(), request.getMacAddressId());
             
             // 根据IP地址查找已存在的执行机（未删除的）
             QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("ip_address", executor.getIpAddress());
+            queryWrapper.eq("ip_address", request.getIpAddress());
             queryWrapper.eq("deleted", 0); // 只查找未删除的记录
             Executor existingExecutor = executorService.getOne(queryWrapper);
+            
+            Executor executor = new Executor();
+            executor.setName(request.getName());
+            executor.setIpAddress(request.getIpAddress());
+            executor.setMacAddress(request.getMacAddress());
+            executor.setRegionId(request.getRegionId());
+            executor.setDescription(request.getDescription());
             
             if (existingExecutor != null) {
                 // 如果存在，则更新（replace）
                 log.info("Executor with IP {} already exists (ID: {}), performing update instead of insert", 
-                        executor.getIpAddress(), existingExecutor.getId());
+                        request.getIpAddress(), existingExecutor.getId());
                 executor.setId(existingExecutor.getId());
                 boolean success = executorService.updateById(executor);
                 if (success) {
+                    // 关联MAC地址
+                    associateMacAddress(executor.getId(), request.getMacAddressId());
                     log.info("Executor updated successfully via IP replace - ID: {}, IP: {}", 
-                            executor.getId(), executor.getIpAddress());
+                            executor.getId(), request.getIpAddress());
                     return Result.success(executor);
                 } else {
-                    log.error("Executor update failed via IP replace - IP: {}", executor.getIpAddress());
+                    log.error("Executor update failed via IP replace - IP: {}", request.getIpAddress());
                     return Result.error("Update failed via IP replace");
                 }
             } else {
                 // 如果不存在，则插入
                 boolean success = executorService.save(executor);
                 if (success) {
+                    // 关联MAC地址
+                    associateMacAddress(executor.getId(), request.getMacAddressId());
                     log.info("Executor created successfully - ID: {}, IP: {}", 
-                            executor.getId(), executor.getIpAddress());
+                            executor.getId(), request.getIpAddress());
                     return Result.success(executor);
                 } else {
-                    log.error("Executor creation failed - IP: {}", executor.getIpAddress());
+                    log.error("Executor creation failed - IP: {}", request.getIpAddress());
                     return Result.error("Creation failed");
                 }
             }
         } catch (Exception e) {
             log.error("Exception creating/updating executor - IP: {}, error: {}", 
-                    executor.getIpAddress(), e.getMessage(), e);
+                    request.getIpAddress(), e.getMessage(), e);
             return Result.error("Create/Update failed: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 关联MAC地址到执行机
+     */
+    private void associateMacAddress(Long executorId, Long macAddressId) {
+        if (macAddressId != null) {
+            ExecutorMacAddress macAddress = executorMacAddressService.getById(macAddressId);
+            if (macAddress != null) {
+                macAddress.setExecutorId(executorId);
+                executorMacAddressService.updateById(macAddress);
+                log.info("MAC地址已关联到执行机 - MAC地址ID: {}, 执行机ID: {}", macAddressId, executorId);
+            }
         }
     }
 
     @PutMapping("/{id}")
-    public Result<Executor> update(@PathVariable @NotNull Long id, @Valid @RequestBody Executor executor) {
+    public Result<Executor> update(@PathVariable @NotNull Long id, @Valid @RequestBody ExecutorRequest request) {
         try {
-            log.info("Update executor - ID: {}, name: {}, IP address: {}", id, executor.getName(), executor.getIpAddress());
+            log.info("Update executor - ID: {}, name: {}, IP address: {}, MAC address ID: {}", 
+                    id, request.getName(), request.getIpAddress(), request.getMacAddressId());
             
             // 检查IP地址是否已被其他执行机使用
-            if (isIpAddressInUse(executor.getIpAddress(), id)) {
-                return Result.error("IP address " + executor.getIpAddress() + " is already used by another executor");
+            if (isIpAddressInUse(request.getIpAddress(), id)) {
+                return Result.error("IP address " + request.getIpAddress() + " is already used by another executor");
             }
             
             // 执行更新
-            return performUpdate(id, executor);
+            Executor executor = new Executor();
+            executor.setId(id);
+            executor.setName(request.getName());
+            executor.setIpAddress(request.getIpAddress());
+            executor.setMacAddress(request.getMacAddress());
+            executor.setRegionId(request.getRegionId());
+            executor.setDescription(request.getDescription());
+            
+            Result<Executor> result = performUpdate(id, executor);
+            
+            // 关联MAC地址
+            if (result.getCode() == 200) {
+                associateMacAddress(id, request.getMacAddressId());
+            }
+            
+            return result;
             
         } catch (Exception e) {
             log.error("Exception updating executor - ID: {}, error: {}", id, e.getMessage(), e);

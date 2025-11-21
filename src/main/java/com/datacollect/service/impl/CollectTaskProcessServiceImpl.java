@@ -16,6 +16,7 @@ import com.datacollect.service.TestCaseService;
 import com.datacollect.service.TestCaseSetService;
 import com.datacollect.service.LogicEnvironmentService;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.LogicEnvironmentUeService;
 import com.datacollect.service.UeService;
 import com.datacollect.service.NetworkTypeService;
@@ -25,6 +26,7 @@ import com.datacollect.entity.LogicEnvironmentUe;
 import com.datacollect.entity.Ue;
 import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.common.exception.CollectTaskException;
 import com.datacollect.util.HttpClientUtil;
@@ -82,6 +84,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private ExecutorService executorService;
+    
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
     
     @Autowired
     private HttpClientUtil httpClientUtil;
@@ -423,14 +428,25 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * 获取环境到执行机的映射
+     * 获取环境到执行机的映射（通过MAC地址查找执行机IP）
      */
     private Map<Long, String> getEnvironmentToExecutorMap(List<Long> logicEnvironmentIds) {
         Map<Long, String> environmentToExecutorMap = new HashMap<>();
         for (Long logicEnvironmentId : logicEnvironmentIds) {
             LogicEnvironmentDTO logicEnvironmentDTO = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironmentId);
-            if (logicEnvironmentDTO != null && logicEnvironmentDTO.getExecutorIpAddress() != null) {
-                environmentToExecutorMap.put(logicEnvironmentId, logicEnvironmentDTO.getExecutorIpAddress());
+            if (logicEnvironmentDTO != null && logicEnvironmentDTO.getExecutorId() != null) {
+                // 通过执行机ID获取MAC地址，然后通过MAC地址查找执行机IP
+                String executorIp = getExecutorIpByMacAddress(logicEnvironmentDTO.getExecutorId());
+                if (executorIp != null) {
+                    environmentToExecutorMap.put(logicEnvironmentId, executorIp);
+                } else {
+                    // 如果没有MAC地址，则使用原来的IP地址（兼容旧逻辑）
+                    if (logicEnvironmentDTO.getExecutorIpAddress() != null) {
+                        environmentToExecutorMap.put(logicEnvironmentId, logicEnvironmentDTO.getExecutorIpAddress());
+                        log.warn("执行机未关联MAC地址，使用IP地址 - 执行机ID: {}, IP: {}", 
+                                logicEnvironmentDTO.getExecutorId(), logicEnvironmentDTO.getExecutorIpAddress());
+                    }
+                }
             }
         }
         
@@ -440,6 +456,51 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         return environmentToExecutorMap;
+    }
+    
+    /**
+     * 通过MAC地址查找执行机IP
+     * 
+     * @param executorId 执行机ID
+     * @return 执行机IP地址
+     */
+    private String getExecutorIpByMacAddress(Long executorId) {
+        try {
+            // 获取执行机关联的MAC地址
+            List<ExecutorMacAddress> macAddresses = executorMacAddressService.getByExecutorId(executorId);
+            if (macAddresses != null && !macAddresses.isEmpty()) {
+                // 使用第一个MAC地址（如果有多个，使用第一个）
+                ExecutorMacAddress macAddress = macAddresses.get(0);
+                String macAddressStr = macAddress.getMacAddress();
+                
+                // 通过MAC地址查找执行机（优先查找关联的执行机）
+                if (macAddress.getExecutorId() != null) {
+                    Executor executor = executorService.getById(macAddress.getExecutorId());
+                    if (executor != null) {
+                        log.info("通过MAC地址查找执行机IP - MAC地址: {}, 执行机ID: {}, IP: {}", 
+                                macAddressStr, executorId, executor.getIpAddress());
+                        return executor.getIpAddress();
+                    }
+                }
+                
+                // 如果没有关联执行机，通过MAC地址查找执行机（通过executor表的mac_address字段）
+                QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("mac_address", macAddressStr);
+                queryWrapper.eq("deleted", 0);
+                Executor executor = executorService.getOne(queryWrapper);
+                if (executor != null) {
+                    log.info("通过MAC地址查找执行机IP - MAC地址: {}, 执行机ID: {}, IP: {}", 
+                            macAddressStr, executor.getId(), executor.getIpAddress());
+                    return executor.getIpAddress();
+                }
+            }
+            
+            log.warn("执行机未关联MAC地址 - 执行机ID: {}", executorId);
+            return null;
+        } catch (Exception e) {
+            log.error("通过MAC地址查找执行机IP失败 - 执行机ID: {}, 错误: {}", executorId, e.getMessage(), e);
+            return null;
+        }
     }
 
     /**

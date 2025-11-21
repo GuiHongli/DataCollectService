@@ -4,7 +4,9 @@ import com.alibaba.fastjson.JSON;
 import com.datacollect.dto.ExecutorRegisterMessage;
 import com.datacollect.dto.WebSocketMessage;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.ExecutorWebSocketService;
 import com.datacollect.service.impl.ExecutorWebSocketServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -37,6 +39,9 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
     
     @Autowired
     private ExecutorService executorService;
+    
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
     
     /**
      * 心跳检查定时任务
@@ -221,6 +226,11 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                 log.info("执行机已存在，更新状态为在线 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 会话ID: {}", 
                         executorIp, executorMac != null ? executorMac : "未提供", 
                         executor.getName(), sessionId);
+            }
+            
+            // 如果提供了MAC地址，注册到MAC地址表
+            if (executorMac != null && !executorMac.trim().isEmpty()) {
+                executorMacAddressService.registerOrUpdateMacAddress(executorMac, executor.getId(), executorIp);
             }
             
             // 注册执行机连接
