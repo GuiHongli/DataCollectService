@@ -77,16 +77,46 @@ public class DashboardStatisticsScheduleService {
     
     /**
      * 更新所有地域的统计数据
+     * 从最小地域（level=4，城市）开始统计，然后向上汇总到level=3（省份）、level=2（国家）、level=1（片区）
      */
     private void updateAllRegionStatistics() {
         try {
-            // 获取所有城市和国家级别的地域（level=2或level=4）
+            // 第一步：统计最小地域（level=4，城市）
+            log.info("Step 1: Updating statistics for level 4 regions (cities)...");
+            updateRegionsByLevel(4);
+            
+            // 第二步：汇总level=3（省份）的统计数据
+            log.info("Step 2: Aggregating statistics for level 3 regions (provinces)...");
+            aggregateRegionsByLevel(3, 4);
+            
+            // 第三步：汇总level=2（国家）的统计数据
+            log.info("Step 3: Aggregating statistics for level 2 regions (countries)...");
+            aggregateRegionsByLevel(2, 4);
+            
+            // 第四步：汇总level=1（片区）的统计数据
+            log.info("Step 4: Aggregating statistics for level 1 regions (regions)...");
+            aggregateRegionsByLevel(1, 2);
+            
+            log.info("All region statistics update completed");
+            
+        } catch (Exception e) {
+            log.error("Failed to update all region statistics - error: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 更新指定层级的地域统计数据（直接计算，不汇总）
+     * 
+     * @param level 地域层级
+     */
+    private void updateRegionsByLevel(Integer level) {
+        try {
             QueryWrapper<Region> regionQuery = new QueryWrapper<>();
-            regionQuery.in("level", 2, 4);
+            regionQuery.eq("level", level);
             regionQuery.eq("deleted", 0);
             List<Region> regions = regionService.list(regionQuery);
             
-            log.info("Found {} regions to update statistics", regions.size());
+            log.info("Found {} level {} regions to update statistics", regions.size(), level);
             
             int successCount = 0;
             int failCount = 0;
@@ -96,19 +126,68 @@ public class DashboardStatisticsScheduleService {
                     Map<String, Object> stats = dashboardStatisticsService.calculateRegionStats(region.getId());
                     dashboardCacheService.updateRegionStats(region.getId(), stats);
                     successCount++;
-                    log.debug("Region statistics updated - region ID: {}, name: {}", 
-                            region.getId(), region.getName());
+                    log.debug("Region statistics updated - region ID: {}, name: {}, level: {}", 
+                            region.getId(), region.getName(), level);
                 } catch (Exception e) {
                     failCount++;
-                    log.warn("Failed to update region statistics - region ID: {}, name: {}, error: {}", 
-                            region.getId(), region.getName(), e.getMessage());
+                    log.warn("Failed to update region statistics - region ID: {}, name: {}, level: {}, error: {}", 
+                            region.getId(), region.getName(), level, e.getMessage());
                 }
             }
             
-            log.info("Region statistics update completed - success: {}, failed: {}", successCount, failCount);
+            log.info("Level {} region statistics update completed - success: {}, failed: {}", 
+                    level, successCount, failCount);
             
         } catch (Exception e) {
-            log.error("Failed to update all region statistics - error: {}", e.getMessage(), e);
+            log.error("Failed to update level {} region statistics - error: {}", level, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 汇总指定层级的地域统计数据（从子级汇总）
+     * 
+     * @param parentLevel 父级地域层级
+     * @param childLevel 子级地域层级
+     */
+    private void aggregateRegionsByLevel(Integer parentLevel, Integer childLevel) {
+        try {
+            QueryWrapper<Region> parentQuery = new QueryWrapper<>();
+            parentQuery.eq("level", parentLevel);
+            parentQuery.eq("deleted", 0);
+            List<Region> parentRegions = regionService.list(parentQuery);
+            
+            log.info("Found {} level {} regions to aggregate from level {} regions", 
+                    parentRegions.size(), parentLevel, childLevel);
+            
+            int successCount = 0;
+            int failCount = 0;
+            
+            for (Region parentRegion : parentRegions) {
+                try {
+                    Map<String, Object> aggregatedStats = dashboardStatisticsService.aggregateChildRegionStats(
+                            parentRegion.getId(), childLevel);
+                    
+                    // 设置地域基本信息
+                    aggregatedStats.put("regionName", parentRegion.getName());
+                    aggregatedStats.put("level", parentLevel);
+                    
+                    dashboardCacheService.updateRegionStats(parentRegion.getId(), aggregatedStats);
+                    successCount++;
+                    log.debug("Region statistics aggregated - region ID: {}, name: {}, level: {}", 
+                            parentRegion.getId(), parentRegion.getName(), parentLevel);
+                } catch (Exception e) {
+                    failCount++;
+                    log.warn("Failed to aggregate region statistics - region ID: {}, name: {}, level: {}, error: {}", 
+                            parentRegion.getId(), parentRegion.getName(), parentLevel, e.getMessage());
+                }
+            }
+            
+            log.info("Level {} region statistics aggregation completed - success: {}, failed: {}", 
+                    parentLevel, successCount, failCount);
+            
+        } catch (Exception e) {
+            log.error("Failed to aggregate level {} region statistics - error: {}", 
+                    parentLevel, e.getMessage(), e);
         }
     }
     

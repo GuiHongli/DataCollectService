@@ -3,6 +3,9 @@ package com.datacollect.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.datacollect.entity.CollectTask;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
+import com.datacollect.entity.LogicEnvironment;
+import com.datacollect.entity.LogicEnvironmentUe;
 import com.datacollect.entity.Region;
 import com.datacollect.entity.TestCase;
 import com.datacollect.entity.TestCaseExecutionInstance;
@@ -48,6 +51,18 @@ public class DashboardStatisticsService {
     @Autowired
     private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
     
+    @Autowired
+    private LogicEnvironmentService logicEnvironmentService;
+    
+    @Autowired
+    private LogicEnvironmentUeService logicEnvironmentUeService;
+    
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
+    
+    @Autowired
+    private DashboardCacheService dashboardCacheService;
+    
     /**
      * 计算仪表盘总体统计数据
      * 
@@ -65,12 +80,33 @@ public class DashboardStatisticsService {
         stats.put("regionCount", regionCount);
         log.info("Region count: {}", regionCount);
         
-        // 统计执行机数量（排除已删除的记录）
+        // 统计执行机数量（排除已删除的记录，按MAC地址去重）
         QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
         executorQuery.eq("deleted", 0);
-        long executorCount = executorService.count(executorQuery);
+        List<Executor> allExecutors = executorService.list(executorQuery);
+        
+        // 根据MAC地址去重统计执行机数量
+        Set<String> uniqueMacAddresses = new java.util.HashSet<>();
+        for (Executor executor : allExecutors) {
+            // 优先使用executor表的mac_address字段
+            if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
+                uniqueMacAddresses.add(executor.getMacAddress().trim());
+            } else if (executor.getMacAddressId() != null) {
+                // 如果executor表没有MAC地址，尝试通过macAddressId查找
+                try {
+                    ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+                    if (macAddress != null && macAddress.getMacAddress() != null && !macAddress.getMacAddress().trim().isEmpty()) {
+                        uniqueMacAddresses.add(macAddress.getMacAddress().trim());
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to get MAC address by macAddressId - executor ID: {}, macAddressId: {}", 
+                            executor.getId(), executor.getMacAddressId());
+                }
+            }
+        }
+        long executorCount = uniqueMacAddresses.size();
         stats.put("executorCount", executorCount);
-        log.info("Executor count: {}", executorCount);
+        log.info("Executor count (deduplicated by MAC address): {} (total executors: {})", executorCount, allExecutors.size());
         
         // 统计UE数量（排除已删除的记录）
         QueryWrapper<Ue> ueQuery = new QueryWrapper<>();
@@ -110,13 +146,16 @@ public class DashboardStatisticsService {
         stats.put("regionName", region.getName());
         stats.put("level", level);
         
-        // 根据层级确定查询条件
-        QueryWrapper<CollectTask> taskQuery = new QueryWrapper<>();
+        // 根据层级确定查询条件（用于任务统计，但实际统计基于执行机）
+        // 注意：level=1和level=3也支持统计
+        
+        // 1. 获取该地域下的所有执行机
+        QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
         if (level == 4) {
-            // 城市级别
-            taskQuery.eq("city_id", regionId);
-        } else if (level == 2) {
-            // 国家级别 - 查询该国家下的所有城市对应的任务
+            // 城市级别：直接查询region_id
+            executorQuery.eq("region_id", regionId);
+        } else if (level == 3) {
+            // 省份级别：查询该省份下所有城市的执行机
             QueryWrapper<Region> cityQuery = new QueryWrapper<>();
             cityQuery.eq("parent_id", regionId);
             cityQuery.eq("level", 4);
@@ -124,23 +163,103 @@ public class DashboardStatisticsService {
             List<Region> cities = regionService.list(cityQuery);
             if (!cities.isEmpty()) {
                 List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                taskQuery.in("city_id", cityIds);
+                executorQuery.in("region_id", cityIds);
             } else {
-                taskQuery.eq("city_id", -1); // 空结果
+                executorQuery.eq("region_id", -1); // 空结果
             }
-        } else {
-            log.warn("Unsupported region level: {}", level);
-            return stats;
+        } else if (level == 2) {
+            // 国家级别：查询该国家下所有城市的执行机
+            QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+            cityQuery.eq("parent_id", regionId);
+            cityQuery.eq("level", 4);
+            cityQuery.eq("deleted", 0);
+            List<Region> cities = regionService.list(cityQuery);
+            if (!cities.isEmpty()) {
+                List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                executorQuery.in("region_id", cityIds);
+            } else {
+                executorQuery.eq("region_id", -1); // 空结果
+            }
+        } else if (level == 1) {
+            // 片区级别：查询该片区下所有城市的执行机
+            QueryWrapper<Region> countryQuery = new QueryWrapper<>();
+            countryQuery.eq("parent_id", regionId);
+            countryQuery.eq("level", 2);
+            countryQuery.eq("deleted", 0);
+            List<Region> countries = regionService.list(countryQuery);
+            if (!countries.isEmpty()) {
+                List<Long> countryIds = countries.stream().map(Region::getId).collect(Collectors.toList());
+                QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                cityQuery.in("parent_id", countryIds);
+                cityQuery.eq("level", 4);
+                cityQuery.eq("deleted", 0);
+                List<Region> cities = regionService.list(cityQuery);
+                if (!cities.isEmpty()) {
+                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                    executorQuery.in("region_id", cityIds);
+                } else {
+                    executorQuery.eq("region_id", -1); // 空结果
+                }
+            } else {
+                executorQuery.eq("region_id", -1); // 空结果
+            }
         }
-        
-        // 1. 获取该地域下的所有执行机
-        QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
-        executorQuery.eq("region_id", regionId);
         executorQuery.eq("deleted", 0);
         List<Executor> executors = executorService.list(executorQuery);
-        long executorCount = executors.size();
+        
+        // 1.1 根据MAC地址去重统计执行机数量
+        Set<String> uniqueMacAddresses = new java.util.HashSet<>();
+        for (Executor executor : executors) {
+            // 优先使用executor表的mac_address字段
+            if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
+                uniqueMacAddresses.add(executor.getMacAddress().trim());
+            } else if (executor.getMacAddressId() != null) {
+                // 如果executor表没有MAC地址，尝试通过macAddressId查找
+                try {
+                    ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+                    if (macAddress != null && macAddress.getMacAddress() != null && !macAddress.getMacAddress().trim().isEmpty()) {
+                        uniqueMacAddresses.add(macAddress.getMacAddress().trim());
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to get MAC address by macAddressId - executor ID: {}, macAddressId: {}", 
+                            executor.getId(), executor.getMacAddressId());
+                }
+            }
+        }
+        long executorCount = uniqueMacAddresses.size();
         stats.put("executorCount", executorCount);
-        log.info("Executor count for region {}: {}", regionId, executorCount);
+        log.info("Executor count (deduplicated by MAC address) for region {}: {} (total executors: {})", 
+                regionId, executorCount, executors.size());
+        
+        // 1.2 统计UE数量：通过执行机 -> 逻辑环境 -> UE（去重）
+        Set<Long> ueIds = new java.util.HashSet<>();
+        if (!executors.isEmpty()) {
+            List<Long> executorIds = executors.stream().map(Executor::getId).collect(Collectors.toList());
+            // 获取这些执行机关联的所有逻辑环境
+            QueryWrapper<LogicEnvironment> envQuery = new QueryWrapper<>();
+            envQuery.in("executor_id", executorIds);
+            envQuery.eq("deleted", 0);
+            List<LogicEnvironment> logicEnvironments = logicEnvironmentService.list(envQuery);
+            
+            if (!logicEnvironments.isEmpty()) {
+                List<Long> logicEnvironmentIds = logicEnvironments.stream()
+                        .map(LogicEnvironment::getId)
+                        .collect(Collectors.toList());
+                
+                // 获取这些逻辑环境关联的所有UE
+                QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+                ueQuery.in("logic_environment_id", logicEnvironmentIds);
+                ueQuery.eq("deleted", 0);
+                List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+                
+                ueIds = logicEnvironmentUes.stream()
+                        .map(LogicEnvironmentUe::getUeId)
+                        .collect(Collectors.toSet());
+            }
+        }
+        long ueCount = ueIds.size();
+        stats.put("ueCount", ueCount);
+        log.info("UE count for region {}: {}", regionId, ueCount);
         
         // 2. 获取这些执行机的IP地址列表
         List<String> executorIps = executors.stream()
@@ -245,10 +364,210 @@ public class DashboardStatisticsService {
         stats.put("collectCount", totalCollectCount);
         stats.put("appList", appList);
         
-        log.info("Region statistics calculated - region ID: {}, app count: {}, collect count: {}, executor count: {}", 
-                regionId, appStatsMap.size(), totalCollectCount, executorCount);
+        log.info("Region statistics calculated - region ID: {}, app count: {}, collect count: {}, executor count: {}, UE count: {}", 
+                regionId, appStatsMap.size(), totalCollectCount, executorCount, ueCount);
         
         return stats;
+    }
+    
+    /**
+     * 汇总下层地域统计数据到上层地域
+     * 
+     * @param parentRegionId 父级地域ID
+     * @param childLevel 子级地域层级
+     * @return 汇总后的统计数据
+     */
+    public Map<String, Object> aggregateChildRegionStats(Long parentRegionId, Integer childLevel) {
+        log.info("Aggregating child region statistics - parent region ID: {}, child level: {}", parentRegionId, childLevel);
+        
+        Map<String, Object> aggregatedStats = new HashMap<>();
+        aggregatedStats.put("executorCount", 0L);
+        aggregatedStats.put("ueCount", 0L);
+        aggregatedStats.put("appCount", 0);
+        aggregatedStats.put("collectCount", 0);
+        aggregatedStats.put("appList", new ArrayList<>());
+        
+        // 获取所有子级地域
+        QueryWrapper<Region> childQuery = new QueryWrapper<>();
+        childQuery.eq("parent_id", parentRegionId);
+        childQuery.eq("level", childLevel);
+        childQuery.eq("deleted", 0);
+        List<Region> childRegions = regionService.list(childQuery);
+        
+        if (childRegions.isEmpty()) {
+            log.debug("No child regions found for parent region ID: {}, child level: {}", parentRegionId, childLevel);
+            return aggregatedStats;
+        }
+        
+        // 汇总所有子级地域的统计数据
+        Map<String, AppStatInfo> aggregatedAppStatsMap = new LinkedHashMap<>();
+        Set<Long> allUeIds = new java.util.HashSet<>();
+        int totalCollectCount = 0;
+        
+        for (Region childRegion : childRegions) {
+            Map<String, Object> childStats = dashboardCacheService.getRegionStats(childRegion.getId());
+            
+            if (childStats != null && !childStats.isEmpty()) {
+                // 注意：执行机数量和UE数量不直接从缓存累加，因为会有重复
+                // 后续会通过重新查询执行机和逻辑环境来准确统计（按MAC地址去重）
+                
+                // 汇总APP统计
+                Object appListObj = childStats.get("appList");
+                if (appListObj instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> appList = (List<Map<String, Object>>) appListObj;
+                    for (Map<String, Object> appInfo : appList) {
+                        String appName = (String) appInfo.get("appName");
+                        Object collectCountObj = appInfo.get("collectCount");
+                        int collectCount = collectCountObj instanceof Number ? 
+                                ((Number) collectCountObj).intValue() : 0;
+                        
+                        if (appName != null && collectCount > 0) {
+                            AppStatInfo appStat = aggregatedAppStatsMap.getOrDefault(appName, new AppStatInfo(appName));
+                            appStat.addCollectCount(collectCount);
+                            aggregatedAppStatsMap.put(appName, appStat);
+                            totalCollectCount += collectCount;
+                        }
+                    }
+                }
+                
+                // 汇总采集次数
+                Object collectCountObj = childStats.get("collectCount");
+                if (collectCountObj instanceof Number) {
+                    totalCollectCount += ((Number) collectCountObj).intValue();
+                }
+            }
+        }
+        
+        // 重新计算执行机数量和UE数量（通过执行机查询，避免重复，按MAC地址去重）
+        long totalExecutorCount = 0L;
+        Region parentRegion = regionService.getById(parentRegionId);
+        if (parentRegion != null) {
+            QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
+            if (parentRegion.getLevel() == 3) {
+                // 省份级别：查询该省份下所有城市的执行机
+                QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                cityQuery.eq("parent_id", parentRegionId);
+                cityQuery.eq("level", 4);
+                cityQuery.eq("deleted", 0);
+                List<Region> cities = regionService.list(cityQuery);
+                if (!cities.isEmpty()) {
+                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                    executorQuery.in("region_id", cityIds);
+                } else {
+                    executorQuery.eq("region_id", -1);
+                }
+            } else if (parentRegion.getLevel() == 2) {
+                // 国家级别：查询该国家下所有城市的执行机
+                QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                cityQuery.eq("parent_id", parentRegionId);
+                cityQuery.eq("level", 4);
+                cityQuery.eq("deleted", 0);
+                List<Region> cities = regionService.list(cityQuery);
+                if (!cities.isEmpty()) {
+                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                    executorQuery.in("region_id", cityIds);
+                } else {
+                    executorQuery.eq("region_id", -1);
+                }
+            } else if (parentRegion.getLevel() == 1) {
+                // 片区级别：查询该片区下所有城市的执行机
+                QueryWrapper<Region> countryQuery = new QueryWrapper<>();
+                countryQuery.eq("parent_id", parentRegionId);
+                countryQuery.eq("level", 2);
+                countryQuery.eq("deleted", 0);
+                List<Region> countries = regionService.list(countryQuery);
+                if (!countries.isEmpty()) {
+                    List<Long> countryIds = countries.stream().map(Region::getId).collect(Collectors.toList());
+                    QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                    cityQuery.in("parent_id", countryIds);
+                    cityQuery.eq("level", 4);
+                    cityQuery.eq("deleted", 0);
+                    List<Region> cities = regionService.list(cityQuery);
+                    if (!cities.isEmpty()) {
+                        List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                        executorQuery.in("region_id", cityIds);
+                    } else {
+                        executorQuery.eq("region_id", -1);
+                    }
+                } else {
+                    executorQuery.eq("region_id", -1);
+                }
+            }
+            executorQuery.eq("deleted", 0);
+            List<Executor> executors = executorService.list(executorQuery);
+            
+            // 根据MAC地址去重统计执行机数量
+            Set<String> uniqueMacAddresses = new java.util.HashSet<>();
+            for (Executor executor : executors) {
+                // 优先使用executor表的mac_address字段
+                if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
+                    uniqueMacAddresses.add(executor.getMacAddress().trim());
+                } else if (executor.getMacAddressId() != null) {
+                    // 如果executor表没有MAC地址，尝试通过macAddressId查找
+                    try {
+                        ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+                        if (macAddress != null && macAddress.getMacAddress() != null && !macAddress.getMacAddress().trim().isEmpty()) {
+                            uniqueMacAddresses.add(macAddress.getMacAddress().trim());
+                        }
+                    } catch (Exception e) {
+                        log.debug("Failed to get MAC address by macAddressId - executor ID: {}, macAddressId: {}", 
+                                executor.getId(), executor.getMacAddressId());
+                    }
+                }
+            }
+            totalExecutorCount = uniqueMacAddresses.size();
+            
+            if (!executors.isEmpty()) {
+                List<Long> executorIds = executors.stream().map(Executor::getId).collect(Collectors.toList());
+                QueryWrapper<LogicEnvironment> envQuery = new QueryWrapper<>();
+                envQuery.in("executor_id", executorIds);
+                envQuery.eq("deleted", 0);
+                List<LogicEnvironment> logicEnvironments = logicEnvironmentService.list(envQuery);
+                
+                if (!logicEnvironments.isEmpty()) {
+                    List<Long> logicEnvironmentIds = logicEnvironments.stream()
+                            .map(LogicEnvironment::getId)
+                            .collect(Collectors.toList());
+                    
+                    QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+                    ueQuery.in("logic_environment_id", logicEnvironmentIds);
+                    ueQuery.eq("deleted", 0);
+                    List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+                    
+                    // UE数量去重
+                    allUeIds = logicEnvironmentUes.stream()
+                            .map(LogicEnvironmentUe::getUeId)
+                            .collect(Collectors.toSet());
+                }
+            }
+        }
+        
+        // 转换为列表，按采集次数降序排序
+        List<Map<String, Object>> appList = new ArrayList<>();
+        for (AppStatInfo appStat : aggregatedAppStatsMap.values()) {
+            Map<String, Object> appInfo = new HashMap<>();
+            appInfo.put("appName", appStat.getAppName());
+            appInfo.put("collectCount", appStat.getCollectCount());
+            appList.add(appInfo);
+        }
+        
+        appList.sort((a, b) -> {
+            Integer countA = (Integer) a.get("collectCount");
+            Integer countB = (Integer) b.get("collectCount");
+            return countB.compareTo(countA);
+        });
+        
+        aggregatedStats.put("executorCount", totalExecutorCount);
+        aggregatedStats.put("ueCount", allUeIds.size());
+        aggregatedStats.put("appCount", aggregatedAppStatsMap.size());
+        aggregatedStats.put("collectCount", totalCollectCount);
+        aggregatedStats.put("appList", appList);
+        
+        log.info("Child region statistics aggregated - parent region ID: {}, executor count: {}, UE count: {}, app count: {}, collect count: {}", 
+                parentRegionId, totalExecutorCount, allUeIds.size(), aggregatedAppStatsMap.size(), totalCollectCount);
+        
+        return aggregatedStats;
     }
     
     /**

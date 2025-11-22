@@ -20,9 +20,12 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.PreDestroy;
 
 /**
  * 执行机WebSocket消息处理器
@@ -52,6 +55,11 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
      * 存储会话的最后活跃时间
      */
     private final java.util.Map<String, Long> sessionLastActiveTime = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    /**
+     * 存储每个会话的心跳检查定时任务，用于取消任务
+     */
+    private final java.util.Map<String, ScheduledFuture<?>> heartbeatTasks = new ConcurrentHashMap<>();
     
     /**
      * 心跳间隔（秒）
@@ -133,6 +141,13 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         String sessionId = session.getId();
         log.info("执行机WebSocket连接关闭 - 会话ID: {}, 关闭状态: {}", sessionId, status);
+        
+        // 取消心跳检查定时任务
+        ScheduledFuture<?> heartbeatTask = heartbeatTasks.remove(sessionId);
+        if (heartbeatTask != null) {
+            heartbeatTask.cancel(false);
+            log.debug("已取消心跳检查定时任务 - 会话ID: {}", sessionId);
+        }
         
         // 清理会话信息
         sessionLastActiveTime.remove(sessionId);
@@ -353,8 +368,16 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
      * 启动心跳检查
      */
     private void startHeartbeatCheck(WebSocketSession session) {
-        heartbeatScheduler.scheduleAtFixedRate(() -> {
-            String sessionId = session.getId();
+        String sessionId = session.getId();
+        
+        // 如果已存在该会话的心跳任务，先取消
+        ScheduledFuture<?> existingTask = heartbeatTasks.get(sessionId);
+        if (existingTask != null) {
+            existingTask.cancel(false);
+        }
+        
+        // 创建新的心跳检查任务并保存引用
+        ScheduledFuture<?> heartbeatTask = heartbeatScheduler.scheduleAtFixedRate(() -> {
             Long lastActiveTime = sessionLastActiveTime.get(sessionId);
             
             if (lastActiveTime == null) {
@@ -374,6 +397,39 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                 }
             }
         }, HEARTBEAT_INTERVAL, HEARTBEAT_INTERVAL, TimeUnit.SECONDS);
+        
+        // 保存任务引用，以便后续取消
+        heartbeatTasks.put(sessionId, heartbeatTask);
+    }
+    
+    /**
+     * 组件销毁时关闭线程池
+     */
+    @PreDestroy
+    public void destroy() {
+        log.info("正在关闭ExecutorWebSocketHandler，清理所有心跳检查任务...");
+        
+        // 取消所有心跳任务
+        for (ScheduledFuture<?> task : heartbeatTasks.values()) {
+            if (task != null) {
+                task.cancel(false);
+            }
+        }
+        heartbeatTasks.clear();
+        
+        // 关闭线程池
+        if (heartbeatScheduler != null && !heartbeatScheduler.isShutdown()) {
+            heartbeatScheduler.shutdown();
+            try {
+                if (!heartbeatScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    heartbeatScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                heartbeatScheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            log.info("心跳检查线程池已关闭");
+        }
     }
 }
 
