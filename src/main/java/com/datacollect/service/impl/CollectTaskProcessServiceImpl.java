@@ -428,22 +428,22 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * 获取环境到执行机的映射（通过MAC地址查找执行机IP）
+     * 获取环境到执行机的映射（直接使用执行机表中的IP地址）
      */
     private Map<Long, String> getEnvironmentToExecutorMap(List<Long> logicEnvironmentIds) {
         Map<Long, String> environmentToExecutorMap = new HashMap<>();
         for (Long logicEnvironmentId : logicEnvironmentIds) {
             LogicEnvironmentDTO logicEnvironmentDTO = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironmentId);
             if (logicEnvironmentDTO != null && logicEnvironmentDTO.getExecutorId() != null) {
-                // 通过执行机ID获取MAC地址，然后通过MAC地址查找执行机IP
+                // 直接使用执行机表中的IP地址
                 String executorIp = getExecutorIpByMacAddress(logicEnvironmentDTO.getExecutorId());
                 if (executorIp != null) {
                     environmentToExecutorMap.put(logicEnvironmentId, executorIp);
                 } else {
-                    // 如果没有MAC地址，则使用原来的IP地址（兼容旧逻辑）
+                    // 如果执行机表中没有IP，则使用逻辑环境DTO中的IP地址（兼容旧逻辑）
                     if (logicEnvironmentDTO.getExecutorIpAddress() != null) {
                         environmentToExecutorMap.put(logicEnvironmentId, logicEnvironmentDTO.getExecutorIpAddress());
-                        log.warn("执行机未关联MAC地址，使用IP地址 - 执行机ID: {}, IP: {}", 
+                        log.warn("执行机表中IP地址为空，使用逻辑环境DTO中的IP地址 - 执行机ID: {}, IP: {}", 
                                 logicEnvironmentDTO.getExecutorId(), logicEnvironmentDTO.getExecutorIpAddress());
                     }
                 }
@@ -459,7 +459,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 通过MAC地址查找执行机IP（支持一个MAC地址关联多个IP，优先使用在线状态的IP）
+     * 获取执行机IP地址（直接使用执行机表中的IP地址）
      * 
      * @param executorId 执行机ID
      * @return 执行机IP地址
@@ -473,73 +473,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return null;
             }
             
-            // 如果执行机有macAddressId，通过macAddressId查询MAC地址记录
-            if (executor.getMacAddressId() != null) {
-                ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
-                if (macAddress != null) {
-                    String macAddressStr = macAddress.getMacAddress();
-                    
-                    // 通过MAC地址查找所有关联的IP地址
-                    List<ExecutorMacAddress> allMacAddressRecords = executorMacAddressService.getAllByMacAddress(macAddressStr);
-                    if (allMacAddressRecords != null && !allMacAddressRecords.isEmpty()) {
-                        // 优先选择在线状态的IP，如果没有在线状态，则使用第一个
-                        String selectedIp = null;
-                        // 首先检查MAC地址是否在线
-                        boolean macOnline = executorWebSocketService.isExecutorOnline(macAddressStr);
-                        for (ExecutorMacAddress record : allMacAddressRecords) {
-                            if (record.getIpAddress() != null && !record.getIpAddress().trim().isEmpty()) {
-                                // 如果MAC地址在线，优先选择该IP
-                                if (macOnline && selectedIp == null) {
-                                    selectedIp = record.getIpAddress();
-                                    log.info("通过MAC地址找到在线执行机IP - MAC地址: {}, IP: {}", macAddressStr, selectedIp);
-                                    break;
-                                }
-                                // 如果没有找到在线IP，使用第一个IP
-                                if (selectedIp == null) {
-                                    selectedIp = record.getIpAddress();
-                                }
-                            }
-                        }
-                        
-                        if (selectedIp != null) {
-                            log.info("通过MAC地址查找执行机IP - MAC地址: {}, 执行机ID: {}, 选择的IP: {}", 
-                                    macAddressStr, executorId, selectedIp);
-                            return selectedIp;
-                        }
-                    }
-                }
+            // 直接使用执行机表中的IP地址
+            if (executor.getIpAddress() != null && !executor.getIpAddress().trim().isEmpty()) {
+                log.info("获取执行机IP - 执行机ID: {}, IP: {}", executorId, executor.getIpAddress());
+                return executor.getIpAddress();
             }
             
-            // 如果没有找到MAC地址记录，尝试通过executor表的mac_address字段查找（兼容旧逻辑）
-            if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
-                List<ExecutorMacAddress> allMacAddressRecords = executorMacAddressService.getAllByMacAddress(executor.getMacAddress());
-                if (allMacAddressRecords != null && !allMacAddressRecords.isEmpty()) {
-                    // 首先检查MAC地址是否在线
-                    boolean macOnline = executorWebSocketService.isExecutorOnline(executor.getMacAddress());
-                    if (macOnline) {
-                        // 如果MAC地址在线，使用第一个IP
-                        String firstIp = allMacAddressRecords.get(0).getIpAddress();
-                        if (firstIp != null && !firstIp.trim().isEmpty()) {
-                            log.info("通过MAC地址查找执行机IP（兼容旧逻辑） - MAC地址: {}, 执行机ID: {}, IP: {}", 
-                                    executor.getMacAddress(), executorId, firstIp);
-                            return firstIp;
-                        }
-                    } else {
-                        // 如果MAC地址不在线，使用第一个IP（用于HTTP回退）
-                        String firstIp = allMacAddressRecords.get(0).getIpAddress();
-                        if (firstIp != null && !firstIp.trim().isEmpty()) {
-                            log.info("通过MAC地址查找执行机IP（MAC地址不在线，使用HTTP） - MAC地址: {}, 执行机ID: {}, IP: {}", 
-                                    executor.getMacAddress(), executorId, firstIp);
-                            return firstIp;
-                        }
-                    }
-                }
-            }
-            
-            log.warn("执行机未关联MAC地址 - 执行机ID: {}", executorId);
+            log.warn("执行机IP地址为空 - 执行机ID: {}", executorId);
             return null;
         } catch (Exception e) {
-            log.error("通过MAC地址查找执行机IP失败 - 执行机ID: {}, 错误: {}", executorId, e.getMessage(), e);
+            log.error("获取执行机IP失败 - 执行机ID: {}, 错误: {}", executorId, e.getMessage(), e);
             return null;
         }
     }
