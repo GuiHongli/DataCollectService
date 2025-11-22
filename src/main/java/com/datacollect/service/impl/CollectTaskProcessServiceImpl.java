@@ -222,28 +222,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * 根据策略筛选测试用例
+     * 获取测试用例（不再根据业务大类和app筛选）
      */
     private List<TestCase> filterTestCasesByStrategy(List<TestCase> allTestCases, CollectStrategy strategy) {
-        return allTestCases.stream()
-            .filter(testCase -> {
-                // 业务大类筛选
-                if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
-                    if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
-                        return false;
-                    }
-                }
-                
-                // APP筛选
-                if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
-                    if (!strategy.getApp().equals(testCase.getApp())) {
-                        return false;
-                    }
-                }
-                
-                return true;
-            })
-            .collect(java.util.stream.Collectors.toList());
+        // 直接返回所有用例，不再根据业务大类和app筛选
+        return allTestCases;
     }
 
     /**

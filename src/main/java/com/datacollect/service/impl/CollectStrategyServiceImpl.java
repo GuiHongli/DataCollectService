@@ -150,32 +150,15 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
     }
 
     /**
-     * 根据策略筛选测试用例
+     * 获取测试用例（不再根据业务大类和app筛选）
      * 
      * @param allTestCases 所有用例
      * @param strategy 采集策略
-     * @return 筛选后的用例列表
+     * @return 用例列表（不再筛选）
      */
     private List<TestCase> filterTestCasesByStrategy(List<TestCase> allTestCases, CollectStrategy strategy) {
-        return allTestCases.stream()
-                .filter(testCase -> {
-                    // 业务大类筛选
-                    if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
-                        if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
-                            return false;
-                        }
-                    }
-                    
-                    // APP筛选
-                    if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
-                        if (!strategy.getApp().equals(testCase.getApp())) {
-                            return false;
-                        }
-                    }
-                    
-                    return true;
-                })
-                .collect(Collectors.toList());
+        // 直接返回所有用例，不再根据业务大类和app筛选
+        return allTestCases;
     }
 
     private void setTestCaseSetBasicInfo(CollectStrategyDTO dto, TestCaseSet testCaseSet) {

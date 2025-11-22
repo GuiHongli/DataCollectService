@@ -819,37 +819,16 @@ public class CollectTaskController {
     }
 
     /**
-     * 获取筛选后的测试用例
+     * 获取测试用例（不再根据业务大类和app筛选）
      */
     private List<TestCase> getFilteredTestCases(CollectStrategy strategy) {
-        log.info("Step 2: Get test cases associated with strategy - test case set ID: {}, filter criteria: business category={}, APP={}", 
-                strategy.getTestCaseSetId(), strategy.getBusinessCategory(), strategy.getApp());
+        log.info("Step 2: Get test cases associated with strategy - test case set ID: {}", 
+                strategy.getTestCaseSetId());
         List<TestCase> allTestCases = testCaseService.getByTestCaseSetId(strategy.getTestCaseSetId());
-        log.info("Got original test case count: {}", allTestCases.size());
+        log.info("Got test case count: {} (no filtering by business category or app)", allTestCases.size());
         
-        // 根据策略的筛选条件过滤用例
-        List<TestCase> testCases = allTestCases.stream()
-            .filter(testCase -> {
-                // 业务大类筛选
-                if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
-                    if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
-                        return false;
-                    }
-                }
-                
-                // APP筛选
-                if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
-                    if (!strategy.getApp().equals(testCase.getApp())) {
-                        return false;
-                    }
-                }
-                
-                return true;
-            })
-            .collect(java.util.stream.Collectors.toList());
-        log.info("Filtered test case count: {}", testCases.size());
-        
-        return testCases;
+        // 直接返回所有用例，不再根据业务大类和app筛选
+        return allTestCases;
     }
 
     /**
