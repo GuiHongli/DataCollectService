@@ -156,39 +156,58 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             ExecutorRegisterMessage registerMsg = JSON.parseObject(
                     JSON.toJSONString(wsMessage.getData()), ExecutorRegisterMessage.class);
             
-            if (registerMsg == null || registerMsg.getExecutorIp() == null) {
-                log.warn("注册消息缺少执行机IP - 会话ID: {}", sessionId);
-                sendErrorResponse(session, "注册消息缺少执行机IP");
+            // MAC地址是必需的
+            if (registerMsg == null || registerMsg.getExecutorMac() == null || registerMsg.getExecutorMac().trim().isEmpty()) {
+                log.warn("注册消息缺少MAC地址 - 会话ID: {}", sessionId);
+                sendErrorResponse(session, "注册消息缺少MAC地址，MAC地址是唯一标识");
                 return;
             }
             
             String executorIp = registerMsg.getExecutorIp();
-            String executorMac = registerMsg.getExecutorMac();
+            String executorMac = registerMsg.getExecutorMac().trim();
             
             log.info("收到执行机注册消息 - 执行机IP: {}, MAC地址: {}, 会话ID: {}", 
-                    executorIp, executorMac != null ? executorMac : "未提供", sessionId);
+                    executorIp != null ? executorIp : "未提供", executorMac, sessionId);
             
-            // 验证执行机是否存在
+            // 使用MAC地址查找执行机（优先通过mac_address字段查找）
             QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("ip_address", executorIp);
+            queryWrapper.eq("mac_address", executorMac);
             Executor executor = executorService.getOne(queryWrapper);
+            
+            // 如果通过mac_address字段没找到，尝试通过ExecutorMacAddress表查找
+            if (executor == null) {
+                ExecutorMacAddress macAddress = executorMacAddressService.getByMacAddress(executorMac);
+                if (macAddress != null && macAddress.getIpAddress() != null) {
+                    // 通过IP地址查找执行机
+                    QueryWrapper<Executor> ipQueryWrapper = new QueryWrapper<>();
+                    ipQueryWrapper.eq("ip_address", macAddress.getIpAddress());
+                    executor = executorService.getOne(ipQueryWrapper);
+                }
+            }
             
             if (executor == null) {
                 // 执行机不存在，自动创建
-                log.info("执行机不存在，自动创建 - 执行机IP: {}, 会话ID: {}", executorIp, sessionId);
+                log.info("执行机不存在，自动创建 - MAC地址: {}, 执行机IP: {}, 会话ID: {}", executorMac, executorIp, sessionId);
                 
                 executor = new Executor();
-                executor.setIpAddress(executorIp);
+                // 设置MAC地址（必需）
+                executor.setMacAddress(executorMac);
                 
-                // 设置MAC地址
-                if (executorMac != null && !executorMac.trim().isEmpty()) {
-                    executor.setMacAddress(executorMac);
+                // 设置IP地址（如果提供）
+                if (executorIp != null && !executorIp.trim().isEmpty()) {
+                    executor.setIpAddress(executorIp);
+                } else {
+                    // 如果没有提供IP，尝试从MAC地址表中获取
+                    ExecutorMacAddress macAddress = executorMacAddressService.getByMacAddress(executorMac);
+                    if (macAddress != null && macAddress.getIpAddress() != null) {
+                        executor.setIpAddress(macAddress.getIpAddress());
+                    }
                 }
                 
                 // 设置执行机名称，如果注册消息中有则使用，否则使用默认值
                 String executorName = registerMsg.getExecutorName();
                 if (executorName == null || executorName.trim().isEmpty()) {
-                    executorName = "执行机-" + executorIp;
+                    executorName = "执行机-" + executorMac;
                 }
                 executor.setName(executorName);
                 
@@ -208,38 +227,39 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                 // 保存执行机
                 executorService.save(executor);
                 
-                log.info("执行机已自动创建 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
-                        executorIp, executorMac != null ? executorMac : "未提供", 
-                        executorName, executor.getId(), sessionId);
+                log.info("执行机已自动创建 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                        executorMac, executor.getIpAddress(), executorName, executor.getId(), sessionId);
             } else {
                 // 执行机已存在，更新状态为在线
                 executor.setStatus(1);
                 
-                // 如果提供了MAC地址且与现有不同，则更新MAC地址
-                if (executorMac != null && !executorMac.trim().isEmpty() && 
-                    (executor.getMacAddress() == null || !executorMac.equals(executor.getMacAddress()))) {
+                // 确保MAC地址已设置
+                if (executor.getMacAddress() == null || !executorMac.equals(executor.getMacAddress())) {
                     executor.setMacAddress(executorMac);
+                }
+                
+                // 如果提供了IP地址且与现有不同，则更新IP地址
+                if (executorIp != null && !executorIp.trim().isEmpty() && 
+                    (executor.getIpAddress() == null || !executorIp.equals(executor.getIpAddress()))) {
+                    executor.setIpAddress(executorIp);
                 }
                 
                 executorService.updateById(executor);
                 
-                log.info("执行机已存在，更新状态为在线 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 会话ID: {}", 
-                        executorIp, executorMac != null ? executorMac : "未提供", 
-                        executor.getName(), sessionId);
+                log.info("执行机已存在，更新状态为在线 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
+                        executorMac, executor.getIpAddress(), executor.getName(), sessionId);
             }
             
-            // 如果提供了MAC地址，注册到MAC地址表
-            if (executorMac != null && !executorMac.trim().isEmpty()) {
-                ExecutorMacAddress macAddress = executorMacAddressService.registerOrUpdateMacAddress(executorMac, executorIp);
-                if (macAddress != null) {
-                    // 更新executor的macAddressId
-                    executor.setMacAddressId(macAddress.getId());
-                    executorService.updateById(executor);
-                }
+            // 注册到MAC地址表
+            ExecutorMacAddress macAddress = executorMacAddressService.registerOrUpdateMacAddress(executorMac, executor.getIpAddress());
+            if (macAddress != null) {
+                // 更新executor的macAddressId
+                executor.setMacAddressId(macAddress.getId());
+                executorService.updateById(executor);
             }
             
-            // 注册执行机连接
-            executorWebSocketService.registerExecutor(executorIp, sessionId);
+            // 使用MAC地址注册执行机连接
+            executorWebSocketService.registerExecutor(executorMac, sessionId);
             
             // 发送注册成功响应
             WebSocketMessage response = new WebSocketMessage();
@@ -249,16 +269,16 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             java.util.Map<String, Object> data = new java.util.HashMap<>();
             data.put("status", "SUCCESS");
             data.put("message", "执行机注册成功");
-            data.put("executorIp", executorIp);
+            data.put("executorMac", executorMac);
+            data.put("executorIp", executor.getIpAddress());
             data.put("executorId", executor.getId());
             data.put("executorName", executor.getName());
             response.setData(data);
             
             sendMessage(session, response);
             
-            log.info("执行机注册成功 - 执行机IP: {}, MAC地址: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
-                    executorIp, executorMac != null ? executorMac : "未提供", 
-                    executor.getName(), executor.getId(), sessionId);
+            log.info("执行机注册成功 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                    executorMac, executor.getIpAddress(), executor.getName(), executor.getId(), sessionId);
             
         } catch (Exception e) {
             log.error("处理注册消息异常 - 会话ID: {}, 错误: {}", sessionId, e.getMessage(), e);

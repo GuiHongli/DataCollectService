@@ -32,6 +32,7 @@ import com.datacollect.dto.CollectTaskRequest;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.entity.CollectTask;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.entity.LogicEnvironmentNetwork;
 import com.datacollect.entity.NetworkType;
@@ -43,6 +44,7 @@ import com.datacollect.service.CollectStrategyService;
 import com.datacollect.service.CollectTaskProcessService;
 import com.datacollect.service.CollectTaskService;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.LogicEnvironmentService;
 import com.datacollect.service.NetworkTypeService;
@@ -68,6 +70,9 @@ public class CollectTaskController {
 
     @Autowired
     private ExecutorService executorService;
+
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
 
     @Autowired
     private LogicEnvironmentService logicEnvironmentService;
@@ -329,6 +334,43 @@ public class CollectTaskController {
                 .filter(instance -> instance.getExecutionTaskId() != null && instance.getExecutorIp() != null)
                 .collect(Collectors.groupingBy(TestCaseExecutionInstance::getExecutorIp));
     }
+    
+    /**
+     * 通过执行机IP获取MAC地址
+     */
+    private String getExecutorMacAddress(String executorIp) {
+        try {
+            // 1. 通过IP地址查找执行机
+            QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("ip_address", executorIp);
+            Executor executor = executorService.getOne(queryWrapper);
+            
+            if (executor == null) {
+                log.warn("执行机不存在 - 执行机IP: {}", executorIp);
+                return null;
+            }
+            
+            // 2. 优先从executor表的mac_address字段获取
+            if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
+                return executor.getMacAddress();
+            }
+            
+            // 3. 如果executor表没有MAC地址，尝试通过macAddressId查找
+            if (executor.getMacAddressId() != null) {
+                ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+                if (macAddress != null && macAddress.getMacAddress() != null) {
+                    return macAddress.getMacAddress();
+                }
+            }
+            
+            log.warn("执行机没有MAC地址 - 执行机IP: {}, 执行机ID: {}", executorIp, executor.getId());
+            return null;
+            
+        } catch (Exception e) {
+            log.error("获取执行机MAC地址失败 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+            return null;
+        }
+    }
 
     /**
      * 取消执行机任务
@@ -344,19 +386,25 @@ public class CollectTaskController {
             try {
                 boolean cancelled = false;
                 
-                // 优先使用WebSocket发送停止命令
-                if (executorWebSocketService.isExecutorOnline(executorIp)) {
-                    log.info("执行机在线，通过WebSocket发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
-                    cancelled = executorWebSocketService.sendCancelCommand(executorIp, executionTaskId);
+                // 通过IP地址查找执行机，获取MAC地址
+                String executorMac = getExecutorMacAddress(executorIp);
+                if (executorMac != null && !executorMac.trim().isEmpty()) {
+                    // 优先使用WebSocket发送停止命令
+                    if (executorWebSocketService.isExecutorOnline(executorMac)) {
+                        log.info("执行机在线，通过WebSocket发送停止命令 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
+                        cancelled = executorWebSocketService.sendCancelCommand(executorMac, executionTaskId);
                     if (cancelled) {
                         log.info("停止命令已通过WebSocket发送成功 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 受影响例次数: {}", 
                                 taskId, executorIp, executionTaskId, instances.size());
                     } else {
-                        log.warn("WebSocket发送停止命令失败，尝试使用HTTP发送 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+                        log.warn("WebSocket发送停止命令失败，尝试使用HTTP发送 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
                     }
                 } else {
-                    log.info("执行机不在线，使用HTTP发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+                    log.info("执行机不在线，使用HTTP发送停止命令 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
                 }
+            } else {
+                log.warn("无法获取执行机MAC地址，使用HTTP发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+            }
                 
                 // 如果WebSocket不可用或发送失败，回退到HTTP请求
                 if (!cancelled) {

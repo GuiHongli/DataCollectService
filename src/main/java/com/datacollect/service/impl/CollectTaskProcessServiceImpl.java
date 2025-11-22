@@ -484,10 +484,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     if (allMacAddressRecords != null && !allMacAddressRecords.isEmpty()) {
                         // 优先选择在线状态的IP，如果没有在线状态，则使用第一个
                         String selectedIp = null;
+                        // 首先检查MAC地址是否在线
+                        boolean macOnline = executorWebSocketService.isExecutorOnline(macAddressStr);
                         for (ExecutorMacAddress record : allMacAddressRecords) {
                             if (record.getIpAddress() != null && !record.getIpAddress().trim().isEmpty()) {
-                                // 检查该IP对应的执行机是否在线（通过WebSocket）
-                                if (executorWebSocketService.isExecutorOnline(record.getIpAddress())) {
+                                // 如果MAC地址在线，优先选择该IP
+                                if (macOnline && selectedIp == null) {
                                     selectedIp = record.getIpAddress();
                                     log.info("通过MAC地址找到在线执行机IP - MAC地址: {}, IP: {}", macAddressStr, selectedIp);
                                     break;
@@ -512,22 +514,24 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
                 List<ExecutorMacAddress> allMacAddressRecords = executorMacAddressService.getAllByMacAddress(executor.getMacAddress());
                 if (allMacAddressRecords != null && !allMacAddressRecords.isEmpty()) {
-                    // 优先选择在线状态的IP
-                    for (ExecutorMacAddress record : allMacAddressRecords) {
-                        if (record.getIpAddress() != null && !record.getIpAddress().trim().isEmpty()) {
-                            if (executorWebSocketService.isExecutorOnline(record.getIpAddress())) {
-                                log.info("通过MAC地址查找执行机IP（兼容旧逻辑） - MAC地址: {}, 执行机ID: {}, IP: {}", 
-                                        executor.getMacAddress(), executorId, record.getIpAddress());
-                                return record.getIpAddress();
-                            }
+                    // 首先检查MAC地址是否在线
+                    boolean macOnline = executorWebSocketService.isExecutorOnline(executor.getMacAddress());
+                    if (macOnline) {
+                        // 如果MAC地址在线，使用第一个IP
+                        String firstIp = allMacAddressRecords.get(0).getIpAddress();
+                        if (firstIp != null && !firstIp.trim().isEmpty()) {
+                            log.info("通过MAC地址查找执行机IP（兼容旧逻辑） - MAC地址: {}, 执行机ID: {}, IP: {}", 
+                                    executor.getMacAddress(), executorId, firstIp);
+                            return firstIp;
                         }
-                    }
-                    // 如果没有在线IP，使用第一个
-                    String firstIp = allMacAddressRecords.get(0).getIpAddress();
-                    if (firstIp != null && !firstIp.trim().isEmpty()) {
-                        log.info("通过MAC地址查找执行机IP（兼容旧逻辑） - MAC地址: {}, 执行机ID: {}, IP: {}", 
-                                executor.getMacAddress(), executorId, firstIp);
-                        return firstIp;
+                    } else {
+                        // 如果MAC地址不在线，使用第一个IP（用于HTTP回退）
+                        String firstIp = allMacAddressRecords.get(0).getIpAddress();
+                        if (firstIp != null && !firstIp.trim().isEmpty()) {
+                            log.info("通过MAC地址查找执行机IP（MAC地址不在线，使用HTTP） - MAC地址: {}, 执行机ID: {}, IP: {}", 
+                                    executor.getMacAddress(), executorId, firstIp);
+                            return firstIp;
+                        }
                     }
                 }
             }
@@ -1157,22 +1161,65 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
+     * 通过执行机IP获取MAC地址
+     */
+    private String getExecutorMacAddress(String executorIp) {
+        try {
+            // 1. 通过IP地址查找执行机
+            QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("ip_address", executorIp);
+            Executor executor = executorService.getOne(queryWrapper);
+            
+            if (executor == null) {
+                log.warn("执行机不存在 - 执行机IP: {}", executorIp);
+                return null;
+            }
+            
+            // 2. 优先从executor表的mac_address字段获取
+            if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
+                return executor.getMacAddress();
+            }
+            
+            // 3. 如果executor表没有MAC地址，尝试通过macAddressId查找
+            if (executor.getMacAddressId() != null) {
+                ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+                if (macAddress != null && macAddress.getMacAddress() != null) {
+                    return macAddress.getMacAddress();
+                }
+            }
+            
+            log.warn("执行机没有MAC地址 - 执行机IP: {}, 执行机ID: {}", executorIp, executor.getId());
+            return null;
+            
+        } catch (Exception e) {
+            log.error("获取执行机MAC地址失败 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+            return null;
+        }
+    }
+    
+    /**
      * 发送执行请求
      */
     private boolean sendExecutionRequest(TestCaseExecutionRequest request, List<TestCaseExecutionInstance> instances, String taskId, String executorIp) {
-        // 优先使用WebSocket发送任务
-        if (executorWebSocketService.isExecutorOnline(executorIp)) {
-            log.info("执行机在线，通过WebSocket发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
-            boolean sent = executorWebSocketService.sendTaskToExecutor(executorIp, request);
-            if (sent) {
-                // 更新例次状态
-                updateInstanceStatus(instances, taskId);
-                return true;
-            } else {
-                log.warn("WebSocket发送任务失败，尝试使用HTTP发送 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
-            }
+        // 通过IP地址查找执行机，获取MAC地址
+        String executorMac = getExecutorMacAddress(executorIp);
+        if (executorMac == null || executorMac.trim().isEmpty()) {
+            log.warn("无法获取执行机MAC地址，使用HTTP发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
         } else {
-            log.info("执行机不在线，使用HTTP发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+            // 优先使用WebSocket发送任务
+            if (executorWebSocketService.isExecutorOnline(executorMac)) {
+                log.info("执行机在线，通过WebSocket发送任务 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+                boolean sent = executorWebSocketService.sendTaskToExecutor(executorMac, request);
+                if (sent) {
+                    // 更新例次状态
+                    updateInstanceStatus(instances, taskId);
+                    return true;
+                } else {
+                    log.warn("WebSocket发送任务失败，尝试使用HTTP发送 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+                }
+            } else {
+                log.info("执行机不在线，使用HTTP发送任务 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+            }
         }
         
         // 如果WebSocket不可用，回退到HTTP请求

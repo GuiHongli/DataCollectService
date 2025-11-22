@@ -25,14 +25,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
     
     /**
-     * 存储执行机IP到会话ID的映射（一个执行机可能有多个会话，但通常只有一个）
-     * key: executorIp, value: Set<sessionId>
+     * 存储执行机MAC地址到会话ID的映射（一个执行机可能有多个会话，但通常只有一个）
+     * key: executorMac, value: Set<sessionId>
      */
     private final Map<String, Set<String>> executorSessions = new ConcurrentHashMap<>();
     
     /**
-     * 存储会话ID到执行机IP的映射（用于反向查找）
-     * key: sessionId, value: executorIp
+     * 存储会话ID到执行机MAC地址的映射（用于反向查找）
+     * key: sessionId, value: executorMac
      */
     private final Map<String, String> sessionToExecutor = new ConcurrentHashMap<>();
     
@@ -43,13 +43,13 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     
     @Override
-    public void registerExecutor(String executorIp, String sessionId) {
-        log.info("注册执行机连接 - 执行机IP: {}, 会话ID: {}", executorIp, sessionId);
+    public void registerExecutor(String executorMac, String sessionId) {
+        log.info("注册执行机连接 - 执行机MAC地址: {}, 会话ID: {}", executorMac, sessionId);
         
-        executorSessions.computeIfAbsent(executorIp, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
-        sessionToExecutor.put(sessionId, executorIp);
+        executorSessions.computeIfAbsent(executorMac, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
+        sessionToExecutor.put(sessionId, executorMac);
         
-        log.info("执行机注册成功 - 执行机IP: {}, 当前在线执行机数: {}", executorIp, executorSessions.size());
+        log.info("执行机注册成功 - 执行机MAC地址: {}, 当前在线执行机数: {}", executorMac, executorSessions.size());
     }
     
     /**
@@ -71,33 +71,33 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
     }
     
     @Override
-    public void unregisterExecutor(String executorIp, String sessionId) {
-        log.info("注销执行机连接 - 执行机IP: {}, 会话ID: {}", executorIp, sessionId);
+    public void unregisterExecutor(String executorMac, String sessionId) {
+        log.info("注销执行机连接 - 执行机MAC地址: {}, 会话ID: {}", executorMac, sessionId);
         
-        Set<String> sessions = executorSessions.get(executorIp);
+        Set<String> sessions = executorSessions.get(executorMac);
         if (sessions != null) {
             sessions.remove(sessionId);
             if (sessions.isEmpty()) {
-                executorSessions.remove(executorIp);
+                executorSessions.remove(executorMac);
             }
         }
         sessionToExecutor.remove(sessionId);
         this.sessions.remove(sessionId);
         
-        log.info("执行机注销成功 - 执行机IP: {}, 当前在线执行机数: {}", executorIp, executorSessions.size());
+        log.info("执行机注销成功 - 执行机MAC地址: {}, 当前在线执行机数: {}", executorMac, executorSessions.size());
     }
     
     @Override
-    public boolean isExecutorOnline(String executorIp) {
-        Set<String> sessions = executorSessions.get(executorIp);
+    public boolean isExecutorOnline(String executorMac) {
+        Set<String> sessions = executorSessions.get(executorMac);
         return sessions != null && !sessions.isEmpty();
     }
     
     @Override
-    public boolean sendTaskToExecutor(String executorIp, TestCaseExecutionRequest request) {
-        Set<String> sessionIds = executorSessions.get(executorIp);
+    public boolean sendTaskToExecutor(String executorMac, TestCaseExecutionRequest request) {
+        Set<String> sessionIds = executorSessions.get(executorMac);
         if (sessionIds == null || sessionIds.isEmpty()) {
-            log.warn("执行机不在线，无法发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, request.getTaskId());
+            log.warn("执行机不在线，无法发送任务 - 执行机MAC地址: {}, 任务ID: {}", executorMac, request.getTaskId());
             return false;
         }
         
@@ -106,7 +106,8 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
             message.setType("TASK");
             message.setData(request);
             message.setTimestamp(System.currentTimeMillis());
-            message.setExecutorIp(executorIp);
+            // 保留executorIp字段用于兼容，但实际使用MAC地址作为key
+            message.setExecutorIp(executorMac);
             
             String messageJson = JSON.toJSONString(message);
             
@@ -118,34 +119,34 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
                     try {
                         session.sendMessage(new TextMessage(messageJson));
                         sent = true;
-                        log.info("任务已通过WebSocket发送到执行机 - 执行机IP: {}, 任务ID: {}, 会话ID: {}", 
-                                executorIp, request.getTaskId(), sessionId);
+                        log.info("任务已通过WebSocket发送到执行机 - 执行机MAC地址: {}, 任务ID: {}, 会话ID: {}", 
+                                executorMac, request.getTaskId(), sessionId);
                     } catch (IOException e) {
                         log.error("发送消息到会话失败 - 会话ID: {}, 错误: {}", sessionId, e.getMessage(), e);
                         // 如果发送失败，移除该会话
                         unregisterSession(sessionId);
-                        unregisterExecutor(executorIp, sessionId);
+                        unregisterExecutor(executorMac, sessionId);
                     }
                 } else {
                     log.warn("会话不存在或已关闭 - 会话ID: {}", sessionId);
-                    unregisterExecutor(executorIp, sessionId);
+                    unregisterExecutor(executorMac, sessionId);
                 }
             }
             
             return sent;
             
         } catch (Exception e) {
-            log.error("通过WebSocket发送任务失败 - 执行机IP: {}, 任务ID: {}, 错误: {}", 
-                    executorIp, request.getTaskId(), e.getMessage(), e);
+            log.error("通过WebSocket发送任务失败 - 执行机MAC地址: {}, 任务ID: {}, 错误: {}", 
+                    executorMac, request.getTaskId(), e.getMessage(), e);
             return false;
         }
     }
     
     @Override
-    public boolean sendCancelCommand(String executorIp, String taskId) {
-        Set<String> sessionIds = executorSessions.get(executorIp);
+    public boolean sendCancelCommand(String executorMac, String taskId) {
+        Set<String> sessionIds = executorSessions.get(executorMac);
         if (sessionIds == null || sessionIds.isEmpty()) {
-            log.warn("执行机不在线，无法发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+            log.warn("执行机不在线，无法发送停止命令 - 执行机MAC地址: {}, 任务ID: {}", executorMac, taskId);
             return false;
         }
         
@@ -156,7 +157,8 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
             cancelData.put("taskId", taskId);
             message.setData(cancelData);
             message.setTimestamp(System.currentTimeMillis());
-            message.setExecutorIp(executorIp);
+            // 保留executorIp字段用于兼容，但实际使用MAC地址作为key
+            message.setExecutorIp(executorMac);
             
             String messageJson = JSON.toJSONString(message);
             
@@ -168,25 +170,25 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
                     try {
                         session.sendMessage(new TextMessage(messageJson));
                         sent = true;
-                        log.info("停止命令已通过WebSocket发送到执行机 - 执行机IP: {}, 任务ID: {}, 会话ID: {}", 
-                                executorIp, taskId, sessionId);
+                        log.info("停止命令已通过WebSocket发送到执行机 - 执行机MAC地址: {}, 任务ID: {}, 会话ID: {}", 
+                                executorMac, taskId, sessionId);
                     } catch (IOException e) {
                         log.error("发送停止命令到会话失败 - 会话ID: {}, 错误: {}", sessionId, e.getMessage(), e);
                         // 如果发送失败，移除该会话
                         unregisterSession(sessionId);
-                        unregisterExecutor(executorIp, sessionId);
+                        unregisterExecutor(executorMac, sessionId);
                     }
                 } else {
                     log.warn("会话不存在或已关闭 - 会话ID: {}", sessionId);
-                    unregisterExecutor(executorIp, sessionId);
+                    unregisterExecutor(executorMac, sessionId);
                 }
             }
             
             return sent;
             
         } catch (Exception e) {
-            log.error("通过WebSocket发送停止命令失败 - 执行机IP: {}, 任务ID: {}, 错误: {}", 
-                    executorIp, taskId, e.getMessage(), e);
+            log.error("通过WebSocket发送停止命令失败 - 执行机MAC地址: {}, 任务ID: {}, 错误: {}", 
+                    executorMac, taskId, e.getMessage(), e);
             return false;
         }
     }
@@ -202,12 +204,12 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
     }
     
     /**
-     * 根据会话ID获取执行机IP
+     * 根据会话ID获取执行机MAC地址
      * 
      * @param sessionId 会话ID
-     * @return 执行机IP
+     * @return 执行机MAC地址
      */
-    public String getExecutorIpBySession(String sessionId) {
+    public String getExecutorMacBySession(String sessionId) {
         return sessionToExecutor.get(sessionId);
     }
     
@@ -217,9 +219,9 @@ public class ExecutorWebSocketServiceImpl implements ExecutorWebSocketService {
      * @param sessionId 会话ID
      */
     public void unregisterBySession(String sessionId) {
-        String executorIp = sessionToExecutor.get(sessionId);
-        if (executorIp != null) {
-            unregisterExecutor(executorIp, sessionId);
+        String executorMac = sessionToExecutor.get(sessionId);
+        if (executorMac != null) {
+            unregisterExecutor(executorMac, sessionId);
         } else {
             unregisterSession(sessionId);
         }

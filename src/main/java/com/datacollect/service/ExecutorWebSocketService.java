@@ -13,49 +13,49 @@ public interface ExecutorWebSocketService {
     /**
      * 注册执行机连接
      * 
-     * @param executorIp 执行机IP
+     * @param executorMac 执行机MAC地址
      * @param sessionId 会话ID
      */
-    void registerExecutor(String executorIp, String sessionId);
+    void registerExecutor(String executorMac, String sessionId);
     
     /**
      * 注销执行机连接
      * 
-     * @param executorIp 执行机IP
+     * @param executorMac 执行机MAC地址
      * @param sessionId 会话ID
      */
-    void unregisterExecutor(String executorIp, String sessionId);
+    void unregisterExecutor(String executorMac, String sessionId);
     
     /**
      * 检查执行机是否在线
      * 
-     * @param executorIp 执行机IP
+     * @param executorMac 执行机MAC地址
      * @return 是否在线
      */
-    boolean isExecutorOnline(String executorIp);
+    boolean isExecutorOnline(String executorMac);
     
     /**
      * 通过WebSocket发送任务到执行机
      * 
-     * @param executorIp 执行机IP
+     * @param executorMac 执行机MAC地址
      * @param request 任务请求
      * @return 是否发送成功
      */
-    boolean sendTaskToExecutor(String executorIp, TestCaseExecutionRequest request);
+    boolean sendTaskToExecutor(String executorMac, TestCaseExecutionRequest request);
     
     /**
      * 通过WebSocket发送停止命令到执行机
      * 
-     * @param executorIp 执行机IP
+     * @param executorMac 执行机MAC地址
      * @param taskId 任务ID
      * @return 是否发送成功
      */
-    boolean sendCancelCommand(String executorIp, String taskId);
+    boolean sendCancelCommand(String executorMac, String taskId);
     
     /**
-     * 获取所有在线的执行机IP列表
+     * 获取所有在线的执行机MAC地址列表
      * 
-     * @return 执行机IP列表
+     * @return 执行机MAC地址列表
      */
     java.util.Set<String> getOnlineExecutors();
     
