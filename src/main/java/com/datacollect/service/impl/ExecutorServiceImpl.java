@@ -121,6 +121,9 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
         String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
         dto.setRegionName(regionPath);
         
+        // 设置MAC地址ID
+        dto.setMacAddressId(executor.getMacAddressId());
+        
         // 查询执行机关联的MAC地址
         if (executor.getMacAddressId() != null) {
             ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
