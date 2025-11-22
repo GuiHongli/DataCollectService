@@ -11,3 +11,4 @@ ALTER TABLE `executor_mac_address` ADD UNIQUE KEY `uk_mac_address_ip` (`mac_addr
 -- 4. 添加MAC地址索引（用于快速查询一个MAC地址的所有IP）
 ALTER TABLE `executor_mac_address` ADD INDEX `idx_mac_address` (`mac_address`);
 
+

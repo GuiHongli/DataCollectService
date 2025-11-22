@@ -7,3 +7,4 @@ ADD COLUMN IF NOT EXISTS `create_by` varchar(50) DEFAULT NULL COMMENT '创建人
 -- 为 create_by 字段添加索引，提高查询性能
 CREATE INDEX IF NOT EXISTS `idx_create_by` ON `collect_task` (`create_by`);
 
+

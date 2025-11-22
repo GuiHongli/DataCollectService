@@ -19,9 +19,6 @@ public class ExecutorMacAddress {
     @TableField("mac_address")
     private String macAddress;
 
-    @TableField("executor_id")
-    private Long executorId;
-
     @NotBlank(message = "IP地址不能为空")
     @TableField("ip_address")
     private String ipAddress;

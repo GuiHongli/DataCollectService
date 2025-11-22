@@ -2,7 +2,6 @@
 CREATE TABLE IF NOT EXISTS `executor_mac_address` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `mac_address` varchar(20) NOT NULL COMMENT 'MAC地址',
-  `executor_id` bigint(20) DEFAULT NULL COMMENT '关联的执行机ID（可为空，表示未分配）',
   `ip_address` varchar(50) NOT NULL COMMENT 'IP地址（一个MAC地址可以关联多个IP）',
   `status` tinyint(4) DEFAULT '1' COMMENT '状态：0-禁用，1-启用',
   `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
@@ -13,7 +12,6 @@ CREATE TABLE IF NOT EXISTS `executor_mac_address` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_mac_address_ip` (`mac_address`, `ip_address`),
   KEY `idx_mac_address` (`mac_address`),
-  KEY `idx_executor_id` (`executor_id`),
   KEY `idx_ip_address` (`ip_address`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='执行机MAC地址表（支持一个MAC地址关联多个IP）';
 

@@ -4,11 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
 import com.datacollect.entity.Executor;
-import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.entity.dto.ExecutorDTO;
 import com.datacollect.dto.ExecutorRequest;
 import com.datacollect.service.ExecutorService;
-import com.datacollect.service.ExecutorMacAddressService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -27,9 +25,6 @@ public class ExecutorController {
 
     @Autowired
     private ExecutorService executorService;
-    
-    @Autowired
-    private ExecutorMacAddressService executorMacAddressService;
 
     @PostMapping
     public Result<Executor> create(@Valid @RequestBody ExecutorRequest request) {
@@ -47,6 +42,7 @@ public class ExecutorController {
             executor.setName(request.getName());
             executor.setIpAddress(request.getIpAddress());
             executor.setMacAddress(request.getMacAddress());
+            executor.setMacAddressId(request.getMacAddressId());
             executor.setRegionId(request.getRegionId());
             executor.setDescription(request.getDescription());
             // 如果请求中没有提供status，默认设置为1（在线）
@@ -59,10 +55,8 @@ public class ExecutorController {
                 executor.setId(existingExecutor.getId());
                 boolean success = executorService.updateById(executor);
                 if (success) {
-                    // 关联MAC地址
-                    associateMacAddress(executor.getId(), request.getMacAddressId());
-                    log.info("Executor updated successfully via IP replace - ID: {}, IP: {}", 
-                            executor.getId(), request.getIpAddress());
+                    log.info("Executor updated successfully via IP replace - ID: {}, IP: {}, MAC Address ID: {}", 
+                            executor.getId(), request.getIpAddress(), request.getMacAddressId());
                     return Result.success(executor);
                 } else {
                     log.error("Executor update failed via IP replace - IP: {}", request.getIpAddress());
@@ -72,10 +66,8 @@ public class ExecutorController {
                 // 如果不存在，则插入
                 boolean success = executorService.save(executor);
                 if (success) {
-                    // 关联MAC地址
-                    associateMacAddress(executor.getId(), request.getMacAddressId());
-                    log.info("Executor created successfully - ID: {}, IP: {}", 
-                            executor.getId(), request.getIpAddress());
+                    log.info("Executor created successfully - ID: {}, IP: {}, MAC Address ID: {}", 
+                            executor.getId(), request.getIpAddress(), request.getMacAddressId());
                     return Result.success(executor);
                 } else {
                     log.error("Executor creation failed - IP: {}", request.getIpAddress());
@@ -89,19 +81,6 @@ public class ExecutorController {
         }
     }
     
-    /**
-     * 关联MAC地址到执行机
-     */
-    private void associateMacAddress(Long executorId, Long macAddressId) {
-        if (macAddressId != null) {
-            ExecutorMacAddress macAddress = executorMacAddressService.getById(macAddressId);
-            if (macAddress != null) {
-                macAddress.setExecutorId(executorId);
-                executorMacAddressService.updateById(macAddress);
-                log.info("MAC地址已关联到执行机 - MAC地址ID: {}, 执行机ID: {}", macAddressId, executorId);
-            }
-        }
-    }
 
     @PutMapping("/{id}")
     public Result<Executor> update(@PathVariable @NotNull Long id, @Valid @RequestBody ExecutorRequest request) {
@@ -120,6 +99,7 @@ public class ExecutorController {
             executor.setName(request.getName());
             executor.setIpAddress(request.getIpAddress());
             executor.setMacAddress(request.getMacAddress());
+            executor.setMacAddressId(request.getMacAddressId());
             executor.setRegionId(request.getRegionId());
             executor.setDescription(request.getDescription());
             // 如果请求中提供了status，则更新；否则保持原值
@@ -127,14 +107,7 @@ public class ExecutorController {
                 executor.setStatus(request.getStatus());
             }
             
-            Result<Executor> result = performUpdate(id, executor);
-            
-            // 关联MAC地址
-            if (result.getCode() == 200) {
-                associateMacAddress(id, request.getMacAddressId());
-            }
-            
-            return result;
+            return performUpdate(id, executor);
             
         } catch (Exception e) {
             log.error("Exception updating executor - ID: {}, error: {}", id, e.getMessage(), e);

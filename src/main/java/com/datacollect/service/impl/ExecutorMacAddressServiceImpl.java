@@ -35,16 +35,7 @@ public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddres
     }
 
     @Override
-    public List<ExecutorMacAddress> getByExecutorId(Long executorId) {
-        QueryWrapper<ExecutorMacAddress> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("executor_id", executorId);
-        queryWrapper.eq("deleted", 0);
-        queryWrapper.orderByDesc("create_time");
-        return list(queryWrapper);
-    }
-
-    @Override
-    public ExecutorMacAddress registerOrUpdateMacAddress(String macAddress, Long executorId, String ipAddress) {
+    public ExecutorMacAddress registerOrUpdateMacAddress(String macAddress, String ipAddress) {
         if (ipAddress == null || ipAddress.trim().isEmpty()) {
             log.warn("IP地址为空，无法注册MAC地址 - MAC地址: {}", macAddress);
             return null;
@@ -61,24 +52,15 @@ public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddres
             // 如果MAC地址和IP的组合不存在，创建新记录（支持一个MAC地址关联多个IP）
             ExecutorMacAddress macAddressEntity = new ExecutorMacAddress();
             macAddressEntity.setMacAddress(macAddress);
-            macAddressEntity.setExecutorId(executorId);
             macAddressEntity.setIpAddress(ipAddress);
             macAddressEntity.setStatus(1);
             macAddressEntity.setCreateTime(LocalDateTime.now());
             macAddressEntity.setUpdateTime(LocalDateTime.now());
             save(macAddressEntity);
-            log.info("MAC地址已注册（新IP） - MAC地址: {}, 执行机ID: {}, IP地址: {}", macAddress, executorId, ipAddress);
+            log.info("MAC地址已注册（新IP） - MAC地址: {}, IP地址: {}", macAddress, ipAddress);
             return macAddressEntity;
         } else {
-            // 如果已存在，更新执行机ID（如果不同）
-            if (executorId != null && !executorId.equals(existingRecord.getExecutorId())) {
-                existingRecord.setExecutorId(executorId);
-                existingRecord.setUpdateTime(LocalDateTime.now());
-                updateById(existingRecord);
-                log.info("MAC地址已更新执行机关联 - MAC地址: {}, 执行机ID: {}, IP地址: {}", macAddress, executorId, ipAddress);
-            } else {
-                log.debug("MAC地址和IP组合已存在 - MAC地址: {}, 执行机ID: {}, IP地址: {}", macAddress, executorId, ipAddress);
-            }
+            log.debug("MAC地址和IP组合已存在 - MAC地址: {}, IP地址: {}", macAddress, ipAddress);
             return existingRecord;
         }
     }
@@ -86,7 +68,6 @@ public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddres
     @Override
     public List<ExecutorMacAddress> getAvailableMacAddresses() {
         QueryWrapper<ExecutorMacAddress> queryWrapper = new QueryWrapper<>();
-        queryWrapper.isNull("executor_id");
         queryWrapper.eq("status", 1);
         queryWrapper.eq("deleted", 0);
         queryWrapper.orderByDesc("create_time");

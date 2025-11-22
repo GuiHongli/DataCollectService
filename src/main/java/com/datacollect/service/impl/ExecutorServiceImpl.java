@@ -121,15 +121,12 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
         String regionPath = buildRegionPath(executor.getRegionId(), regionMap);
         dto.setRegionName(regionPath);
         
-        // 查询执行机关联的MAC地址（如果有多个，显示第一个）
-        List<ExecutorMacAddress> macAddresses = executorMacAddressService.getByExecutorId(executor.getId());
-        if (macAddresses != null && !macAddresses.isEmpty()) {
-            // 如果有多个MAC地址，用逗号分隔显示
-            String macAddressStr = macAddresses.stream()
-                    .map(ExecutorMacAddress::getMacAddress)
-                    .distinct()
-                    .collect(Collectors.joining(", "));
-            dto.setMacAddress(macAddressStr);
+        // 查询执行机关联的MAC地址
+        if (executor.getMacAddressId() != null) {
+            ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+            if (macAddress != null) {
+                dto.setMacAddress(macAddress.getMacAddress());
+            }
         }
         
         return dto;

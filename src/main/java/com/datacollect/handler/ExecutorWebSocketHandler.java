@@ -230,7 +230,12 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             
             // 如果提供了MAC地址，注册到MAC地址表
             if (executorMac != null && !executorMac.trim().isEmpty()) {
-                executorMacAddressService.registerOrUpdateMacAddress(executorMac, executor.getId(), executorIp);
+                ExecutorMacAddress macAddress = executorMacAddressService.registerOrUpdateMacAddress(executorMac, executorIp);
+                if (macAddress != null) {
+                    // 更新executor的macAddressId
+                    executor.setMacAddressId(macAddress.getId());
+                    executorService.updateById(executor);
+                }
             }
             
             // 注册执行机连接

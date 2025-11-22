@@ -23,6 +23,9 @@ public class Executor {
     @TableField("mac_address")
     private String macAddress;
 
+    @TableField("mac_address_id")
+    private Long macAddressId;
+
     @NotBlank(message = "执行机名称不能为空")
     @TableField("name")
     private String name;

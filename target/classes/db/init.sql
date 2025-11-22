@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS `executor` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `ip_address` varchar(50) NOT NULL COMMENT '执行机IP地址',
   `mac_address` varchar(20) DEFAULT NULL COMMENT '执行机MAC地址',
+  `mac_address_id` bigint(20) DEFAULT NULL COMMENT '关联的MAC地址ID（关联executor_mac_address表的id）',
   `name` varchar(100) NOT NULL COMMENT '执行机名称',
   `region_id` bigint(20) NOT NULL COMMENT '执行机所属地域ID',
   `description` text COMMENT '描述',
@@ -49,7 +50,8 @@ CREATE TABLE IF NOT EXISTS `executor` (
   `deleted` tinyint(4) DEFAULT '0' COMMENT '逻辑删除：0-未删除，1-已删除',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ip_address` (`ip_address`),
-  KEY `idx_region_id` (`region_id`)
+  KEY `idx_region_id` (`region_id`),
+  KEY `idx_mac_address_id` (`mac_address_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='执行机表';
 
 -- UE表

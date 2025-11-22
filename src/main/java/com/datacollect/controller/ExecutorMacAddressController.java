@@ -39,15 +39,6 @@ public class ExecutorMacAddressController {
     }
 
     /**
-     * 根据执行机ID获取MAC地址列表
-     */
-    @GetMapping("/executor/{executorId}")
-    public Result<List<ExecutorMacAddress>> getByExecutorId(@PathVariable Long executorId) {
-        List<ExecutorMacAddress> macAddresses = executorMacAddressService.getByExecutorId(executorId);
-        return Result.success(macAddresses);
-    }
-    
-    /**
      * 根据MAC地址获取所有关联的IP地址列表
      */
     @GetMapping("/mac/{macAddress}/ips")
