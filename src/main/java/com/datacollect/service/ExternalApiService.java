@@ -6,6 +6,8 @@ import com.datacollect.dto.GetDailyRankRequest;
 import com.datacollect.dto.GetDailyRankResponse;
 import com.datacollect.dto.GetVersionHistoryRequest;
 import com.datacollect.dto.GetVersionHistoryResponse;
+import com.datacollect.dto.GetSingleAppVersionHistoryRequest;
+import com.datacollect.dto.GetSingleAppVersionHistoryResponse;
 import com.datacollect.dto.UpdateProbedStatusRequest;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 
@@ -50,5 +52,13 @@ public interface ExternalApiService {
      * @return 获取版本历史响应
      */
     GetVersionHistoryResponse getVersionHistory(GetVersionHistoryRequest request);
+    
+    /**
+     * 获取单个应用版本历史
+     * 
+     * @param request 获取单个应用版本历史请求
+     * @return 获取单个应用版本历史响应
+     */
+    GetSingleAppVersionHistoryResponse getSingleAppVersionHistory(GetSingleAppVersionHistoryRequest request);
 }
 

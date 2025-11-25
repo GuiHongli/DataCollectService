@@ -17,10 +17,20 @@ import lombok.AllArgsConstructor;
 public class GetDailyRankRequest {
     
     /**
-     * 日期，格式：YYYY-MM-DD
+     * 周期类型：daily（每日）, weekly（每周）, monthly（每月）, quarterly（每季度）
      */
-    @JsonProperty("date")
-    private String date;
+    @JsonProperty("period_type")
+    private String periodType;
+    
+    /**
+     * 周期值，格式根据period_type不同而不同：
+     * daily: YYYY-MM-DD
+     * weekly: YYYY-WW（年份-周数）
+     * monthly: YYYY-MM
+     * quarterly: YYYY-Q（年份-季度）
+     */
+    @JsonProperty("period_value")
+    private String periodValue;
     
     /**
      * 市场品牌：appstore, googleplay, huawei, xiaomi
@@ -33,6 +43,18 @@ public class GetDailyRankRequest {
      */
     @JsonProperty("category")
     private String category;
+    
+    /**
+     * 每页显示多少数据，默认0表示不分页
+     */
+    @JsonProperty("num")
+    private Integer num = 0;
+    
+    /**
+     * 页码，从1开始
+     */
+    @JsonProperty("page")
+    private Integer page;
 }
 
 

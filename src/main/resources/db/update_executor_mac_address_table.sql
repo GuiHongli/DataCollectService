@@ -12,3 +12,4 @@ ALTER TABLE `executor_mac_address` ADD UNIQUE KEY `uk_mac_address_ip` (`mac_addr
 ALTER TABLE `executor_mac_address` ADD INDEX `idx_mac_address` (`mac_address`);
 
 
+
