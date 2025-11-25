@@ -201,49 +201,79 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
             }
             
             if (executor == null) {
-                // 执行机不存在，自动创建
-                log.info("执行机不存在，自动创建 - MAC地址: {}, 执行机IP: {}, 会话ID: {}", executorMac, executorIp, sessionId);
-                
-                executor = new Executor();
-                // 设置MAC地址（必需）
-                executor.setMacAddress(executorMac);
-                
-                // 设置IP地址（如果提供）
+                // 执行机不存在，先检查IP地址是否已存在
+                boolean ipExists = false;
                 if (executorIp != null && !executorIp.trim().isEmpty()) {
-                    executor.setIpAddress(executorIp);
-                } else {
-                    // 如果没有提供IP，尝试从MAC地址表中获取
-                    ExecutorMacAddress macAddress = executorMacAddressService.getByMacAddress(executorMac);
-                    if (macAddress != null && macAddress.getIpAddress() != null) {
-                        executor.setIpAddress(macAddress.getIpAddress());
+                    QueryWrapper<Executor> ipQueryWrapper = new QueryWrapper<>();
+                    ipQueryWrapper.eq("ip_address", executorIp);
+                    Executor existingExecutor = executorService.getOne(ipQueryWrapper);
+                    
+                    if (existingExecutor != null) {
+                        // IP地址已存在，更新mac_address_id
+                        log.info("IP地址已存在，更新mac_address_id - IP地址: {}, MAC地址: {}, 执行机ID: {}, 会话ID: {}", 
+                                executorIp, executorMac, existingExecutor.getId(), sessionId);
+                        
+                        executor = existingExecutor;
+                        ipExists = true;
+                        
+                        // 更新MAC地址
+                        executor.setMacAddress(executorMac);
+                        
+                        // 更新状态为在线
+                        executor.setStatus(registerMsg.getStatus() != null ? registerMsg.getStatus() : 1);
+                        
+                        executorService.updateById(executor);
+                        
+                        log.info("已更新执行机的mac_address - IP地址: {}, MAC地址: {}, 执行机ID: {}, 会话ID: {}", 
+                                executorIp, executorMac, executor.getId(), sessionId);
                     }
                 }
                 
-                // 设置执行机名称，如果注册消息中有则使用，否则使用默认值
-                String executorName = registerMsg.getExecutorName();
-                if (executorName == null || executorName.trim().isEmpty()) {
-                    executorName = "执行机-" + executorMac;
+                if (!ipExists) {
+                    // IP地址不存在，自动创建新执行机
+                    log.info("执行机不存在，自动创建 - MAC地址: {}, 执行机IP: {}, 会话ID: {}", executorMac, executorIp, sessionId);
+                    
+                    executor = new Executor();
+                    // 设置MAC地址（必需）
+                    executor.setMacAddress(executorMac);
+                    
+                    // 设置IP地址（如果提供）
+                    if (executorIp != null && !executorIp.trim().isEmpty()) {
+                        executor.setIpAddress(executorIp);
+                    } else {
+                        // 如果没有提供IP，尝试从MAC地址表中获取
+                        ExecutorMacAddress macAddress = executorMacAddressService.getByMacAddress(executorMac);
+                        if (macAddress != null && macAddress.getIpAddress() != null) {
+                            executor.setIpAddress(macAddress.getIpAddress());
+                        }
+                    }
+                    
+                    // 设置执行机名称，如果注册消息中有则使用，否则使用默认值
+                    String executorName = registerMsg.getExecutorName();
+                    if (executorName == null || executorName.trim().isEmpty()) {
+                        executorName = "执行机-" + executorMac;
+                    }
+                    executor.setName(executorName);
+                    
+                    // 设置默认地域ID为1（中国片区），如果后续需要可以配置化
+                    executor.setRegionId(1L);
+                    
+                    // 设置描述
+                    if (registerMsg.getDescription() != null && !registerMsg.getDescription().trim().isEmpty()) {
+                        executor.setDescription(registerMsg.getDescription());
+                    } else {
+                        executor.setDescription("通过WebSocket自动注册的执行机");
+                    }
+                    
+                    // 设置状态为在线
+                    executor.setStatus(registerMsg.getStatus() != null ? registerMsg.getStatus() : 1);
+                    
+                    // 保存执行机
+                    executorService.save(executor);
+                    
+                    log.info("执行机已自动创建 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
+                            executorMac, executor.getIpAddress(), executorName, executor.getId(), sessionId);
                 }
-                executor.setName(executorName);
-                
-                // 设置默认地域ID为1（中国片区），如果后续需要可以配置化
-                executor.setRegionId(1L);
-                
-                // 设置描述
-                if (registerMsg.getDescription() != null && !registerMsg.getDescription().trim().isEmpty()) {
-                    executor.setDescription(registerMsg.getDescription());
-                } else {
-                    executor.setDescription("通过WebSocket自动注册的执行机");
-                }
-                
-                // 设置状态为在线
-                executor.setStatus(registerMsg.getStatus() != null ? registerMsg.getStatus() : 1);
-                
-                // 保存执行机
-                executorService.save(executor);
-                
-                log.info("执行机已自动创建 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 执行机ID: {}, 会话ID: {}", 
-                        executorMac, executor.getIpAddress(), executorName, executor.getId(), sessionId);
             } else {
                 // 执行机已存在，更新状态为在线
                 executor.setStatus(1);
@@ -263,6 +293,13 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                 
                 log.info("执行机已存在，更新状态为在线 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
                         executorMac, executor.getIpAddress(), executor.getName(), sessionId);
+            }
+            
+            // 确保executor不为null（理论上不应该为null，但为了代码健壮性添加检查）
+            if (executor == null) {
+                log.error("执行机处理异常，executor为null - MAC地址: {}, 执行机IP: {}, 会话ID: {}", executorMac, executorIp, sessionId);
+                sendErrorResponse(session, "处理执行机信息异常");
+                return;
             }
             
             // 注册到MAC地址表
