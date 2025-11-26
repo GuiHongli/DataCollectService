@@ -784,17 +784,38 @@ public class DashboardStatisticsService {
                 executorQuery.eq("region_id", -1); // 空结果
             }
         } else if (level == 2) {
-            // 国家级别：查询该国家下所有城市的执行机
-            QueryWrapper<Region> cityQuery = new QueryWrapper<>();
-            cityQuery.eq("parent_id", regionId);
-            cityQuery.eq("level", 4);
-            cityQuery.eq("deleted", 0);
-            List<Region> cities = regionService.list(cityQuery);
-            if (!cities.isEmpty()) {
-                List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                executorQuery.in("region_id", cityIds);
+            // 国家级别：先查询该国家下所有省份，再查询这些省份下的所有城市
+            QueryWrapper<Region> provinceQuery = new QueryWrapper<>();
+            provinceQuery.eq("parent_id", regionId);
+            provinceQuery.eq("level", 3);
+            provinceQuery.eq("deleted", 0);
+            List<Region> provinces = regionService.list(provinceQuery);
+            if (!provinces.isEmpty()) {
+                List<Long> provinceIds = provinces.stream().map(Region::getId).collect(Collectors.toList());
+                QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                cityQuery.in("parent_id", provinceIds);
+                cityQuery.eq("level", 4);
+                cityQuery.eq("deleted", 0);
+                List<Region> cities = regionService.list(cityQuery);
+                if (!cities.isEmpty()) {
+                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                    executorQuery.in("region_id", cityIds);
+                } else {
+                    executorQuery.eq("region_id", -1); // 空结果
+                }
             } else {
-                executorQuery.eq("region_id", -1); // 空结果
+                // 如果国家下没有省份，尝试直接查询城市（兼容某些国家可能直接有城市的情况）
+                QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                cityQuery.eq("parent_id", regionId);
+                cityQuery.eq("level", 4);
+                cityQuery.eq("deleted", 0);
+                List<Region> cities = regionService.list(cityQuery);
+                if (!cities.isEmpty()) {
+                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                    executorQuery.in("region_id", cityIds);
+                } else {
+                    executorQuery.eq("region_id", -1); // 空结果
+                }
             }
         } else if (level == 1) {
             // 片区级别：查询该片区下所有城市的执行机
@@ -1074,17 +1095,38 @@ public class DashboardStatisticsService {
                     executorQuery.eq("region_id", -1);
                 }
             } else if (parentRegion.getLevel() == 2) {
-                // 国家级别：查询该国家下所有城市的执行机
-                QueryWrapper<Region> cityQuery = new QueryWrapper<>();
-                cityQuery.eq("parent_id", parentRegionId);
-                cityQuery.eq("level", 4);
-                cityQuery.eq("deleted", 0);
-                List<Region> cities = regionService.list(cityQuery);
-                if (!cities.isEmpty()) {
-                    List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                    executorQuery.in("region_id", cityIds);
+                // 国家级别：先查询该国家下所有省份，再查询这些省份下的所有城市
+                QueryWrapper<Region> provinceQuery = new QueryWrapper<>();
+                provinceQuery.eq("parent_id", parentRegionId);
+                provinceQuery.eq("level", 3);
+                provinceQuery.eq("deleted", 0);
+                List<Region> provinces = regionService.list(provinceQuery);
+                if (!provinces.isEmpty()) {
+                    List<Long> provinceIds = provinces.stream().map(Region::getId).collect(Collectors.toList());
+                    QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                    cityQuery.in("parent_id", provinceIds);
+                    cityQuery.eq("level", 4);
+                    cityQuery.eq("deleted", 0);
+                    List<Region> cities = regionService.list(cityQuery);
+                    if (!cities.isEmpty()) {
+                        List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                        executorQuery.in("region_id", cityIds);
+                    } else {
+                        executorQuery.eq("region_id", -1);
+                    }
                 } else {
-                    executorQuery.eq("region_id", -1);
+                    // 如果国家下没有省份，尝试直接查询城市（兼容某些国家可能直接有城市的情况）
+                    QueryWrapper<Region> cityQuery = new QueryWrapper<>();
+                    cityQuery.eq("parent_id", parentRegionId);
+                    cityQuery.eq("level", 4);
+                    cityQuery.eq("deleted", 0);
+                    List<Region> cities = regionService.list(cityQuery);
+                    if (!cities.isEmpty()) {
+                        List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
+                        executorQuery.in("region_id", cityIds);
+                    } else {
+                        executorQuery.eq("region_id", -1);
+                    }
                 }
             } else if (parentRegion.getLevel() == 1) {
                 // 片区级别：查询该片区下所有城市的执行机
