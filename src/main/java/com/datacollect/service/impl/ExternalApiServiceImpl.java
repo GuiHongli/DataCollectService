@@ -164,3 +164,29 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     }
 }
 
+    @Override
+    public GetSingleAppVersionHistoryResponse getSingleAppVersionHistory(GetSingleAppVersionHistoryRequest request) {
+        String url = externalApiHost + "/api/apps/get_single_app_version_history";
+        
+        log.info("Calling external API to get single app version history - URL: {}, request parameters: {}", url, request);
+        
+        try {
+            ResponseEntity<GetSingleAppVersionHistoryResponse> response = 
+                httpClientUtil.post(url, request, GetSingleAppVersionHistoryResponse.class);
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                GetSingleAppVersionHistoryResponse result = response.getBody();
+                log.info("External API call successful - response: {}", result);
+                return result;
+            } else {
+                log.error("External API call failed - HTTP status code: {}", response.getStatusCode());
+                throw new RuntimeException("External API call failed, HTTP status code: " + response.getStatusCode());
+            }
+            
+        } catch (Exception e) {
+            log.error("Exception calling external API - URL: {}, error message: {}", url, e.getMessage(), e);
+            throw new RuntimeException("Exception calling external API: " + e.getMessage(), e);
+        }
+    }
+}
+

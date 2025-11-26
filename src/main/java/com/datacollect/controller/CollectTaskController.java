@@ -389,7 +389,7 @@ public class CollectTaskController {
                 // 通过IP地址查找执行机，获取MAC地址
                 String executorMac = getExecutorMacAddress(executorIp);
                 if (executorMac != null && !executorMac.trim().isEmpty()) {
-                    // 优先使用WebSocket发送停止命令
+                // 优先使用WebSocket发送停止命令
                     if (executorWebSocketService.isExecutorOnline(executorMac)) {
                         log.info("执行机在线，通过WebSocket发送停止命令 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
                         cancelled = executorWebSocketService.sendCancelCommand(executorMac, executionTaskId);
@@ -404,7 +404,7 @@ public class CollectTaskController {
                 }
             } else {
                 log.warn("无法获取执行机MAC地址，使用HTTP发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
-            }
+                }
                 
                 // 如果WebSocket不可用或发送失败，回退到HTTP请求
                 if (!cancelled) {
@@ -999,4 +999,50 @@ public class CollectTaskController {
         }
     }
 
+}
+
+            for (String ip : executorIps) {
+                // 通过执行机IP查找执行机
+                QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("ip_address", ip);
+                queryWrapper.eq("deleted", 0);
+                Executor executor = executorService.getOne(queryWrapper);
+                
+                if (executor != null) {
+                    // 检查执行机状态：status=1表示在线（通过WebSocket连接活跃）
+                    // 这里可以根据实际的WebSocket服务来检查连接状态
+                    // 目前先使用数据库中的status字段，如果WebSocket服务已实现，可以改为检查WebSocket连接状态
+                    boolean isOnline = executor.getStatus() != null && executor.getStatus() == 1;
+                    onlineStatusMap.put(ip, isOnline);
+                    log.debug("Executor online status - IP: {}, status: {}, isOnline: {}", 
+                            ip, executor.getStatus(), isOnline);
+                } else {
+                    // 执行机不存在，认为不在线
+                    onlineStatusMap.put(ip, false);
+                    log.warn("Executor not found - IP: {}", ip);
+                }
+            }
+            
+            log.info("Checked executors online status - result: {}", onlineStatusMap);
+            return Result.success(onlineStatusMap);
+            
+        } catch (Exception e) {
+            log.error("Failed to check executors online status", e);
+            return Result.error("Failed to check executors online status: " + e.getMessage());
+        }
+    }
+
+}
+            log.debug("Port check failed - host: {}, port: {}, error: {}", host, port, e.getMessage());
+            return false;
+        } finally {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close socket - host: {}, port: {}", host, port);
+                }
+            }
+        }
+    }
 }

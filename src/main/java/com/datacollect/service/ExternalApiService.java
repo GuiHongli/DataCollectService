@@ -62,3 +62,12 @@ public interface ExternalApiService {
     GetSingleAppVersionHistoryResponse getSingleAppVersionHistory(GetSingleAppVersionHistoryRequest request);
 }
 
+    /**
+     * 获取单个应用版本历史
+     * 
+     * @param request 获取单个应用版本历史请求
+     * @return 获取单个应用版本历史响应
+     */
+    GetSingleAppVersionHistoryResponse getSingleAppVersionHistory(GetSingleAppVersionHistoryRequest request);
+}
+

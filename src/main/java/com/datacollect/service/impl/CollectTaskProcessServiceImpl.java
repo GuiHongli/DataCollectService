@@ -1122,7 +1122,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return null;
         }
     }
-    
+
     /**
      * 发送执行请求
      */
@@ -1132,18 +1132,18 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         if (executorMac == null || executorMac.trim().isEmpty()) {
             log.warn("无法获取执行机MAC地址，使用HTTP发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
         } else {
-            // 优先使用WebSocket发送任务
+        // 优先使用WebSocket发送任务
             if (executorWebSocketService.isExecutorOnline(executorMac)) {
                 log.info("执行机在线，通过WebSocket发送任务 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
                 boolean sent = executorWebSocketService.sendTaskToExecutor(executorMac, request);
-                if (sent) {
-                    // 更新例次状态
-                    updateInstanceStatus(instances, taskId);
-                    return true;
-                } else {
-                    log.warn("WebSocket发送任务失败，尝试使用HTTP发送 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
-                }
+            if (sent) {
+                // 更新例次状态
+                updateInstanceStatus(instances, taskId);
+                return true;
             } else {
+                    log.warn("WebSocket发送任务失败，尝试使用HTTP发送 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+            }
+        } else {
                 log.info("执行机不在线，使用HTTP发送任务 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
             }
         }
