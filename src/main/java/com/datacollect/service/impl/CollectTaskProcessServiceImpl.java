@@ -770,11 +770,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return false;
             }
             
-            // 按执行机IP分组
-            java.util.Map<String, List<TestCaseExecutionInstance>> instancesByExecutor = groupInstancesByExecutor(instances);
+            // 按逻辑环境分组
+            java.util.Map<Long, List<TestCaseExecutionInstance>> instancesByLogicEnvironment = groupInstancesByLogicEnvironment(instances);
             
-            // 为每个执行机创建执行任务
-            return createExecutionTasksForExecutors(instancesByExecutor);
+            // 为每个逻辑环境创建执行任务
+            return createExecutionTasksForLogicEnvironments(instancesByLogicEnvironment);
             
         } catch (Exception e) {
             log.error("Executor service call exception - error: {}", e.getMessage(), e);
@@ -798,47 +798,72 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * 按执行机分组实例
+     * 按逻辑环境分组实例
      */
-    private java.util.Map<String, List<TestCaseExecutionInstance>> groupInstancesByExecutor(List<TestCaseExecutionInstance> instances) {
-        java.util.Map<String, List<TestCaseExecutionInstance>> instancesByExecutor = new java.util.HashMap<>();
+    private java.util.Map<Long, List<TestCaseExecutionInstance>> groupInstancesByLogicEnvironment(List<TestCaseExecutionInstance> instances) {
+        java.util.Map<Long, List<TestCaseExecutionInstance>> instancesByLogicEnvironment = new java.util.HashMap<>();
         for (TestCaseExecutionInstance instance : instances) {
-            instancesByExecutor.computeIfAbsent(instance.getExecutorIp(), k -> new ArrayList<>()).add(instance);
+            if (instance.getLogicEnvironmentId() != null) {
+                instancesByLogicEnvironment.computeIfAbsent(instance.getLogicEnvironmentId(), k -> new ArrayList<>()).add(instance);
+            } else {
+                log.warn("Instance has no logic environment ID - test case: {}, round: {}", instance.getTestCaseId(), instance.getRound());
+            }
         }
-        return instancesByExecutor;
+        return instancesByLogicEnvironment;
     }
 
     /**
-     * 为执行机创建执行任务
+     * 为逻辑环境创建执行任务
      */
-    private boolean createExecutionTasksForExecutors(java.util.Map<String, List<TestCaseExecutionInstance>> instancesByExecutor) {
-        for (java.util.Map.Entry<String, List<TestCaseExecutionInstance>> entry : instancesByExecutor.entrySet()) {
-            String executorIp = entry.getKey();
-            List<TestCaseExecutionInstance> executorInstances = entry.getValue();
+    private boolean createExecutionTasksForLogicEnvironments(java.util.Map<Long, List<TestCaseExecutionInstance>> instancesByLogicEnvironment) {
+        for (java.util.Map.Entry<Long, List<TestCaseExecutionInstance>> entry : instancesByLogicEnvironment.entrySet()) {
+            Long logicEnvironmentId = entry.getKey();
+            List<TestCaseExecutionInstance> environmentInstances = entry.getValue();
             
             // 再次检查任务状态，确保在调用执行机前任务未被停止
-            if (!checkTaskStatus(executorInstances)) {
-                log.warn("Task stopped, skip test case distribution for executor {}", executorIp);
+            if (!checkTaskStatus(environmentInstances)) {
+                log.warn("Task stopped, skip test case distribution for logic environment {}", logicEnvironmentId);
                 continue;
             }
             
-            boolean success = createExecutionTaskForExecutor(executorIp, executorInstances);
+            boolean success = createExecutionTaskForLogicEnvironment(logicEnvironmentId, environmentInstances);
             if (!success) {
-                log.error("Failed to create execution task for executor - executor IP: {}", executorIp);
+                log.error("Failed to create execution task for logic environment - logic environment ID: {}", logicEnvironmentId);
                 return false;
             }
         }
         
-        log.info("Executor service call completed");
+        log.info("Logic environment service call completed");
         return true;
     }
     
-    private boolean createExecutionTaskForExecutor(String executorIp, List<TestCaseExecutionInstance> instances) {
+    private boolean createExecutionTaskForLogicEnvironment(Long logicEnvironmentId, List<TestCaseExecutionInstance> instances) {
         try {
-            log.info("Create execution task for executor - executor IP: {}, instance count: {}", executorIp, instances.size());
+            log.info("Create execution task for logic environment - logic environment ID: {}, instance count: {}", logicEnvironmentId, instances.size());
             
             if (!checkTaskStatus(instances)) {
-                log.warn("Task stopped, no longer create execution task for executor - executor IP: {}", executorIp);
+                log.warn("Task stopped, no longer create execution task for logic environment - logic environment ID: {}", logicEnvironmentId);
+                return false;
+            }
+            
+            // 获取逻辑环境信息
+            LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+            if (logicEnvironment == null) {
+                log.error("Logic environment not found - logic environment ID: {}", logicEnvironmentId);
+                return false;
+            }
+            
+            // 获取执行机IP
+            String executorIp = null;
+            if (logicEnvironment.getExecutorId() != null) {
+                Executor executor = executorService.getById(logicEnvironment.getExecutorId());
+                if (executor != null && executor.getIpAddress() != null) {
+                    executorIp = executor.getIpAddress();
+                }
+            }
+            
+            if (executorIp == null || executorIp.trim().isEmpty()) {
+                log.error("Executor IP not found for logic environment - logic environment ID: {}", logicEnvironmentId);
                 return false;
             }
             
@@ -849,7 +874,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
             
             List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = buildTestCaseList(instances);
-            List<TestCaseExecutionRequest.UeInfo> ueList = getExecutorUeList(executorIp);
+            // 获取逻辑环境绑定的UE信息
+            List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
             
@@ -859,7 +885,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return sendExecutionRequest(request, instances, taskId, executorIp);
             
         } catch (Exception e) {
-            log.error("Exception creating execution task for executor - executor IP: {}, error: {}", executorIp, e.getMessage(), e);
+            log.error("Exception creating execution task for logic environment - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage(), e);
             return false;
         }
     }
@@ -1450,11 +1476,50 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 获取执行机关联的UE全部信息
+     * 获取逻辑环境绑定的UE信息
+     * 
+     * @param logicEnvironmentId 逻辑环境ID
+     * @return UE信息列表
+     */
+    private List<TestCaseExecutionRequest.UeInfo> getLogicEnvironmentUeList(Long logicEnvironmentId) {
+        List<TestCaseExecutionRequest.UeInfo> ueList = new ArrayList<>();
+        
+        try {
+            // 1. 获取逻辑环境关联的UE ID列表
+            QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+            ueQuery.eq("logic_environment_id", logicEnvironmentId);
+            List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+            
+            if (logicEnvironmentUes.isEmpty()) {
+                log.warn("Logic environment not associated with UE - logic environment ID: {}", logicEnvironmentId);
+                return ueList;
+            }
+            
+            // 2. 提取UE ID集合
+            Set<Long> ueIds = logicEnvironmentUes.stream()
+                    .map(LogicEnvironmentUe::getUeId)
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            // 3. 获取UE详细信息并转换为DTO格式
+            ueList = convertUesToDto(ueIds);
+            
+            log.info("Successfully got UE information for logic environment - logic environment ID: {}, UE count: {}", logicEnvironmentId, ueList.size());
+            
+        } catch (Exception e) {
+            log.error("Failed to get UE information for logic environment - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage(), e);
+        }
+        
+        return ueList;
+    }
+    
+    /**
+     * 获取执行机关联的UE全部信息（保留此方法用于兼容，但不再使用）
      * 
      * @param executorIp 执行机IP
      * @return UE信息列表
+     * @deprecated 请使用 getLogicEnvironmentUeList 方法
      */
+    @Deprecated
     private List<TestCaseExecutionRequest.UeInfo> getExecutorUeList(String executorIp) {
         List<TestCaseExecutionRequest.UeInfo> ueList = new ArrayList<>();
         
