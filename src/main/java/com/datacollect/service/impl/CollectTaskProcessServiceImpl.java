@@ -982,7 +982,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private List<TestCaseExecutionRequest.TestCaseInfo> buildTestCaseList(List<TestCaseExecutionInstance> instances) {
         List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = new ArrayList<>();
         for (TestCaseExecutionInstance instance : instances) {
-            // 获取用例编号
+            // 获取用例信息
             TestCase testCase = testCaseService.getById(instance.getTestCaseId());
             if (testCase != null) {
                 TestCaseExecutionRequest.TestCaseInfo testCaseInfo = 
@@ -990,7 +990,15 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 testCaseInfo.setTestCaseId(instance.getTestCaseId());
                 testCaseInfo.setTestCaseNumber(testCase.getNumber());
                 testCaseInfo.setRound(instance.getRound());
+                // 添加用例的业务大类、app、appEn字段
+                testCaseInfo.setBusinessCategory(testCase.getBusinessCategory());
+                testCaseInfo.setApp(testCase.getApp());
+                testCaseInfo.setAppEn(testCase.getAppEn());
                 testCaseList.add(testCaseInfo);
+                
+                log.debug("Built test case info - test case ID: {}, number: {}, businessCategory: {}, app: {}, appEn: {}", 
+                        instance.getTestCaseId(), testCase.getNumber(), testCase.getBusinessCategory(), 
+                        testCase.getApp(), testCase.getAppEn());
             } else {
                 log.warn("Test case not found - test case ID: {}", instance.getTestCaseId());
             }

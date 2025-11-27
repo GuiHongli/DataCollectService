@@ -95,6 +95,21 @@ public class TestCaseExecutionRequest {
          */
         @NotNull(message = "轮次不能为空")
         private Integer round;
+        
+        /**
+         * 业务大类
+         */
+        private String businessCategory;
+        
+        /**
+         * APP名称
+         */
+        private String app;
+        
+        /**
+         * APP英文名称
+         */
+        private String appEn;
     }
     
     /**
