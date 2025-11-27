@@ -59,6 +59,16 @@ public class CollectTaskRequest {
     private Long cityId;
     
     /**
+     * 网络类型（normal、weak、congestion、weakcongestion、sunshang）
+     */
+    private String network;
+    
+    /**
+     * 厂商列表（逗号分隔，如：xiaomi,oppo,vivo）
+     */
+    private String manufacturer;
+    
+    /**
      * 选中的逻辑环境ID列表
      */
     @NotNull(message = "逻辑环境列表不能为空")

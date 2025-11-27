@@ -38,9 +38,15 @@ public interface CollectTaskProcessService {
      * 
      * @param instances 用例执行例次列表
      * @param logicEnvironmentIds 逻辑环境ID列表
+     * @param network 网络类型
+     * @param manufacturer 厂商列表（逗号分隔）
      * @return 分配后的用例执行例次列表
      */
-    List<TestCaseExecutionInstance> distributeInstancesToEnvironments(List<TestCaseExecutionInstance> instances, List<Long> logicEnvironmentIds);
+    List<TestCaseExecutionInstance> distributeInstancesToEnvironments(
+            List<TestCaseExecutionInstance> instances, 
+            List<Long> logicEnvironmentIds, 
+            String network, 
+            String manufacturer);
     
     /**
      * 调用执行机服务

@@ -35,9 +35,9 @@ import com.datacollect.dto.AppCheckResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson.JSON;
+import java.util.Arrays;
 import java.util.Set;
-import java.util.Map;
-import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.HashSet;
 import lombok.extern.slf4j.Slf4j;
@@ -145,8 +145,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount(), testCaseConfigMap);
             log.info("Test case execution instances assembled - instance count: {} - task ID: {}", instances.size(), collectTaskId);
             
-            // 5. 分配用例执行例次到逻辑环境
-            List<TestCaseExecutionInstance> distributedInstances = distributeInstancesToEnvironments(instances, request.getLogicEnvironmentIds());
+            // 5. 分配用例执行例次到逻辑环境（根据物理组网匹配）
+            List<TestCaseExecutionInstance> distributedInstances = distributeInstancesToEnvironments(
+                    instances, request.getLogicEnvironmentIds(), request.getNetwork(), request.getManufacturer());
             log.info("Test case execution instances distribution completed - task ID: {}", collectTaskId);
             
             // 6. 保存用例执行例次
@@ -385,19 +386,260 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     @Override
-    public List<TestCaseExecutionInstance> distributeInstancesToEnvironments(List<TestCaseExecutionInstance> instances, List<Long> logicEnvironmentIds) {
-        log.info("Start distributing test case execution instances to logic environments - instance count: {}, logic environment count: {}", instances.size(), logicEnvironmentIds.size());
+    public List<TestCaseExecutionInstance> distributeInstancesToEnvironments(
+            List<TestCaseExecutionInstance> instances, 
+            List<Long> logicEnvironmentIds, 
+            String network, 
+            String manufacturer) {
+        log.info("Start distributing test case execution instances to logic environments - instance count: {}, logic environment count: {}, network: {}, manufacturer: {}", 
+                instances.size(), logicEnvironmentIds.size(), network, manufacturer);
         
         validateLogicEnvironments(logicEnvironmentIds);
         
-        // 获取逻辑环境关联的执行机IP
-        Map<Long, String> environmentToExecutorMap = getEnvironmentToExecutorMap(logicEnvironmentIds);
+        // 如果没有网络或厂商，使用原来的均分逻辑
+        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.trim().isEmpty()) {
+            log.info("Network or manufacturer not provided, using even distribution");
+            Map<Long, String> environmentToExecutorMap = getEnvironmentToExecutorMap(logicEnvironmentIds);
+            distributeInstancesEvenly(instances, logicEnvironmentIds, environmentToExecutorMap);
+            return instances;
+        }
         
-        // 均分分配用例执行例次到逻辑环境
-        distributeInstancesEvenly(instances, logicEnvironmentIds, environmentToExecutorMap);
+        // 解析厂商列表
+        List<String> manufacturers = Arrays.asList(manufacturer.split(","))
+                .stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+        
+        if (manufacturers.isEmpty()) {
+            log.warn("No valid manufacturers found, using even distribution");
+            Map<Long, String> environmentToExecutorMap = getEnvironmentToExecutorMap(logicEnvironmentIds);
+            distributeInstancesEvenly(instances, logicEnvironmentIds, environmentToExecutorMap);
+            return instances;
+        }
+        
+        // 获取逻辑环境信息（包括物理组网）
+        Map<Long, LogicEnvironmentInfo> environmentInfoMap = getLogicEnvironmentInfoMap(logicEnvironmentIds);
+        
+        // 获取用例信息缓存
+        Map<Long, TestCase> testCaseCache = new HashMap<>();
+        
+        // 按物理组网分组用例执行实例（key: 物理组网, value: 实例列表）
+        Map<String, List<TestCaseExecutionInstance>> instancesByPhysicalNetwork = new HashMap<>();
+        
+        for (TestCaseExecutionInstance instance : instances) {
+            // 获取用例信息
+            TestCase testCase = testCaseCache.get(instance.getTestCaseId());
+            if (testCase == null) {
+                testCase = testCaseService.getById(instance.getTestCaseId());
+                if (testCase != null) {
+                    testCaseCache.put(instance.getTestCaseId(), testCase);
+                }
+            }
+            
+            if (testCase == null || testCase.getLogicNetwork() == null || testCase.getLogicNetwork().trim().isEmpty()) {
+                log.warn("TestCase {} not found or has no logic network, will use even distribution", instance.getTestCaseId());
+                // 如果没有逻辑组网，使用默认分组
+                instancesByPhysicalNetwork.computeIfAbsent("default", k -> new ArrayList<>()).add(instance);
+                continue;
+            }
+            
+            // 解析用例的逻辑组网（可能有多个，用分号分隔）
+            String[] logicNetworks = testCase.getLogicNetwork().split(";");
+            boolean matched = false;
+            
+            // 为每个逻辑组网和厂商生成物理组网，找到第一个匹配的逻辑环境
+            for (String logicNetwork : logicNetworks) {
+                String trimmedLogicNetwork = logicNetwork.trim();
+                if (trimmedLogicNetwork.isEmpty()) {
+                    continue;
+                }
+                
+                // 为每个厂商生成物理组网
+                for (String manu : manufacturers) {
+                    String physicalNetwork = trimmedLogicNetwork + "_" + network + "_" + manu;
+                    
+                    // 找到匹配该物理组网的逻辑环境
+                    List<Long> matchingEnvironments = findMatchingEnvironments(physicalNetwork, environmentInfoMap);
+                    
+                    if (!matchingEnvironments.isEmpty()) {
+                        // 找到匹配的物理组网，将实例添加到对应的分组中
+                        instancesByPhysicalNetwork.computeIfAbsent(physicalNetwork, k -> new ArrayList<>()).add(instance);
+                        matched = true;
+                        break; // 只使用第一个匹配的厂商
+                    }
+                }
+                
+                if (matched) {
+                    break; // 已经找到匹配的物理组网，跳出循环
+                }
+            }
+            
+            // 如果没有找到匹配的物理组网，使用默认分组
+            if (!matched) {
+                log.warn("No matching physical network found for test case {}, will use even distribution", instance.getTestCaseId());
+                instancesByPhysicalNetwork.computeIfAbsent("default", k -> new ArrayList<>()).add(instance);
+            }
+        }
+        
+        // 为每个物理组网分组分配用例到匹配的逻辑环境
+        distributeInstancesByPhysicalNetwork(instancesByPhysicalNetwork, environmentInfoMap);
         
         log.info("Test case execution instances distribution completed - task ID: {}", instances.get(0).getCollectTaskId());
         return instances;
+    }
+    
+    /**
+     * 逻辑环境信息内部类
+     */
+    @lombok.Data
+    private static class LogicEnvironmentInfo {
+        private Long id;
+        private String executorIp;
+        private List<String> physicalNetworks; // 物理组网列表
+    }
+    
+    /**
+     * 获取逻辑环境信息映射（包括物理组网）
+     */
+    private Map<Long, LogicEnvironmentInfo> getLogicEnvironmentInfoMap(List<Long> logicEnvironmentIds) {
+        Map<Long, LogicEnvironmentInfo> infoMap = new HashMap<>();
+        
+        for (Long logicEnvironmentId : logicEnvironmentIds) {
+            LogicEnvironmentDTO dto = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironmentId);
+            if (dto == null) {
+                continue;
+            }
+            
+            LogicEnvironmentInfo info = new LogicEnvironmentInfo();
+            info.setId(logicEnvironmentId);
+            
+            // 获取执行机IP
+            if (dto.getExecutorId() != null) {
+                String executorIp = getExecutorIpByMacAddress(dto.getExecutorId());
+                if (executorIp == null && dto.getExecutorIpAddress() != null) {
+                    executorIp = dto.getExecutorIpAddress();
+                }
+                info.setExecutorIp(executorIp);
+            }
+            
+            // 获取逻辑环境的物理组网列表
+            LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+            if (logicEnvironment != null && logicEnvironment.getPhysicalNetwork() != null 
+                    && !logicEnvironment.getPhysicalNetwork().trim().isEmpty()) {
+                try {
+                    List<String> physicalNetworks = JSON.parseArray(logicEnvironment.getPhysicalNetwork(), String.class);
+                    info.setPhysicalNetworks(physicalNetworks != null ? physicalNetworks : new ArrayList<>());
+                } catch (Exception e) {
+                    log.error("Failed to parse physical network JSON for logic environment {}: {}", 
+                            logicEnvironmentId, e.getMessage());
+                    info.setPhysicalNetworks(new ArrayList<>());
+                }
+            } else {
+                info.setPhysicalNetworks(new ArrayList<>());
+            }
+            
+            infoMap.put(logicEnvironmentId, info);
+        }
+        
+        return infoMap;
+    }
+    
+    /**
+     * 找到匹配指定物理组网的逻辑环境列表
+     */
+    private List<Long> findMatchingEnvironments(String physicalNetwork, Map<Long, LogicEnvironmentInfo> environmentInfoMap) {
+        List<Long> matchingEnvironments = new ArrayList<>();
+        
+        for (Map.Entry<Long, LogicEnvironmentInfo> entry : environmentInfoMap.entrySet()) {
+            LogicEnvironmentInfo info = entry.getValue();
+            if (info.getPhysicalNetworks() != null && info.getPhysicalNetworks().contains(physicalNetwork)) {
+                matchingEnvironments.add(entry.getKey());
+            }
+        }
+        
+        return matchingEnvironments;
+    }
+    
+    /**
+     * 根据物理组网分配用例执行实例到逻辑环境
+     */
+    private void distributeInstancesByPhysicalNetwork(
+            Map<String, List<TestCaseExecutionInstance>> instancesByPhysicalNetwork,
+            Map<Long, LogicEnvironmentInfo> environmentInfoMap) {
+        
+        for (Map.Entry<String, List<TestCaseExecutionInstance>> entry : instancesByPhysicalNetwork.entrySet()) {
+            String physicalNetwork = entry.getKey();
+            List<TestCaseExecutionInstance> instances = entry.getValue();
+            
+            // 如果是默认分组，使用均分逻辑
+            if ("default".equals(physicalNetwork)) {
+                log.info("Using even distribution for {} instances without matching physical network", instances.size());
+                List<Long> allEnvironmentIds = new ArrayList<>(environmentInfoMap.keySet());
+                Map<Long, String> environmentToExecutorMap = new HashMap<>();
+                for (Long envId : allEnvironmentIds) {
+                    LogicEnvironmentInfo info = environmentInfoMap.get(envId);
+                    if (info != null && info.getExecutorIp() != null) {
+                        environmentToExecutorMap.put(envId, info.getExecutorIp());
+                    }
+                }
+                distributeInstancesEvenly(instances, allEnvironmentIds, environmentToExecutorMap);
+                continue;
+            }
+            
+            // 找到匹配该物理组网的逻辑环境
+            List<Long> matchingEnvironments = findMatchingEnvironments(physicalNetwork, environmentInfoMap);
+            
+            if (matchingEnvironments.isEmpty()) {
+                log.warn("No matching logic environment found for physical network: {}, skipping {} instances", 
+                        physicalNetwork, instances.size());
+                // 如果没有匹配的逻辑环境，使用均分逻辑
+                List<Long> allEnvironmentIds = new ArrayList<>(environmentInfoMap.keySet());
+                Map<Long, String> environmentToExecutorMap = new HashMap<>();
+                for (Long envId : allEnvironmentIds) {
+                    LogicEnvironmentInfo info = environmentInfoMap.get(envId);
+                    if (info != null && info.getExecutorIp() != null) {
+                        environmentToExecutorMap.put(envId, info.getExecutorIp());
+                    }
+                }
+                distributeInstancesEvenly(instances, allEnvironmentIds, environmentToExecutorMap);
+                continue;
+            }
+            
+            // 均分用例到匹配的逻辑环境
+            int totalInstances = instances.size();
+            int environmentCount = matchingEnvironments.size();
+            int baseCount = totalInstances / environmentCount;
+            int remainder = totalInstances % environmentCount;
+            
+            log.info("Distributing {} instances for physical network {} to {} environments - base: {}, remainder: {}", 
+                    totalInstances, physicalNetwork, environmentCount, baseCount, remainder);
+            
+            int instanceIndex = 0;
+            for (int i = 0; i < matchingEnvironments.size(); i++) {
+                Long logicEnvironmentId = matchingEnvironments.get(i);
+                LogicEnvironmentInfo info = environmentInfoMap.get(logicEnvironmentId);
+                
+                if (info == null || info.getExecutorIp() == null) {
+                    log.warn("Logic environment {} has no executor IP, skipping", logicEnvironmentId);
+                    continue;
+                }
+                
+                int currentEnvironmentCount = baseCount + (i < remainder ? 1 : 0);
+                
+                log.info("Logic environment {} (executor IP: {}) allocated {} instances for physical network {}", 
+                        logicEnvironmentId, info.getExecutorIp(), currentEnvironmentCount, physicalNetwork);
+                
+                for (int j = 0; j < currentEnvironmentCount; j++) {
+                    if (instanceIndex < instances.size()) {
+                        TestCaseExecutionInstance instance = instances.get(instanceIndex);
+                        instance.setLogicEnvironmentId(logicEnvironmentId);
+                        instance.setExecutorIp(info.getExecutorIp());
+                        instanceIndex++;
+                    }
+                }
+            }
+        }
     }
 
     /**
