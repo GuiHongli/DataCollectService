@@ -1,12 +1,15 @@
 package com.datacollect.controller;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.alibaba.fastjson.JSON;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
@@ -767,10 +770,12 @@ public class CollectTaskController {
             @RequestParam(required = false) Long regionId,
             @RequestParam(required = false) Long countryId,
             @RequestParam(required = false) Long provinceId,
-            @RequestParam(required = false) Long cityId) {
+            @RequestParam(required = false) Long cityId,
+            @RequestParam(required = false) String network,
+            @RequestParam(required = false) String manufacturer) {
         
-        log.info("Start getting available logic environment list - strategy ID: {}, region filter: regionId={}, countryId={}, provinceId={}, cityId={}", 
-                strategyId, regionId, countryId, provinceId, cityId);
+        log.info("Start getting available logic environment list - strategy ID: {}, region filter: regionId={}, countryId={}, provinceId={}, cityId={}, network={}, manufacturer={}", 
+                strategyId, regionId, countryId, provinceId, cityId, network, manufacturer);
         
         try {
             // 1. 获取采集策略信息
@@ -782,8 +787,8 @@ public class CollectTaskController {
             // 2. 获取策略关联的测试用例（基于筛选条件）
             List<TestCase> testCases = getFilteredTestCases(strategy);
             
-            // 3. 提取测试用例中的环境组网列表A
-            Set<String> requiredNetworks = extractRequiredNetworks(testCases);
+            // 3. 根据用例的逻辑组网、网络和厂商，组成物理组网列表
+            Set<String> requiredPhysicalNetworks = extractRequiredPhysicalNetworks(testCases, network, manufacturer);
             
             // 4. 根据环境筛选条件获取可用的执行机
             List<Executor> availableExecutors = getAvailableExecutors(regionId, countryId, provinceId, cityId);
@@ -791,8 +796,8 @@ public class CollectTaskController {
             // 5. 获取执行机关联的逻辑环境列表B
             List<LogicEnvironment> allLogicEnvironments = getAllLogicEnvironments(availableExecutors);
             
-            // 6. 筛选逻辑环境，检查其环境组网是否存在于环境组网列表A中
-            List<LogicEnvironmentDTO> availableLogicEnvironments = filterMatchingLogicEnvironments(allLogicEnvironments, requiredNetworks);
+            // 6. 筛选逻辑环境，检查其物理组网是否存在于物理组网列表A中
+            List<LogicEnvironmentDTO> availableLogicEnvironments = filterMatchingLogicEnvironmentsByPhysicalNetwork(allLogicEnvironments, requiredPhysicalNetworks);
             
             log.info("Matching completed - available logic environment count: {}", availableLogicEnvironments.size());
             
@@ -855,6 +860,59 @@ public class CollectTaskController {
         
         log.info("Extracted environment network requirements list A: {}", requiredNetworks);
         return requiredNetworks;
+    }
+
+    /**
+     * 根据用例的逻辑组网、网络和厂商，组成物理组网列表
+     * 物理组网格式：逻辑组网_网络_厂商
+     */
+    private Set<String> extractRequiredPhysicalNetworks(List<TestCase> testCases, String network, String manufacturer) {
+        log.info("Step 3: Extract physical network requirements from test cases - network: {}, manufacturer: {}", network, manufacturer);
+        Set<String> requiredPhysicalNetworks = new HashSet<>();
+        
+        // 如果没有选择网络或厂商，返回空集合
+        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.trim().isEmpty()) {
+            log.info("Network or manufacturer not selected, returning empty physical network list");
+            return requiredPhysicalNetworks;
+        }
+        
+        // 解析厂商列表（逗号分隔）
+        List<String> manufacturers = Arrays.asList(manufacturer.split(","))
+                .stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+        
+        if (manufacturers.isEmpty()) {
+            log.info("No valid manufacturers found, returning empty physical network list");
+            return requiredPhysicalNetworks;
+        }
+        
+        // 遍历所有用例，提取逻辑组网
+        Set<String> logicNetworks = new HashSet<>();
+        for (TestCase testCase : testCases) {
+            if (testCase.getLogicNetwork() != null && !testCase.getLogicNetwork().trim().isEmpty()) {
+                String[] networks = testCase.getLogicNetwork().split(";");
+                for (String logicNetwork : networks) {
+                    String trimmedNetwork = logicNetwork.trim();
+                    if (!trimmedNetwork.isEmpty()) {
+                        logicNetworks.add(trimmedNetwork);
+                    }
+                }
+            }
+        }
+        
+        // 生成所有可能的物理组网组合：逻辑组网_网络_厂商
+        for (String logicNetwork : logicNetworks) {
+            for (String manu : manufacturers) {
+                String physicalNetwork = logicNetwork + "_" + network + "_" + manu;
+                requiredPhysicalNetworks.add(physicalNetwork);
+                log.debug("Generated physical network: {}", physicalNetwork);
+            }
+        }
+        
+        log.info("Extracted physical network requirements list: {}", requiredPhysicalNetworks);
+        return requiredPhysicalNetworks;
     }
 
     /**
@@ -956,6 +1014,58 @@ public class CollectTaskController {
     }
 
     /**
+     * 根据物理组网筛选匹配的逻辑环境
+     */
+    private List<LogicEnvironmentDTO> filterMatchingLogicEnvironmentsByPhysicalNetwork(
+            List<LogicEnvironment> allLogicEnvironments, Set<String> requiredPhysicalNetworks) {
+        log.info("Step 6: Filter matching logic environments by physical network");
+        List<LogicEnvironmentDTO> availableLogicEnvironments = new ArrayList<>();
+        
+        for (LogicEnvironment logicEnvironment : allLogicEnvironments) {
+            log.debug("Checking logic environment: {} (ID: {})", logicEnvironment.getName(), logicEnvironment.getId());
+            
+            // 获取逻辑环境的物理组网列表（JSON格式）
+            String physicalNetworkJson = logicEnvironment.getPhysicalNetwork();
+            if (physicalNetworkJson == null || physicalNetworkJson.trim().isEmpty()) {
+                log.debug("Logic environment {} has no physical network data, skipping", logicEnvironment.getName());
+                continue;
+            }
+            
+            try {
+                // 解析物理组网JSON数组
+                List<String> physicalNetworks = JSON.parseArray(physicalNetworkJson, String.class);
+                log.debug("Logic environment {} physical networks: {}", logicEnvironment.getName(), physicalNetworks);
+                
+                // 检查是否有匹配的物理组网
+                boolean hasMatchingPhysicalNetwork = false;
+                for (String physicalNetwork : physicalNetworks) {
+                    if (requiredPhysicalNetworks.contains(physicalNetwork)) {
+                        log.debug("Found matching physical network: {} in logic environment {}", 
+                                physicalNetwork, logicEnvironment.getName());
+                        hasMatchingPhysicalNetwork = true;
+                        break;
+                    }
+                }
+                
+                // 如果有匹配的物理组网，则添加到可用列表
+                if (hasMatchingPhysicalNetwork) {
+                    log.info("Logic environment {} matched successfully by physical network, added to available list", 
+                            logicEnvironment.getName());
+                    LogicEnvironmentDTO dto = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironment.getId());
+                    availableLogicEnvironments.add(dto);
+                } else {
+                    log.debug("Logic environment {} doesn't match by physical network, skipping", logicEnvironment.getName());
+                }
+            } catch (Exception e) {
+                log.error("Failed to parse physical network JSON for logic environment {}: {}", 
+                        logicEnvironment.getName(), e.getMessage());
+            }
+        }
+        
+        return availableLogicEnvironments;
+    }
+
+    /**
      * 批量检查执行机在线状态（通过WebSocket检查）
      * 
      * @param executorIps 执行机IP地址列表
@@ -999,50 +1109,4 @@ public class CollectTaskController {
         }
     }
 
-}
-
-            for (String ip : executorIps) {
-                // 通过执行机IP查找执行机
-                QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
-                queryWrapper.eq("ip_address", ip);
-                queryWrapper.eq("deleted", 0);
-                Executor executor = executorService.getOne(queryWrapper);
-                
-                if (executor != null) {
-                    // 检查执行机状态：status=1表示在线（通过WebSocket连接活跃）
-                    // 这里可以根据实际的WebSocket服务来检查连接状态
-                    // 目前先使用数据库中的status字段，如果WebSocket服务已实现，可以改为检查WebSocket连接状态
-                    boolean isOnline = executor.getStatus() != null && executor.getStatus() == 1;
-                    onlineStatusMap.put(ip, isOnline);
-                    log.debug("Executor online status - IP: {}, status: {}, isOnline: {}", 
-                            ip, executor.getStatus(), isOnline);
-                } else {
-                    // 执行机不存在，认为不在线
-                    onlineStatusMap.put(ip, false);
-                    log.warn("Executor not found - IP: {}", ip);
-                }
-            }
-            
-            log.info("Checked executors online status - result: {}", onlineStatusMap);
-            return Result.success(onlineStatusMap);
-            
-        } catch (Exception e) {
-            log.error("Failed to check executors online status", e);
-            return Result.error("Failed to check executors online status: " + e.getMessage());
-        }
-    }
-
-}
-            log.debug("Port check failed - host: {}, port: {}, error: {}", host, port, e.getMessage());
-            return false;
-        } finally {
-            if (socket != null) {
-                try {
-                    socket.close();
-                } catch (Exception e) {
-                    log.warn("Failed to close socket - host: {}, port: {}", host, port);
-                }
-            }
-        }
-    }
 }
