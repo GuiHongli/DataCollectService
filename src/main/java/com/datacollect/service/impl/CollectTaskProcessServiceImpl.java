@@ -36,7 +36,6 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.alibaba.fastjson.JSON;
-import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.HashSet;
@@ -369,6 +368,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             TestCaseConfig config = testCaseConfigMap.get(testCaseId);
             int executionCount = (config != null && config.getExecutionCount() != null) ? config.getExecutionCount() : collectCount;
             
+            // 记录用例的自定义参数信息（用于后续验证）
+            boolean hasCustomParams = config != null && config.getCustomParams() != null && !config.getCustomParams().isEmpty();
+            
             for (int round = 1; round <= executionCount; round++) {
                 TestCaseExecutionInstance instance = new TestCaseExecutionInstance();
                 instance.setCollectTaskId(collectTaskId);
@@ -378,7 +380,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 instances.add(instance);
             }
             
-            log.debug("Assembled instances for test case {} - execution count: {}", testCaseId, executionCount);
+            log.info("Assembled instances for test case {} - execution count: {}, has custom params: {}", 
+                    testCaseId, executionCount, hasCustomParams);
         }
         
         log.info("Test case execution instances assembly completed - instance count: {} - task ID: {}", instances.size(), collectTaskId);
@@ -390,23 +393,22 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             List<TestCaseExecutionInstance> instances, 
             List<Long> logicEnvironmentIds, 
             String network, 
-            String manufacturer) {
+            List<String> manufacturer) {
         log.info("Start distributing test case execution instances to logic environments - instance count: {}, logic environment count: {}, network: {}, manufacturer: {}", 
                 instances.size(), logicEnvironmentIds.size(), network, manufacturer);
         
         validateLogicEnvironments(logicEnvironmentIds);
         
         // 如果没有网络或厂商，使用原来的均分逻辑
-        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.trim().isEmpty()) {
+        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.isEmpty()) {
             log.info("Network or manufacturer not provided, using even distribution");
             Map<Long, String> environmentToExecutorMap = getEnvironmentToExecutorMap(logicEnvironmentIds);
             distributeInstancesEvenly(instances, logicEnvironmentIds, environmentToExecutorMap);
             return instances;
         }
         
-        // 解析厂商列表
-        List<String> manufacturers = Arrays.asList(manufacturer.split(","))
-                .stream()
+        // 过滤掉空的厂商
+        List<String> manufacturers = manufacturer.stream()
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(java.util.stream.Collectors.toList());
@@ -438,7 +440,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
             
             if (testCase == null || testCase.getLogicNetwork() == null || testCase.getLogicNetwork().trim().isEmpty()) {
-                log.warn("TestCase {} not found or has no logic network, will use even distribution", instance.getTestCaseId());
+                log.warn("TestCase {} not found or has no logic network, will use even distribution - instance round: {}", 
+                        instance.getTestCaseId(), instance.getRound());
                 // 如果没有逻辑组网，使用默认分组
                 instancesByPhysicalNetwork.computeIfAbsent("default", k -> new ArrayList<>()).add(instance);
                 continue;
@@ -447,6 +450,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 解析用例的逻辑组网（可能有多个，用分号分隔）
             String[] logicNetworks = testCase.getLogicNetwork().split(";");
             boolean matched = false;
+            String matchedPhysicalNetwork = null;
             
             // 为每个逻辑组网和厂商生成物理组网，找到第一个匹配的逻辑环境
             for (String logicNetwork : logicNetworks) {
@@ -466,6 +470,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         // 找到匹配的物理组网，将实例添加到对应的分组中
                         instancesByPhysicalNetwork.computeIfAbsent(physicalNetwork, k -> new ArrayList<>()).add(instance);
                         matched = true;
+                        matchedPhysicalNetwork = physicalNetwork;
+                        log.debug("Matched physical network {} for test case {} (round: {}) - matching environments: {}", 
+                                physicalNetwork, instance.getTestCaseId(), instance.getRound(), matchingEnvironments.size());
                         break; // 只使用第一个匹配的厂商
                     }
                 }
@@ -477,8 +484,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
             // 如果没有找到匹配的物理组网，使用默认分组
             if (!matched) {
-                log.warn("No matching physical network found for test case {}, will use even distribution", instance.getTestCaseId());
+                log.warn("No matching physical network found for test case {} (round: {}), will use even distribution", 
+                        instance.getTestCaseId(), instance.getRound());
                 instancesByPhysicalNetwork.computeIfAbsent("default", k -> new ArrayList<>()).add(instance);
+            } else {
+                log.debug("Instance assigned to physical network {} - test case: {}, round: {}", 
+                        matchedPhysicalNetwork, instance.getTestCaseId(), instance.getRound());
             }
         }
         
@@ -635,6 +646,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         TestCaseExecutionInstance instance = instances.get(instanceIndex);
                         instance.setLogicEnvironmentId(logicEnvironmentId);
                         instance.setExecutorIp(info.getExecutorIp());
+                        
+                        log.debug("Assigned instance to logic environment - test case: {}, round: {}, physical network: {}, logic environment: {}, executor IP: {}", 
+                                instance.getTestCaseId(), instance.getRound(), physicalNetwork, logicEnvironmentId, info.getExecutorIp());
                         instanceIndex++;
                     }
                 }

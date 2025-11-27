@@ -64,9 +64,9 @@ public class CollectTaskRequest {
     private String network;
     
     /**
-     * 厂商列表（逗号分隔，如：xiaomi,oppo,vivo）
+     * 厂商列表（如：["xiaomi", "oppo", "vivo"]）
      */
-    private String manufacturer;
+    private List<String> manufacturer;
     
     /**
      * 选中的逻辑环境ID列表

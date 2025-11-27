@@ -1,7 +1,6 @@
 package com.datacollect.controller;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -773,7 +772,7 @@ public class CollectTaskController {
             @RequestParam(required = false) Long provinceId,
             @RequestParam(required = false) Long cityId,
             @RequestParam(required = false) String network,
-            @RequestParam(required = false) String manufacturer) {
+            @RequestParam(required = false) List<String> manufacturer) {
         
         log.info("Start getting available logic environment list - strategy ID: {}, region filter: regionId={}, countryId={}, provinceId={}, cityId={}, network={}, manufacturer={}", 
                 strategyId, regionId, countryId, provinceId, cityId, network, manufacturer);
@@ -947,19 +946,18 @@ public class CollectTaskController {
      * 根据用例的逻辑组网、网络和厂商，组成物理组网列表
      * 物理组网格式：逻辑组网_网络_厂商
      */
-    private Set<String> extractRequiredPhysicalNetworks(List<TestCase> testCases, String network, String manufacturer) {
+    private Set<String> extractRequiredPhysicalNetworks(List<TestCase> testCases, String network, List<String> manufacturer) {
         log.info("Step 3: Extract physical network requirements from test cases - network: {}, manufacturer: {}", network, manufacturer);
         Set<String> requiredPhysicalNetworks = new HashSet<>();
         
         // 如果没有选择网络或厂商，返回空集合
-        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.trim().isEmpty()) {
+        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.isEmpty()) {
             log.info("Network or manufacturer not selected, returning empty physical network list");
             return requiredPhysicalNetworks;
         }
         
-        // 解析厂商列表（逗号分隔）
-        List<String> manufacturers = Arrays.asList(manufacturer.split(","))
-                .stream()
+        // 过滤掉空的厂商
+        List<String> manufacturers = manufacturer.stream()
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(java.util.stream.Collectors.toList());
