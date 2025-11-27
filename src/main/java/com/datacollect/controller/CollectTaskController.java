@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
@@ -824,16 +825,96 @@ public class CollectTaskController {
     }
 
     /**
-     * 获取测试用例（不再根据业务大类和app筛选）
+     * 获取测试用例（根据策略中勾选的用例返回）
      */
     private List<TestCase> getFilteredTestCases(CollectStrategy strategy) {
         log.info("Step 2: Get test cases associated with strategy - test case set ID: {}", 
                 strategy.getTestCaseSetId());
         List<TestCase> allTestCases = testCaseService.getByTestCaseSetId(strategy.getTestCaseSetId());
-        log.info("Got test case count: {} (no filtering by business category or app)", allTestCases.size());
+        log.info("Got all test case count: {}", allTestCases.size());
         
-        // 直接返回所有用例，不再根据业务大类和app筛选
-        return allTestCases;
+        // 获取策略中勾选的用例ID列表
+        List<Long> selectedTestCaseIds = getSelectedTestCaseIds(strategy);
+        
+        if (selectedTestCaseIds == null || selectedTestCaseIds.isEmpty()) {
+            log.info("No selected test cases found in strategy, returning all test cases");
+            return allTestCases;
+        }
+        
+        log.info("Strategy has {} selected test case IDs: {}", selectedTestCaseIds.size(), selectedTestCaseIds);
+        
+        // 根据勾选的用例ID筛选用例
+        List<TestCase> filteredTestCases = allTestCases.stream()
+                .filter(testCase -> selectedTestCaseIds.contains(testCase.getId()))
+                .collect(Collectors.toList());
+        
+        log.info("Filtered test case count: {} (from {} total test cases)", 
+                filteredTestCases.size(), allTestCases.size());
+        
+        return filteredTestCases;
+    }
+    
+    /**
+     * 获取策略中勾选的用例ID列表
+     */
+    private List<Long> getSelectedTestCaseIds(CollectStrategy strategy) {
+        List<Long> selectedIds = new ArrayList<>();
+        
+        try {
+            // 首先尝试从 selectedTestCaseIds 字段获取
+            if (strategy.getSelectedTestCaseIds() != null && !strategy.getSelectedTestCaseIds().trim().isEmpty()) {
+                List<Object> ids = JSON.parseArray(strategy.getSelectedTestCaseIds(), Object.class);
+                if (ids != null) {
+                    for (Object id : ids) {
+                        if (id != null) {
+                            Long testCaseId = null;
+                            if (id instanceof Number) {
+                                testCaseId = ((Number) id).longValue();
+                            } else if (id instanceof String) {
+                                try {
+                                    testCaseId = Long.parseLong((String) id);
+                                } catch (NumberFormatException e) {
+                                    log.warn("Invalid test case ID format: {}", id);
+                                }
+                            }
+                            if (testCaseId != null) {
+                                selectedIds.add(testCaseId);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 如果没有 selectedTestCaseIds，尝试从 testCaseExecutionCounts 中获取（兼容旧数据）
+            if (selectedIds.isEmpty() && strategy.getTestCaseExecutionCounts() != null 
+                    && !strategy.getTestCaseExecutionCounts().trim().isEmpty()) {
+                try {
+                    Map<String, Object> executionCounts = JSON.parseObject(
+                            strategy.getTestCaseExecutionCounts(), 
+                            new TypeReference<Map<String, Object>>() {});
+                    if (executionCounts != null) {
+                        for (Map.Entry<String, Object> entry : executionCounts.entrySet()) {
+                            try {
+                                Long testCaseId = Long.parseLong(entry.getKey());
+                                Object count = entry.getValue();
+                                // 如果执行次数大于0，则认为该用例被勾选
+                                if (count instanceof Number && ((Number) count).intValue() > 0) {
+                                    selectedIds.add(testCaseId);
+                                }
+                            } catch (NumberFormatException e) {
+                                log.warn("Invalid test case ID in execution counts: {}", entry.getKey());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse testCaseExecutionCounts: {}", e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse selectedTestCaseIds: {}", e.getMessage());
+        }
+        
+        return selectedIds;
     }
 
     /**
