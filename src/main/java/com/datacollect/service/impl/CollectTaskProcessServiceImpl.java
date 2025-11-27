@@ -123,6 +123,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         private Integer executionCount;
         private List<Map<String, Object>> customParams; // [{"key": "k", "value": ["v1", "v2"]}]
     }
+    
+    /**
+     * 用例信息内部类（用于物理用例分组）
+     */
+    @lombok.Data
+    private static class TestCaseInfo {
+        private Long testCaseId;
+        private TestCase testCase; // 用例实体
+        private Integer executionCount; // 执行次数
+        private TestCaseConfig config; // 用例配置
+    }
 
     @Override
     public Long processCollectTaskCreation(CollectTaskRequest request, String createBy) {
@@ -140,27 +151,32 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
             List<Long> testCaseIds = getTestCaseIds(collectTask, request, testCaseConfigMap);
             
-            // 4. 组装用例执行例次列表（根据用例配置中的执行次数）
-            List<TestCaseExecutionInstance> instances = assembleTestCaseInstances(collectTaskId, testCaseIds, request.getCollectCount(), testCaseConfigMap);
-            log.info("Test case execution instances assembled - instance count: {} - task ID: {}", instances.size(), collectTaskId);
+            // 4. 按物理用例分组用例（逻辑组网_网络_厂商）
+            Map<String, List<TestCaseInfo>> testCasesByPhysicalNetwork = groupTestCasesByPhysicalNetwork(
+                    testCaseIds, request.getNetwork(), request.getManufacturer(), testCaseConfigMap, request.getCollectCount());
+            log.info("Test cases grouped by physical network - physical network count: {} - task ID: {}", 
+                    testCasesByPhysicalNetwork.size(), collectTaskId);
             
-            // 5. 分配用例执行例次到逻辑环境（根据物理组网匹配）
-            List<TestCaseExecutionInstance> distributedInstances = distributeInstancesToEnvironments(
-                    instances, request.getLogicEnvironmentIds(), request.getNetwork(), request.getManufacturer());
-            log.info("Test case execution instances distribution completed - task ID: {}", collectTaskId);
+            // 5. 匹配逻辑环境，按逻辑环境分组用例
+            Map<Long, List<TestCaseInfo>> testCasesByLogicEnvironment = matchTestCasesToLogicEnvironments(
+                    testCasesByPhysicalNetwork, request.getLogicEnvironmentIds());
+            log.info("Test cases matched to logic environments - logic environment count: {} - task ID: {}", 
+                    testCasesByLogicEnvironment.size(), collectTaskId);
             
-            // 6. 保存用例执行例次
-            saveTestCaseInstances(distributedInstances, collectTaskId);
+            // 6. 为每个逻辑环境创建用例执行实例并保存
+            List<TestCaseExecutionInstance> allInstances = createAndSaveInstancesForLogicEnvironments(
+                    collectTaskId, testCasesByLogicEnvironment);
+            log.info("Test case execution instances created and saved - instance count: {} - task ID: {}", 
+                    allInstances.size(), collectTaskId);
             
             // 7. 更新任务总用例数
-            collectTaskService.updateTaskProgress(collectTaskId, instances.size(), 0, 0);
+            collectTaskService.updateTaskProgress(collectTaskId, allInstances.size(), 0, 0);
             
             // 8. 保存用例配置到任务中（用于后续获取用例自定义参数）
-            // 将用例配置存储到CollectTask中，以便后续使用
             storeTestCaseConfigs(collectTaskId, testCaseConfigMap);
             
             // 9. 异步调用执行机服务
-            callExecutorServicesAsync(distributedInstances, collectTaskId);
+            callExecutorServicesAsync(allInstances, collectTaskId);
             
             return collectTaskId;
             
@@ -508,6 +524,287 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         private Long id;
         private String executorIp;
         private List<String> physicalNetworks; // 物理组网列表
+    }
+    
+    /**
+     * 按物理用例分组用例（物理用例 = 逻辑组网_网络_厂商）
+     * 
+     * @param testCaseIds 用例ID列表
+     * @param network 网络类型
+     * @param manufacturer 厂商列表
+     * @param testCaseConfigMap 用例配置Map
+     * @param defaultCollectCount 默认采集次数
+     * @return 按物理用例分组的用例信息Map（key: 物理用例, value: 用例信息列表）
+     */
+    private Map<String, List<TestCaseInfo>> groupTestCasesByPhysicalNetwork(
+            List<Long> testCaseIds, String network, List<String> manufacturer, 
+            Map<Long, TestCaseConfig> testCaseConfigMap, Integer defaultCollectCount) {
+        log.info("Start grouping test cases by physical network - test case count: {}, network: {}, manufacturer: {}", 
+                testCaseIds.size(), network, manufacturer);
+        
+        Map<String, List<TestCaseInfo>> testCasesByPhysicalNetwork = new HashMap<>();
+        
+        // 如果没有网络或厂商，使用默认分组
+        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.isEmpty()) {
+            log.info("Network or manufacturer not provided, using default grouping");
+            String defaultPhysicalNetwork = "default";
+            for (Long testCaseId : testCaseIds) {
+                TestCase testCase = testCaseService.getById(testCaseId);
+                if (testCase != null) {
+                    TestCaseInfo testCaseInfo = createTestCaseInfo(testCase, testCaseConfigMap, defaultCollectCount);
+                    testCasesByPhysicalNetwork.computeIfAbsent(defaultPhysicalNetwork, k -> new ArrayList<>()).add(testCaseInfo);
+                }
+            }
+            return testCasesByPhysicalNetwork;
+        }
+        
+        // 过滤掉空的厂商
+        List<String> manufacturers = manufacturer.stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+        
+        if (manufacturers.isEmpty()) {
+            log.warn("No valid manufacturers found, using default grouping");
+            String defaultPhysicalNetwork = "default";
+            for (Long testCaseId : testCaseIds) {
+                TestCase testCase = testCaseService.getById(testCaseId);
+                if (testCase != null) {
+                    TestCaseInfo testCaseInfo = createTestCaseInfo(testCase, testCaseConfigMap, defaultCollectCount);
+                    testCasesByPhysicalNetwork.computeIfAbsent(defaultPhysicalNetwork, k -> new ArrayList<>()).add(testCaseInfo);
+                }
+            }
+            return testCasesByPhysicalNetwork;
+        }
+        
+        // 遍历用例，按物理用例分组
+        for (Long testCaseId : testCaseIds) {
+            TestCase testCase = testCaseService.getById(testCaseId);
+            if (testCase == null) {
+                log.warn("Test case not found - test case ID: {}", testCaseId);
+                continue;
+            }
+            
+            if (testCase.getLogicNetwork() == null || testCase.getLogicNetwork().trim().isEmpty()) {
+                log.warn("Test case has no logic network - test case ID: {}, using default grouping", testCaseId);
+                String defaultPhysicalNetwork = "default";
+                TestCaseInfo testCaseInfo = createTestCaseInfo(testCase, testCaseConfigMap, defaultCollectCount);
+                testCasesByPhysicalNetwork.computeIfAbsent(defaultPhysicalNetwork, k -> new ArrayList<>()).add(testCaseInfo);
+                continue;
+            }
+            
+            // 解析用例的逻辑组网（可能有多个，用分号分隔）
+            String[] logicNetworks = testCase.getLogicNetwork().split(";");
+            TestCaseInfo testCaseInfo = createTestCaseInfo(testCase, testCaseConfigMap, defaultCollectCount);
+            
+            // 为每个逻辑组网和厂商生成物理用例
+            for (String logicNetwork : logicNetworks) {
+                String trimmedLogicNetwork = logicNetwork.trim();
+                if (trimmedLogicNetwork.isEmpty()) {
+                    continue;
+                }
+                
+                for (String manu : manufacturers) {
+                    String physicalNetwork = trimmedLogicNetwork + "_" + network + "_" + manu;
+                    testCasesByPhysicalNetwork.computeIfAbsent(physicalNetwork, k -> new ArrayList<>()).add(testCaseInfo);
+                    log.debug("Grouped test case {} to physical network {} - logic network: {}, network: {}, manufacturer: {}", 
+                            testCaseId, physicalNetwork, trimmedLogicNetwork, network, manu);
+                }
+            }
+        }
+        
+        log.info("Test cases grouped by physical network completed - physical network count: {}", testCasesByPhysicalNetwork.size());
+        return testCasesByPhysicalNetwork;
+    }
+    
+    /**
+     * 创建用例信息对象
+     */
+    private TestCaseInfo createTestCaseInfo(TestCase testCase, Map<Long, TestCaseConfig> testCaseConfigMap, Integer defaultCollectCount) {
+        TestCaseInfo testCaseInfo = new TestCaseInfo();
+        testCaseInfo.setTestCaseId(testCase.getId());
+        testCaseInfo.setTestCase(testCase);
+        TestCaseConfig config = testCaseConfigMap.get(testCase.getId());
+        testCaseInfo.setConfig(config);
+        int executionCount = (config != null && config.getExecutionCount() != null) ? config.getExecutionCount() : defaultCollectCount;
+        testCaseInfo.setExecutionCount(executionCount);
+        return testCaseInfo;
+    }
+    
+    /**
+     * 匹配逻辑环境，按逻辑环境分组用例
+     * 
+     * @param testCasesByPhysicalNetwork 按物理用例分组的用例信息Map
+     * @param logicEnvironmentIds 逻辑环境ID列表
+     * @return 按逻辑环境分组的用例信息Map（key: 逻辑环境ID, value: 用例信息列表）
+     */
+    private Map<Long, List<TestCaseInfo>> matchTestCasesToLogicEnvironments(
+            Map<String, List<TestCaseInfo>> testCasesByPhysicalNetwork, List<Long> logicEnvironmentIds) {
+        log.info("Start matching test cases to logic environments - physical network count: {}, logic environment count: {}", 
+                testCasesByPhysicalNetwork.size(), logicEnvironmentIds.size());
+        
+        validateLogicEnvironments(logicEnvironmentIds);
+        
+        // 获取逻辑环境信息（包括物理组网）
+        Map<Long, LogicEnvironmentInfo> environmentInfoMap = getLogicEnvironmentInfoMap(logicEnvironmentIds);
+        
+        // 按逻辑环境分组用例
+        Map<Long, List<TestCaseInfo>> testCasesByLogicEnvironment = new HashMap<>();
+        
+        for (Map.Entry<String, List<TestCaseInfo>> entry : testCasesByPhysicalNetwork.entrySet()) {
+            String physicalNetwork = entry.getKey();
+            List<TestCaseInfo> testCaseInfos = entry.getValue();
+            
+            // 如果是默认分组，均分到所有逻辑环境
+            if ("default".equals(physicalNetwork)) {
+                log.info("Using even distribution for {} test cases without matching physical network", testCaseInfos.size());
+                distributeTestCasesEvenly(testCaseInfos, logicEnvironmentIds, testCasesByLogicEnvironment);
+                continue;
+            }
+            
+            // 找到匹配该物理组网的逻辑环境
+            List<Long> matchingEnvironments = findMatchingEnvironments(physicalNetwork, environmentInfoMap);
+            
+            if (matchingEnvironments.isEmpty()) {
+                log.warn("No matching logic environment found for physical network: {}, using even distribution for {} test cases", 
+                        physicalNetwork, testCaseInfos.size());
+                distributeTestCasesEvenly(testCaseInfos, logicEnvironmentIds, testCasesByLogicEnvironment);
+                continue;
+            }
+            
+            // 均分用例到匹配的逻辑环境
+            int totalTestCases = testCaseInfos.size();
+            int environmentCount = matchingEnvironments.size();
+            int baseCount = totalTestCases / environmentCount;
+            int remainder = totalTestCases % environmentCount;
+            
+            log.info("Distributing {} test cases for physical network {} to {} environments - base: {}, remainder: {}", 
+                    totalTestCases, physicalNetwork, environmentCount, baseCount, remainder);
+            
+            int testCaseIndex = 0;
+            for (int i = 0; i < matchingEnvironments.size(); i++) {
+                Long logicEnvironmentId = matchingEnvironments.get(i);
+                int currentEnvironmentCount = baseCount + (i < remainder ? 1 : 0);
+                
+                for (int j = 0; j < currentEnvironmentCount; j++) {
+                    if (testCaseIndex < testCaseInfos.size()) {
+                        TestCaseInfo testCaseInfo = testCaseInfos.get(testCaseIndex);
+                        testCasesByLogicEnvironment.computeIfAbsent(logicEnvironmentId, k -> new ArrayList<>()).add(testCaseInfo);
+                        testCaseIndex++;
+                    }
+                }
+                
+                log.debug("Assigned {} test cases to logic environment {} for physical network {}", 
+                        currentEnvironmentCount, logicEnvironmentId, physicalNetwork);
+            }
+        }
+        
+        log.info("Test cases matched to logic environments completed - logic environment count: {}", testCasesByLogicEnvironment.size());
+        return testCasesByLogicEnvironment;
+    }
+    
+    /**
+     * 均分用例到所有逻辑环境
+     */
+    private void distributeTestCasesEvenly(List<TestCaseInfo> testCaseInfos, List<Long> logicEnvironmentIds, 
+            Map<Long, List<TestCaseInfo>> testCasesByLogicEnvironment) {
+        int totalTestCases = testCaseInfos.size();
+        int environmentCount = logicEnvironmentIds.size();
+        int baseCount = totalTestCases / environmentCount;
+        int remainder = totalTestCases % environmentCount;
+        
+        int testCaseIndex = 0;
+        for (int i = 0; i < logicEnvironmentIds.size(); i++) {
+            Long logicEnvironmentId = logicEnvironmentIds.get(i);
+            int currentEnvironmentCount = baseCount + (i < remainder ? 1 : 0);
+            
+            for (int j = 0; j < currentEnvironmentCount; j++) {
+                if (testCaseIndex < testCaseInfos.size()) {
+                    TestCaseInfo testCaseInfo = testCaseInfos.get(testCaseIndex);
+                    testCasesByLogicEnvironment.computeIfAbsent(logicEnvironmentId, k -> new ArrayList<>()).add(testCaseInfo);
+                    testCaseIndex++;
+                }
+            }
+        }
+    }
+    
+    /**
+     * 为每个逻辑环境创建用例执行实例并保存
+     * 
+     * @param collectTaskId 采集任务ID
+     * @param testCasesByLogicEnvironment 按逻辑环境分组的用例信息Map
+     * @return 所有创建的用例执行实例列表
+     */
+    private List<TestCaseExecutionInstance> createAndSaveInstancesForLogicEnvironments(
+            Long collectTaskId, Map<Long, List<TestCaseInfo>> testCasesByLogicEnvironment) {
+        log.info("Start creating test case execution instances for logic environments - task ID: {}, logic environment count: {}", 
+                collectTaskId, testCasesByLogicEnvironment.size());
+        
+        List<TestCaseExecutionInstance> allInstances = new ArrayList<>();
+        Map<Long, LogicEnvironmentInfo> environmentInfoMap = new HashMap<>();
+        
+        // 获取所有逻辑环境信息
+        for (Long logicEnvironmentId : testCasesByLogicEnvironment.keySet()) {
+            LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+            if (logicEnvironment != null && logicEnvironment.getExecutorId() != null) {
+                Executor executor = executorService.getById(logicEnvironment.getExecutorId());
+                if (executor != null && executor.getIpAddress() != null) {
+                    LogicEnvironmentInfo info = new LogicEnvironmentInfo();
+                    info.setId(logicEnvironmentId);
+                    info.setExecutorIp(executor.getIpAddress());
+                    // 解析物理组网
+                    if (logicEnvironment.getPhysicalNetwork() != null && !logicEnvironment.getPhysicalNetwork().trim().isEmpty()) {
+                        try {
+                            List<String> physicalNetworks = JSON.parseArray(logicEnvironment.getPhysicalNetwork(), String.class);
+                            info.setPhysicalNetworks(physicalNetworks);
+                        } catch (Exception e) {
+                            log.warn("Failed to parse physical network for logic environment {}: {}", logicEnvironmentId, e.getMessage());
+                            info.setPhysicalNetworks(new ArrayList<>());
+                        }
+                    } else {
+                        info.setPhysicalNetworks(new ArrayList<>());
+                    }
+                    environmentInfoMap.put(logicEnvironmentId, info);
+                }
+            }
+        }
+        
+        // 为每个逻辑环境创建用例执行实例
+        for (Map.Entry<Long, List<TestCaseInfo>> entry : testCasesByLogicEnvironment.entrySet()) {
+            Long logicEnvironmentId = entry.getKey();
+            List<TestCaseInfo> testCaseInfos = entry.getValue();
+            LogicEnvironmentInfo info = environmentInfoMap.get(logicEnvironmentId);
+            
+            if (info == null || info.getExecutorIp() == null) {
+                log.warn("Logic environment {} has no executor IP, skipping", logicEnvironmentId);
+                continue;
+            }
+            
+            // 为每个用例创建执行实例
+            for (TestCaseInfo testCaseInfo : testCaseInfos) {
+                int executionCount = testCaseInfo.getExecutionCount();
+                for (int round = 1; round <= executionCount; round++) {
+                    TestCaseExecutionInstance instance = new TestCaseExecutionInstance();
+                    instance.setCollectTaskId(collectTaskId);
+                    instance.setTestCaseId(testCaseInfo.getTestCaseId());
+                    instance.setRound(round);
+                    instance.setLogicEnvironmentId(logicEnvironmentId);
+                    instance.setExecutorIp(info.getExecutorIp());
+                    instance.setStatus("RUNNING");
+                    allInstances.add(instance);
+                }
+            }
+            
+            log.info("Created {} instances for logic environment {} (executor IP: {})", 
+                    testCaseInfos.stream().mapToInt(TestCaseInfo::getExecutionCount).sum(), logicEnvironmentId, info.getExecutorIp());
+        }
+        
+        // 保存所有实例
+        saveTestCaseInstances(allInstances, collectTaskId);
+        
+        log.info("Test case execution instances created and saved - total instance count: {} - task ID: {}", 
+                allInstances.size(), collectTaskId);
+        return allInstances;
     }
     
     /**
