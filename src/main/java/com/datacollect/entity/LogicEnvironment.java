@@ -24,6 +24,12 @@ public class LogicEnvironment {
     @TableField("executor_id")
     private Long executorId;
 
+    @TableField("network")
+    private String network; // 网络类型：normal、weak、congestion、weakcongestion、sunshang
+
+    @TableField("physical_network")
+    private String physicalNetwork; // 物理组网列表，JSON格式存储
+
     @TableField("description")
     private String description;
 
