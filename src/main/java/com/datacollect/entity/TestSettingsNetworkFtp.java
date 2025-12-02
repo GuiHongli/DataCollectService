@@ -9,25 +9,26 @@ import java.time.LocalDateTime;
 
 @Data
 @EqualsAndHashCode(callSuper = false)
-@TableName("user")
-public class User {
+@TableName("test_settings_network_ftp")
+public class TestSettingsNetworkFtp {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @NotBlank(message = "用户名不能为空")
-    @TableField("username")
-    private String username;
+    @NotBlank(message = "服务器地址不能为空")
+    @TableField("server_address")
+    private String serverAddress;
+
+    @NotBlank(message = "账户不能为空")
+    @TableField("account")
+    private String account;
 
     @NotBlank(message = "密码不能为空")
     @TableField("password")
     private String password;
 
-    @TableField("role")
-    private String role; // admin-管理员，user-普通用户
-
-    @TableField("status")
-    private Integer status; // 0: 禁用, 1: 启用
+    @TableField("check_md5")
+    private Integer checkMd5; // 0: 否, 1: 是
 
     @TableField("create_by")
     private String createBy;
@@ -45,28 +46,4 @@ public class User {
     @TableField("deleted")
     private Integer deleted;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

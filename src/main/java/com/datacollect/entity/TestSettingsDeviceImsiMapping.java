@@ -9,25 +9,19 @@ import java.time.LocalDateTime;
 
 @Data
 @EqualsAndHashCode(callSuper = false)
-@TableName("user")
-public class User {
+@TableName("test_settings_device_imsi_mapping")
+public class TestSettingsDeviceImsiMapping {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @NotBlank(message = "用户名不能为空")
-    @TableField("username")
-    private String username;
+    @NotBlank(message = "deviceid不能为空")
+    @TableField("device_id")
+    private String deviceId;
 
-    @NotBlank(message = "密码不能为空")
-    @TableField("password")
-    private String password;
-
-    @TableField("role")
-    private String role; // admin-管理员，user-普通用户
-
-    @TableField("status")
-    private Integer status; // 0: 禁用, 1: 启用
+    @NotBlank(message = "IMSI不能为空")
+    @TableField("imsi")
+    private String imsi;
 
     @TableField("create_by")
     private String createBy;
@@ -45,28 +39,4 @@ public class User {
     @TableField("deleted")
     private Integer deleted;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
