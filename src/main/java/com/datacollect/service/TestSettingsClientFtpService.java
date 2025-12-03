@@ -16,3 +16,4 @@ public interface TestSettingsClientFtpService extends IService<TestSettingsClien
     boolean saveOrUpdateClientFtpConfig(TestSettingsClientFtp config);
 }
 
+

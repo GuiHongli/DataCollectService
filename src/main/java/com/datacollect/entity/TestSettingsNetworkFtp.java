@@ -47,3 +47,4 @@ public class TestSettingsNetworkFtp {
     private Integer deleted;
 }
 
+

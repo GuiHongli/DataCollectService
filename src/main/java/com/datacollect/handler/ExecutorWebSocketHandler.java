@@ -8,6 +8,7 @@ import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.service.ExecutorService;
 import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.ExecutorWebSocketService;
+import com.datacollect.service.RegionService;
 import com.datacollect.service.impl.ExecutorWebSocketServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,9 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
     
     @Autowired
     private ExecutorMacAddressService executorMacAddressService;
+    
+    @Autowired
+    private RegionService regionService;
     
     /**
      * 心跳检查定时任务
@@ -255,8 +259,26 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                     }
                     executor.setName(executorName);
                     
-                    // 设置默认地域ID为1（中国片区），如果后续需要可以配置化
-                    executor.setRegionId(1L);
+                    // 处理地域信息：判断是否存在，不存在则创建，并绑定到执行机
+                    Long regionId = regionService.findOrCreateRegionHierarchy(
+                        registerMsg.getRegionName(),
+                        registerMsg.getCountryName(),
+                        registerMsg.getProvinceName(),
+                        registerMsg.getCityName(),
+                        "通过执行机注册自动创建"
+                    );
+                    
+                    if (regionId != null) {
+                        executor.setRegionId(regionId);
+                        log.info("执行机地域已绑定 - MAC地址: {}, 地域ID: {}, 地域信息: 地域={}, 国家={}, 省份={}, 城市={}, 会话ID: {}", 
+                                executorMac, regionId, 
+                                registerMsg.getRegionName(), registerMsg.getCountryName(), 
+                                registerMsg.getProvinceName(), registerMsg.getCityName(), sessionId);
+                    } else {
+                        // 如果没有提供地域信息，设置默认地域ID为1（中国片区）
+                        executor.setRegionId(1L);
+                        log.info("执行机未提供地域信息，使用默认地域ID=1 - MAC地址: {}, 会话ID: {}", executorMac, sessionId);
+                    }
                     
                     // 设置描述
                     if (registerMsg.getDescription() != null && !registerMsg.getDescription().trim().isEmpty()) {
@@ -479,6 +501,7 @@ import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.service.ExecutorService;
 import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.ExecutorWebSocketService;
+import com.datacollect.service.RegionService;
 import com.datacollect.service.impl.ExecutorWebSocketServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
@@ -516,6 +539,9 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
     
     @Autowired
     private ExecutorMacAddressService executorMacAddressService;
+    
+    @Autowired
+    private RegionService regionService;
     
     /**
      * 心跳检查定时任务
@@ -726,8 +752,26 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                     }
                     executor.setName(executorName);
                     
-                    // 设置默认地域ID为1（中国片区），如果后续需要可以配置化
-                    executor.setRegionId(1L);
+                    // 处理地域信息：判断是否存在，不存在则创建，并绑定到执行机
+                    Long regionId = regionService.findOrCreateRegionHierarchy(
+                        registerMsg.getRegionName(),
+                        registerMsg.getCountryName(),
+                        registerMsg.getProvinceName(),
+                        registerMsg.getCityName(),
+                        "通过执行机注册自动创建"
+                    );
+                    
+                    if (regionId != null) {
+                        executor.setRegionId(regionId);
+                        log.info("执行机地域已绑定 - MAC地址: {}, 地域ID: {}, 地域信息: 地域={}, 国家={}, 省份={}, 城市={}, 会话ID: {}", 
+                                executorMac, regionId, 
+                                registerMsg.getRegionName(), registerMsg.getCountryName(), 
+                                registerMsg.getProvinceName(), registerMsg.getCityName(), sessionId);
+                    } else {
+                        // 如果没有提供地域信息，设置默认地域ID为1（中国片区）
+                        executor.setRegionId(1L);
+                        log.info("执行机未提供地域信息，使用默认地域ID=1 - MAC地址: {}, 会话ID: {}", executorMac, sessionId);
+                    }
                     
                     // 设置描述
                     if (registerMsg.getDescription() != null && !registerMsg.getDescription().trim().isEmpty()) {

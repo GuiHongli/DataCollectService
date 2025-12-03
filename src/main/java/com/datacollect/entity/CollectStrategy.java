@@ -40,7 +40,7 @@ public class CollectStrategy {
     @TableField("custom_params")
     private String customParams;
 
-    @TableField("test_case_custom_params")
+    @TableField(value = "test_case_custom_params", updateStrategy = FieldStrategy.IGNORED)
     private String testCaseCustomParams;
 
     @TableField("test_case_execution_counts")

@@ -47,3 +47,4 @@ public class TestSettingsClientFtp {
     private Integer deleted;
 }
 
+

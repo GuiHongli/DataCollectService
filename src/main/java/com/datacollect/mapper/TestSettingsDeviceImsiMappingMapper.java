@@ -8,3 +8,4 @@ import org.apache.ibatis.annotations.Mapper;
 public interface TestSettingsDeviceImsiMappingMapper extends BaseMapper<TestSettingsDeviceImsiMapping> {
 }
 
+

@@ -239,6 +239,52 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
         return dto;
     }
 
+    @Override
+    @Transactional
+    public Long findOrCreateRegionHierarchy(String regionName, String countryName, String provinceName, String cityName, String description) {
+        // 如果所有地域信息都为空，返回null
+        if ((regionName == null || regionName.trim().isEmpty()) &&
+            (countryName == null || countryName.trim().isEmpty()) &&
+            (provinceName == null || provinceName.trim().isEmpty()) &&
+            (cityName == null || cityName.trim().isEmpty())) {
+            return null;
+        }
+        
+        Long finalRegionId = null;
+        
+        // 1. 创建或获取地域（片区，level=1）
+        Region region = null;
+        if (regionName != null && !regionName.trim().isEmpty()) {
+            region = findOrCreateRegion(regionName, 1, null, description);
+            finalRegionId = region.getId();
+        }
+        
+        // 2. 创建或获取国家（level=2）
+        Region country = null;
+        if (countryName != null && !countryName.trim().isEmpty()) {
+            Long parentId = region != null ? region.getId() : null;
+            country = findOrCreateRegion(countryName, 2, parentId, description);
+            finalRegionId = country.getId();
+        }
+        
+        // 3. 创建或获取省份（level=3）
+        Region province = null;
+        if (provinceName != null && !provinceName.trim().isEmpty()) {
+            Long parentId = country != null ? country.getId() : (region != null ? region.getId() : null);
+            province = findOrCreateRegion(provinceName, 3, parentId, description);
+            finalRegionId = province.getId();
+        }
+        
+        // 4. 创建或获取城市（level=4）
+        if (cityName != null && !cityName.trim().isEmpty()) {
+            Long parentId = province != null ? province.getId() : (country != null ? country.getId() : (region != null ? region.getId() : null));
+            Region city = findOrCreateRegion(cityName, 4, parentId, description);
+            finalRegionId = city.getId();
+        }
+        
+        return finalRegionId;
+    }
+    
     /**
      * 查找或创建地域
      */

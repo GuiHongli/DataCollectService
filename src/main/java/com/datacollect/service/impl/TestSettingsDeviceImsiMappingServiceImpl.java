@@ -10,3 +10,4 @@ import org.springframework.stereotype.Service;
 public class TestSettingsDeviceImsiMappingServiceImpl extends ServiceImpl<TestSettingsDeviceImsiMappingMapper, TestSettingsDeviceImsiMapping> implements TestSettingsDeviceImsiMappingService {
 }
 
+

@@ -40,3 +40,4 @@ public class TestSettingsDeviceImsiMapping {
     private Integer deleted;
 }
 
+

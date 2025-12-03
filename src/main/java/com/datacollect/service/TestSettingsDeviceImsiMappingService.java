@@ -6,3 +6,4 @@ import com.datacollect.entity.TestSettingsDeviceImsiMapping;
 public interface TestSettingsDeviceImsiMappingService extends IService<TestSettingsDeviceImsiMapping> {
 }
 
+
