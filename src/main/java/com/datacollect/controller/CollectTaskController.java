@@ -97,6 +97,9 @@ public class CollectTaskController {
     
     @Autowired
     private com.datacollect.service.ExecutorWebSocketService executorWebSocketService;
+    
+    @Autowired
+    private com.datacollect.service.TestCaseExecutionResultService testCaseExecutionResultService;
 
     @PostMapping
     public Result<CollectTask> create(@Valid @RequestBody CollectTask collectTask) {
@@ -731,6 +734,25 @@ public class CollectTaskController {
         LogicEnvironment logicEnvironment = logicEnvironmentService.getById(instance.getLogicEnvironmentId());
         if (logicEnvironment != null) {
             instanceMap.put("logicEnvironmentName", logicEnvironment.getName());
+        }
+        
+        // 获取用例执行结果中的采集路径
+        if (instance.getExecutionTaskId() != null) {
+            try {
+                List<com.datacollect.entity.TestCaseExecutionResult> executionResults = 
+                    testCaseExecutionResultService.getByTaskId(instance.getExecutionTaskId());
+                // 查找匹配的用例ID和轮次
+                for (com.datacollect.entity.TestCaseExecutionResult result : executionResults) {
+                    if (result.getTestCaseId().equals(instance.getTestCaseId()) && 
+                        result.getRound().equals(instance.getRound())) {
+                        instanceMap.put("collectPath", result.getCollectPath());
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get collect path for instance - instance ID: {}, error: {}", 
+                        instance.getId(), e.getMessage());
+            }
         }
         
         return instanceMap;
