@@ -736,7 +736,7 @@ public class CollectTaskController {
             instanceMap.put("logicEnvironmentName", logicEnvironment.getName());
         }
         
-        // 获取用例执行结果中的采集路径
+        // 获取用例执行结果中的采集路径和质检结果
         if (instance.getExecutionTaskId() != null) {
             try {
                 List<com.datacollect.entity.TestCaseExecutionResult> executionResults = 
@@ -746,11 +746,12 @@ public class CollectTaskController {
                     if (result.getTestCaseId().equals(instance.getTestCaseId()) && 
                         result.getRound().equals(instance.getRound())) {
                         instanceMap.put("collectPath", result.getCollectPath());
+                        instanceMap.put("qcResult", result.getQcResult());
                         break;
                     }
                 }
             } catch (Exception e) {
-                log.warn("Failed to get collect path for instance - instance ID: {}, error: {}", 
+                log.warn("Failed to get collect path and QC result for instance - instance ID: {}, error: {}", 
                         instance.getId(), e.getMessage());
             }
         }
