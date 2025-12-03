@@ -39,13 +39,25 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
         log.info("Save test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
                 result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus());
         
+        // 记录采集路径和质检结果信息
+        if (result.getCollectPath() != null && !result.getCollectPath().trim().isEmpty()) {
+            log.info("Test case execution result contains collect path - task ID: {}, test case ID: {}, round: {}, collect path: {}", 
+                    result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getCollectPath());
+        }
+        if (result.getQcResult() != null && !result.getQcResult().trim().isEmpty()) {
+            log.info("Test case execution result contains QC result - task ID: {}, test case ID: {}, round: {}, QC result length: {} characters", 
+                    result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getQcResult().length());
+        }
+        
         try {
             com.datacollect.entity.TestCaseExecutionResult entity = createResultEntity(result);
             
             boolean success = save(entity);
             if (success) {
-                log.info("Test case execution result saved successfully - task ID: {}, test case ID: {}, round: {}", 
-                        result.getTaskId(), result.getTestCaseId(), result.getRound());
+                log.info("Test case execution result saved successfully - task ID: {}, test case ID: {}, round: {}, collect path: {}, QC result: {}", 
+                        result.getTaskId(), result.getTestCaseId(), result.getRound(), 
+                        entity.getCollectPath() != null ? "present" : "null", 
+                        entity.getQcResult() != null ? "present" : "null");
                 
                 // 更新例次状态
                 updateExecutionInstanceStatus(result);
