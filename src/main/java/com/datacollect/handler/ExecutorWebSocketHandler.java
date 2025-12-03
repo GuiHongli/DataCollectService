@@ -10,6 +10,8 @@ import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.ExecutorWebSocketService;
 import com.datacollect.service.RegionService;
 import com.datacollect.service.impl.ExecutorWebSocketServiceImpl;
+import com.datacollect.util.PinyinUtil;
+import com.datacollect.entity.Region;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -311,9 +313,51 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                     executor.setIpAddress(executorIp);
                 }
                 
+                // 处理地域信息：判断是否存在，不存在则创建，并更新执行机所属地域
+                Long regionId = regionService.findOrCreateRegionHierarchy(
+                    registerMsg.getRegionName(),
+                    registerMsg.getCountryName(),
+                    registerMsg.getProvinceName(),
+                    registerMsg.getCityName(),
+                    "通过执行机注册自动创建"
+                );
+                
+                if (regionId != null) {
+                    executor.setRegionId(regionId);
+                    log.info("执行机地域已更新 - MAC地址: {}, 地域ID: {}, 地域信息: 地域={}, 国家={}, 省份={}, 城市={}, 会话ID: {}", 
+                            executorMac, regionId, 
+                            registerMsg.getRegionName(), registerMsg.getCountryName(), 
+                            registerMsg.getProvinceName(), registerMsg.getCityName(), sessionId);
+                    
+                    // 获取城市名称并转换为拼音，更新执行机名称
+                    String cityName = registerMsg.getCityName();
+                    if (cityName == null || cityName.trim().isEmpty()) {
+                        // 如果没有提供城市名称，尝试从地域ID获取城市信息
+                        Region region = regionService.getById(regionId);
+                        if (region != null && region.getLevel() == 4) {
+                            cityName = region.getName();
+                        } else if (region != null && region.getLevel() == 3) {
+                            // 如果是省份，使用省份名称
+                            cityName = region.getName();
+                        } else if (region != null && region.getLevel() == 2) {
+                            // 如果是国家，使用国家名称
+                            cityName = region.getName();
+                        }
+                    }
+                    
+                    // 将城市名称转换为拼音，并更新执行机名称
+                    if (cityName != null && !cityName.trim().isEmpty()) {
+                        String cityPinyin = PinyinUtil.toPinyin(cityName);
+                        String executorName = cityPinyin + "_" + executor.getIpAddress();
+                        executor.setName(executorName);
+                        log.info("执行机名称已更新 - MAC地址: {}, 城市名称: {}, 城市拼音: {}, 新名称: {}, 会话ID: {}", 
+                                executorMac, cityName, cityPinyin, executorName, sessionId);
+                    }
+                }
+                
                 executorService.updateById(executor);
                 
-                log.info("执行机已存在，更新状态为在线 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
+                log.info("执行机已存在，已更新状态和地域信息 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
                         executorMac, executor.getIpAddress(), executor.getName(), sessionId);
             }
             
@@ -503,6 +547,8 @@ import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.ExecutorWebSocketService;
 import com.datacollect.service.RegionService;
 import com.datacollect.service.impl.ExecutorWebSocketServiceImpl;
+import com.datacollect.util.PinyinUtil;
+import com.datacollect.entity.Region;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -804,9 +850,51 @@ public class ExecutorWebSocketHandler extends TextWebSocketHandler {
                     executor.setIpAddress(executorIp);
                 }
                 
+                // 处理地域信息：判断是否存在，不存在则创建，并更新执行机所属地域
+                Long regionId = regionService.findOrCreateRegionHierarchy(
+                    registerMsg.getRegionName(),
+                    registerMsg.getCountryName(),
+                    registerMsg.getProvinceName(),
+                    registerMsg.getCityName(),
+                    "通过执行机注册自动创建"
+                );
+                
+                if (regionId != null) {
+                    executor.setRegionId(regionId);
+                    log.info("执行机地域已更新 - MAC地址: {}, 地域ID: {}, 地域信息: 地域={}, 国家={}, 省份={}, 城市={}, 会话ID: {}", 
+                            executorMac, regionId, 
+                            registerMsg.getRegionName(), registerMsg.getCountryName(), 
+                            registerMsg.getProvinceName(), registerMsg.getCityName(), sessionId);
+                    
+                    // 获取城市名称并转换为拼音，更新执行机名称
+                    String cityName = registerMsg.getCityName();
+                    if (cityName == null || cityName.trim().isEmpty()) {
+                        // 如果没有提供城市名称，尝试从地域ID获取城市信息
+                        Region region = regionService.getById(regionId);
+                        if (region != null && region.getLevel() == 4) {
+                            cityName = region.getName();
+                        } else if (region != null && region.getLevel() == 3) {
+                            // 如果是省份，使用省份名称
+                            cityName = region.getName();
+                        } else if (region != null && region.getLevel() == 2) {
+                            // 如果是国家，使用国家名称
+                            cityName = region.getName();
+                        }
+                    }
+                    
+                    // 将城市名称转换为拼音，并更新执行机名称
+                    if (cityName != null && !cityName.trim().isEmpty()) {
+                        String cityPinyin = PinyinUtil.toPinyin(cityName);
+                        String executorName = cityPinyin + "_" + executor.getIpAddress();
+                        executor.setName(executorName);
+                        log.info("执行机名称已更新 - MAC地址: {}, 城市名称: {}, 城市拼音: {}, 新名称: {}, 会话ID: {}", 
+                                executorMac, cityName, cityPinyin, executorName, sessionId);
+                    }
+                }
+                
                 executorService.updateById(executor);
                 
-                log.info("执行机已存在，更新状态为在线 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
+                log.info("执行机已存在，已更新状态和地域信息 - MAC地址: {}, 执行机IP: {}, 执行机名称: {}, 会话ID: {}", 
                         executorMac, executor.getIpAddress(), executor.getName(), sessionId);
             }
             
