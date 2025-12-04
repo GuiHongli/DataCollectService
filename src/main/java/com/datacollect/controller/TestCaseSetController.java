@@ -32,6 +32,7 @@ import com.datacollect.service.TestCaseService;
 import com.datacollect.service.TestCaseSetService;
 import com.datacollect.util.ExcelParser;
 import com.datacollect.util.GoHttpServerClient;
+import com.datacollect.util.PinyinUtil;
 import com.datacollect.util.ZipProcessor;
 
 import lombok.extern.slf4j.Slf4j;
@@ -173,7 +174,9 @@ public class TestCaseSetController {
      */
     private Path saveFileToLocal(MultipartFile file, String originalFilename) throws IOException {
         Path uploadPath = fileUploadConfig.getTestcaseUploadPath();
-        String originalFileName = originalFilename;
+        // 将中文文件名转换为拼音
+        String pinyinFileName = PinyinUtil.convertFileNameToPinyin(originalFilename);
+        String originalFileName = pinyinFileName;
         Path filePath = uploadPath.resolve(originalFileName);
         
         // 如果文件已存在，添加时间戳后缀
@@ -197,7 +200,9 @@ public class TestCaseSetController {
         String goHttpServerUrl = null;
         try {
             if (goHttpServerClient.isAvailable()) {
-                goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), originalFilename);
+                // 将中文文件名转换为拼音
+                String pinyinFileName = PinyinUtil.convertFileNameToPinyin(originalFilename);
+                goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), pinyinFileName);
                 log.info("File uploaded to gohttpserver: {}", goHttpServerUrl);
             } else {
                 log.warn("gohttpserver is not available, skipping upload");

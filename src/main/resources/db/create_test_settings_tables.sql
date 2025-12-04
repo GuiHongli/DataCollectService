@@ -46,3 +46,4 @@ CREATE TABLE IF NOT EXISTS `test_settings_device_imsi_mapping` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='deviceid和IMSI对应关系表';
 
 
+

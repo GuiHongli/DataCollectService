@@ -67,5 +67,38 @@ public class PinyinUtil {
         }
         return pinyin;
     }
+    
+    /**
+     * 将文件名中的中文转换为拼音
+     * 保留文件扩展名和其他非中文字符
+     * 
+     * @param filename 文件名（例如：用例集名称_版本.zip）
+     * @return 转换后的文件名（例如：yongliijimingcheng_banben.zip）
+     */
+    public static String convertFileNameToPinyin(String filename) {
+        if (filename == null || filename.trim().isEmpty()) {
+            return filename;
+        }
+        
+        // 分离文件名和扩展名
+        int lastDotIndex = filename.lastIndexOf('.');
+        String nameWithoutExt;
+        String extension;
+        
+        if (lastDotIndex > 0) {
+            nameWithoutExt = filename.substring(0, lastDotIndex);
+            extension = filename.substring(lastDotIndex);
+        } else {
+            nameWithoutExt = filename;
+            extension = "";
+        }
+        
+        // 将文件名部分转换为拼音
+        String pinyinName = toPinyin(nameWithoutExt);
+        
+        // 组合文件名和扩展名
+        return pinyinName + extension;
+    }
 }
+
 
