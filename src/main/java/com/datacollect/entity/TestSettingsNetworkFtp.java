@@ -30,6 +30,9 @@ public class TestSettingsNetworkFtp {
     @TableField("check_md5")
     private Integer checkMd5; // 0: 否, 1: 是
 
+    @TableField("directory")
+    private String directory;
+
     @TableField("create_by")
     private String createBy;
 
@@ -46,6 +49,7 @@ public class TestSettingsNetworkFtp {
     @TableField("deleted")
     private Integer deleted;
 }
+
 
 
 

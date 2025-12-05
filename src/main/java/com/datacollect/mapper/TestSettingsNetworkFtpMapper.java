@@ -10,3 +10,4 @@ public interface TestSettingsNetworkFtpMapper extends BaseMapper<TestSettingsNet
 
 
 
+
