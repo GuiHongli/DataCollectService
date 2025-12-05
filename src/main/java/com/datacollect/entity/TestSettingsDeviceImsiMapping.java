@@ -19,9 +19,9 @@ public class TestSettingsDeviceImsiMapping {
     @TableField("device_id")
     private String deviceId;
 
-    @NotBlank(message = "IMSI不能为空")
-    @TableField("imsi")
-    private String imsi;
+    @NotBlank(message = "GPSI不能为空")
+    @TableField("gpsi")
+    private String gpsi;
 
     @TableField("create_by")
     private String createBy;
