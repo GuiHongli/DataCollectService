@@ -1,7 +1,9 @@
 package com.datacollect.service;
 
+import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.entity.TestSettingsClientFtp;
 import com.datacollect.entity.TestSettingsNetworkFtp;
+import com.datacollect.util.ClientFileProcessor;
 import com.datacollect.util.FtpClientUtil;
 import com.datacollect.util.GoHttpServerClient;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class FtpFileProcessService {
 
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
+     * 如果是压缩包，会解压并解析taskinfo.json
      *
      * @param fileName 文件名
      * @return 上传后的文件URL
@@ -49,14 +52,55 @@ public class FtpFileProcessService {
             throw new IOException("Client FTP server configuration not found");
         }
 
-        return processFtpFile(
+        // 用于存储解析的taskinfo信息
+        List<TaskInfoDTO> taskInfoHolder = new ArrayList<>();
+        
+        String fileUrl = processFtpFile(
                 ftpConfig.getServerAddress(),
                 ftpConfig.getAccount(),
                 ftpConfig.getPassword(),
                 ftpConfig.getDirectory(),
                 fileName,
-                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1
+                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1,
+                isCompressedFile(fileName) ? taskInfoHolder : null
         );
+
+        // 如果解析到了taskinfo，可以在这里保存到数据库
+        if (!taskInfoHolder.isEmpty()) {
+            TaskInfoDTO taskInfo = taskInfoHolder.get(0);
+            log.info("端侧文件taskinfo解析完成: taskId={}, app={}, service={}, nation={}, operator={}, deviceId={}",
+                    taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService(),
+                    taskInfo.getNation(), taskInfo.getOperator(), taskInfo.getDeviceId());
+            log.info("端侧文件数据报告: stunNumber={}, stunRate={}, avgUplinkRtt={}, avgDownlinkRtt={}, avgUplinkSpeed={}, avgDownlinkSpeed={}",
+                    taskInfo.getSummary() != null ? taskInfo.getSummary().get("stunNumber") : null,
+                    taskInfo.getSummary() != null ? taskInfo.getSummary().get("stunRate") : null,
+                    taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgUplinkRtt") : null,
+                    taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgDownlinkRtt") : null,
+                    taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgUplinkSpeed") : null,
+                    taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgDownlinkSpeed") : null);
+            // TODO: 保存taskInfo到数据库
+            // saveTaskInfo(taskInfo);
+        }
+
+        return fileUrl;
+    }
+
+    /**
+     * 判断文件是否为压缩包
+     *
+     * @param fileName 文件名
+     * @return 是否为压缩包
+     */
+    private boolean isCompressedFile(String fileName) {
+        if (fileName == null) {
+            return false;
+        }
+        String lowerName = fileName.toLowerCase();
+        return lowerName.endsWith(".zip") ||
+               lowerName.endsWith(".rar") ||
+               lowerName.endsWith(".7z") ||
+               lowerName.endsWith(".tar") ||
+               lowerName.endsWith(".gz");
     }
 
     /**
@@ -99,6 +143,25 @@ public class FtpFileProcessService {
      */
     private String processFtpFile(String serverAddress, String account, String password,
                                  String directory, String fileName, boolean checkMd5) throws IOException {
+        return processFtpFile(serverAddress, account, password, directory, fileName, checkMd5, null);
+    }
+
+    /**
+     * 处理FTP文件的完整流程：下载、MD5校验、上传到gohttpserver
+     *
+     * @param serverAddress FTP服务器地址
+     * @param account 账户
+     * @param password 密码
+     * @param directory 目录
+     * @param fileName 文件名
+     * @param checkMd5 是否校验MD5
+     * @param taskInfoHolder 用于返回解析的taskinfo信息（仅端侧文件使用）
+     * @return 上传后的文件URL
+     * @throws IOException IO异常
+     */
+    private String processFtpFile(String serverAddress, String account, String password,
+                                 String directory, String fileName, boolean checkMd5, 
+                                 List<TaskInfoDTO> taskInfoHolder) throws IOException {
         // 创建临时目录
         Path tempDir = Files.createTempDirectory("ftp_download_");
         String localFilePath = tempDir.resolve(fileName).toString();
@@ -152,7 +215,24 @@ public class FtpFileProcessService {
                 log.info("MD5 verification passed");
             }
 
-            // 3. 上传文件到gohttpserver
+            // 3. 如果是端侧压缩包，解析taskinfo.json
+            if (taskInfoHolder != null && isCompressedFile(fileName)) {
+                try {
+                    TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(localFilePath);
+                    if (taskInfo != null) {
+                        taskInfoHolder.add(taskInfo);
+                        log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
+                                taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
+                    } else {
+                        log.warn("未能解析taskinfo.json");
+                    }
+                } catch (Exception e) {
+                    log.error("解析端侧文件taskinfo.json失败: {}", e.getMessage(), e);
+                    // 不抛出异常，继续处理文件上传
+                }
+            }
+
+            // 4. 上传文件到gohttpserver
             log.info("Uploading file to gohttpserver: {}", fileName);
             String fileUrl = goHttpServerClient.uploadLocalFile(localFilePath, fileName);
             log.info("File uploaded to gohttpserver successfully: {}", fileUrl);
@@ -285,12 +365,26 @@ public class FtpFileProcessService {
 
     /**
      * 从端侧FTP服务器指定日期目录下获取所有文件并上传到gohttpserver
+     * 如果是压缩包，会解压并解析taskinfo.json
      *
      * @param dateStr 日期字符串，格式：YYYY-MM-DD，如：2025-12-05
      * @return 上传后的文件URL列表
      * @throws IOException IO异常
      */
     public List<String> processClientFtpFilesByDate(String dateStr) throws IOException {
+        return processClientFtpFilesByDate(dateStr, null);
+    }
+
+    /**
+     * 从端侧FTP服务器指定日期目录下获取所有文件并上传到gohttpserver
+     * 如果是压缩包，会解压并解析taskinfo.json
+     *
+     * @param dateStr 日期字符串，格式：YYYY-MM-DD，如：2025-12-05
+     * @param taskInfoList 用于返回解析的taskinfo信息列表
+     * @return 上传后的文件URL列表
+     * @throws IOException IO异常
+     */
+    public List<String> processClientFtpFilesByDate(String dateStr, List<TaskInfoDTO> taskInfoList) throws IOException {
         log.info("Processing client FTP files for date: {}", dateStr);
 
         // 获取端侧FTP服务器配置
@@ -303,13 +397,67 @@ public class FtpFileProcessService {
         String baseDirectory = ftpConfig.getDirectory();
         String dateDirectory = buildDateDirectoryPath(baseDirectory, dateStr);
 
-        return processFtpFilesByDate(
+        // 列出日期目录下的所有文件
+        List<String> fileNames = FtpClientUtil.listFiles(
                 ftpConfig.getServerAddress(),
                 ftpConfig.getAccount(),
                 ftpConfig.getPassword(),
-                dateDirectory,
-                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1
+                dateDirectory
         );
+
+        if (fileNames.isEmpty()) {
+            log.warn("No files found in date directory: {}", dateDirectory);
+            return new ArrayList<>();
+        }
+
+        log.info("Found {} files in date directory: {}", fileNames.size(), dateDirectory);
+
+        // 处理每个文件
+        List<String> fileUrls = new ArrayList<>();
+        List<String> failedFiles = new ArrayList<>();
+        if (taskInfoList == null) {
+            taskInfoList = new ArrayList<>();
+        }
+
+        for (String fileName : fileNames) {
+            try {
+                // 如果是压缩包，需要收集taskinfo信息
+                if (isCompressedFile(fileName)) {
+                    List<TaskInfoDTO> fileTaskInfoHolder = new ArrayList<>();
+                    String fileUrl = processFtpFile(
+                            ftpConfig.getServerAddress(),
+                            ftpConfig.getAccount(),
+                            ftpConfig.getPassword(),
+                            dateDirectory,
+                            fileName,
+                            ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1,
+                            fileTaskInfoHolder
+                    );
+                    fileUrls.add(fileUrl);
+                    // 收集taskinfo信息
+                    if (!fileTaskInfoHolder.isEmpty()) {
+                        taskInfoList.addAll(fileTaskInfoHolder);
+                    }
+                    log.info("File processed successfully: {} -> {}", fileName, fileUrl);
+                } else {
+                    // 非压缩包，直接处理
+                    String fileUrl = processClientFtpFile(fileName);
+                    fileUrls.add(fileUrl);
+                    log.info("File processed successfully: {} -> {}", fileName, fileUrl);
+                }
+            } catch (Exception e) {
+                log.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
+                failedFiles.add(fileName);
+            }
+        }
+
+        if (!failedFiles.isEmpty()) {
+            log.warn("Some files failed to process: {}", String.join(", ", failedFiles));
+        }
+
+        log.info("Processed {} files successfully, {} files failed, {} taskinfo parsed", 
+                fileUrls.size(), failedFiles.size(), taskInfoList.size());
+        return fileUrls;
     }
 
     /**

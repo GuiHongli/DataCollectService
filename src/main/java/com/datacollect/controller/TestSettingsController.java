@@ -6,6 +6,7 @@ import com.datacollect.common.Result;
 import com.datacollect.entity.TestSettingsClientFtp;
 import com.datacollect.entity.TestSettingsDeviceImsiMapping;
 import com.datacollect.entity.TestSettingsNetworkFtp;
+import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.service.FtpFileProcessService;
 import com.datacollect.service.TestSettingsClientFtpService;
 import com.datacollect.service.TestSettingsDeviceImsiMappingService;
@@ -17,7 +18,10 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -132,15 +136,19 @@ public class TestSettingsController {
 
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
+     * 如果是压缩包，会自动解压并解析taskinfo.json
      *
      * @param fileName 文件名
-     * @return 上传后的文件URL
+     * @return 上传后的文件URL和解析的taskinfo信息
      */
     @PostMapping("/client-ftp/process-file")
-    public Result<String> processClientFtpFile(@RequestParam @NotNull String fileName) {
+    public Result<Map<String, Object>> processClientFtpFile(@RequestParam @NotNull String fileName) {
         try {
             String fileUrl = ftpFileProcessService.processClientFtpFile(fileName);
-            return Result.success(fileUrl);
+            Map<String, Object> result = new HashMap<>();
+            result.put("fileUrl", fileUrl);
+            result.put("fileName", fileName);
+            return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to process client FTP file: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
@@ -200,15 +208,25 @@ public class TestSettingsController {
 
     /**
      * 从端侧FTP服务器指定日期目录下获取所有文件并上传到gohttpserver
+     * 如果是压缩包，会自动解压并解析taskinfo.json
      *
      * @param dateStr 日期字符串，格式：YYYY-MM-DD，如：2025-12-05
-     * @return 上传后的文件URL列表
+     * @return 上传后的文件URL列表和解析的taskinfo信息列表
      */
     @PostMapping("/client-ftp/process-files-by-date")
-    public Result<List<String>> processClientFtpFilesByDate(@RequestParam @NotNull String dateStr) {
+    public Result<Map<String, Object>> processClientFtpFilesByDate(@RequestParam @NotNull String dateStr) {
         try {
-            List<String> fileUrls = ftpFileProcessService.processClientFtpFilesByDate(dateStr);
-            return Result.success(fileUrls);
+            List<TaskInfoDTO> taskInfoList = new ArrayList<>();
+            List<String> fileUrls = ftpFileProcessService.processClientFtpFilesByDate(dateStr, taskInfoList);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("fileUrls", fileUrls);
+            result.put("taskInfoList", taskInfoList);
+            result.put("date", dateStr);
+            result.put("fileCount", fileUrls.size());
+            result.put("taskInfoCount", taskInfoList.size());
+            
+            return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to process client FTP files by date: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
