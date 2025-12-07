@@ -1,6 +1,7 @@
 package com.datacollect.service;
 
 import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.SpeedData;
 import com.datacollect.entity.TestSettingsClientFtp;
 import com.datacollect.entity.TestSettingsNetworkFtp;
 import com.datacollect.util.ClientFileProcessor;
@@ -37,6 +38,9 @@ public class FtpFileProcessService {
 
     @Autowired
     private TaskInfoService taskInfoService;
+
+    @Autowired
+    private SpeedDataService speedDataService;
 
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
@@ -92,6 +96,7 @@ public class FtpFileProcessService {
             } catch (Exception e) {
                 log.error("Error saving TaskInfo to database - taskId: {}, error: {}", taskInfo.getTaskId(), e.getMessage(), e);
             }
+
         }
 
         return fileUrl;
@@ -227,7 +232,7 @@ public class FtpFileProcessService {
                 log.info("MD5 verification passed");
             }
 
-            // 3. 如果是端侧压缩包，解析taskinfo.json
+            // 3. 如果是端侧压缩包，解析taskinfo.json和speed-10s.csv
             if (taskInfoHolder != null && isCompressedFile(fileName)) {
                 try {
                     TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(localFilePath);
@@ -235,6 +240,24 @@ public class FtpFileProcessService {
                         taskInfoHolder.add(taskInfo);
                         log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
                                 taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
+                        
+                        // 解析并保存speed-10s.csv
+                        try {
+                            List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedCsv(localFilePath);
+                            if (speedDataList != null && !speedDataList.isEmpty()) {
+                                boolean saved = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
+                                if (saved) {
+                                    log.info("SpeedData saved to database successfully - taskId: {}, count: {}", 
+                                            taskInfo.getTaskId(), speedDataList.size());
+                                } else {
+                                    log.warn("Failed to save SpeedData to database - taskId: {}", taskInfo.getTaskId());
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("Error parsing or saving SpeedData - taskId: {}, error: {}", 
+                                    taskInfo.getTaskId(), e.getMessage(), e);
+                            // 不抛出异常，继续处理
+                        }
                     } else {
                         log.warn("未能解析taskinfo.json");
                     }

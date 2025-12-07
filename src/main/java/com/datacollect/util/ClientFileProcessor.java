@@ -1,14 +1,19 @@
 package com.datacollect.util;
 
 import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.SpeedData;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -135,6 +140,154 @@ public class ClientFileProcessor {
             log.error("解析taskinfo.json失败: {}", e.getMessage(), e);
             throw new IOException("解析taskinfo.json失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 解压端侧压缩包并解析speed-10s.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return SpeedData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<SpeedData> extractAndParseSpeedCsv(String zipFilePath) throws IOException {
+        log.info("开始解压端侧文件并解析speed-10s.csv: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<SpeedData> speedDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析speed-10s.csv
+            Path speedCsvPath = extractDir.resolve("speed-10s.csv");
+            if (!Files.exists(speedCsvPath)) {
+                // 尝试在子目录中查找
+                speedCsvPath = findSpeedCsvFile(extractDir);
+            }
+
+            if (speedCsvPath != null && Files.exists(speedCsvPath)) {
+                log.info("找到speed-10s.csv文件: {}", speedCsvPath);
+                speedDataList = parseSpeedCsv(speedCsvPath);
+                log.info("speed-10s.csv解析成功: 共{}条记录", speedDataList.size());
+            } else {
+                log.warn("未找到speed-10s.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                log.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                log.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return speedDataList;
+    }
+
+    /**
+     * 递归查找speed-10s.csv文件
+     *
+     * @param directory 搜索目录
+     * @return speed-10s.csv文件路径，如果未找到返回null
+     */
+    private static Path findSpeedCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("speed-10s.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析speed-10s.csv文件
+     *
+     * @param csvPath CSV文件路径
+     * @return SpeedData列表
+     * @throws IOException IO异常
+     */
+    private static List<SpeedData> parseSpeedCsv(Path csvPath) throws IOException {
+        List<SpeedData> speedDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("dl_speed") || 
+                        line.toLowerCase().contains("ul_speed") || 
+                        line.toLowerCase().contains("total")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 3) {
+                    SpeedData speedData = new SpeedData();
+                    speedData.setDlSpeed(values[0].trim());
+                    speedData.setUlSpeed(values[1].trim());
+                    speedData.setTotal(values[2].trim());
+                    speedDataList.add(speedData);
+                } else {
+                    log.warn("CSV行格式不正确，跳过: {}", line);
+                }
+            }
+
+            log.info("解析speed-10s.csv完成，共{}条记录", speedDataList.size());
+        } catch (Exception e) {
+            log.error("解析speed-10s.csv失败: {}", e.getMessage(), e);
+            throw new IOException("解析speed-10s.csv失败: " + e.getMessage(), e);
+        }
+
+        return speedDataList;
+    }
+
+    /**
+     * 解析CSV行（简单实现，处理逗号分隔）
+     *
+     * @param line CSV行
+     * @return 字段值数组
+     */
+    private static String[] parseCsvLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder currentValue = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                values.add(currentValue.toString());
+                currentValue = new StringBuilder();
+            } else {
+                currentValue.append(c);
+            }
+        }
+
+        // 添加最后一个值
+        values.add(currentValue.toString());
+
+        return values.toArray(new String[0]);
     }
 
     /**
