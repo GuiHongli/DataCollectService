@@ -25,7 +25,7 @@ public class SpeedData {
     private Long id;
 
     /**
-     * 任务ID（关联task_info表的task_id）
+     * 任务ID（关联client_task_info表的task_id）
      */
     @TableField("task_id")
     private String taskId;

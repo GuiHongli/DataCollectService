@@ -1,7 +1,7 @@
 -- 创建速率数据表
 CREATE TABLE IF NOT EXISTS `speed_data` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID（关联task_info表的task_id）',
+  `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID（关联client_task_info表的task_id）',
   `dl_speed` varchar(50) DEFAULT NULL COMMENT '下行速率（bps）',
   `ul_speed` varchar(50) DEFAULT NULL COMMENT '上行速率（bps）',
   `total` varchar(50) DEFAULT NULL COMMENT '总体速率（bps）',

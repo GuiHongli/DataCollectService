@@ -1,7 +1,7 @@
 -- 创建vMOS数据表
 CREATE TABLE IF NOT EXISTS `vmos_data` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID（关联task_info表的task_id）',
+  `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID（关联client_task_info表的task_id）',
   `sequence_number` varchar(50) DEFAULT NULL COMMENT '序号',
   `speed` varchar(50) DEFAULT NULL COMMENT '速率',
   `resolution` varchar(100) DEFAULT NULL COMMENT '分辨率',

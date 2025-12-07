@@ -1,5 +1,5 @@
 -- 创建端侧任务信息表
-CREATE TABLE IF NOT EXISTS `task_info` (
+CREATE TABLE IF NOT EXISTS `client_task_info` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID',
   `nation` varchar(100) DEFAULT NULL COMMENT '国家信息',

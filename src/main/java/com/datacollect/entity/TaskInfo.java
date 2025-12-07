@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
-@TableName("task_info")
+@TableName("client_task_info")
 public class TaskInfo {
 
     /**
