@@ -1,4 +1,4 @@
-package com.datacollect.service;
+﻿package com.datacollect.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.datacollect.entity.CollectTask;

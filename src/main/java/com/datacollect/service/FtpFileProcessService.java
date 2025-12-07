@@ -35,6 +35,9 @@ public class FtpFileProcessService {
     @Autowired
     private TestSettingsNetworkFtpService networkFtpService;
 
+    @Autowired
+    private TaskInfoService taskInfoService;
+
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
      * 如果是压缩包，会解压并解析taskinfo.json
@@ -65,7 +68,7 @@ public class FtpFileProcessService {
                 isCompressedFile(fileName) ? taskInfoHolder : null
         );
 
-        // 如果解析到了taskinfo，可以在这里保存到数据库
+        // 如果解析到了taskinfo，保存到数据库
         if (!taskInfoHolder.isEmpty()) {
             TaskInfoDTO taskInfo = taskInfoHolder.get(0);
             log.info("端侧文件taskinfo解析完成: taskId={}, app={}, service={}, nation={}, operator={}, deviceId={}",
@@ -78,8 +81,17 @@ public class FtpFileProcessService {
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgDownlinkRtt") : null,
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgUplinkSpeed") : null,
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgDownlinkSpeed") : null);
-            // TODO: 保存taskInfo到数据库
-            // saveTaskInfo(taskInfo);
+            // 保存taskInfo到数据库
+            try {
+                boolean saved = taskInfoService.saveTaskInfo(taskInfo);
+                if (saved) {
+                    log.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
+                } else {
+                    log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                }
+            } catch (Exception e) {
+                log.error("Error saving TaskInfo to database - taskId: {}, error: {}", taskInfo.getTaskId(), e.getMessage(), e);
+            }
         }
 
         return fileUrl;
@@ -455,8 +467,32 @@ public class FtpFileProcessService {
             log.warn("Some files failed to process: {}", String.join(", ", failedFiles));
         }
 
+        // 批量保存taskinfo到数据库
+        if (taskInfoList != null && !taskInfoList.isEmpty()) {
+            int savedCount = 0;
+            int failedCount = 0;
+            for (TaskInfoDTO taskInfo : taskInfoList) {
+                try {
+                    boolean saved = taskInfoService.saveTaskInfo(taskInfo);
+                    if (saved) {
+                        savedCount++;
+                        log.debug("TaskInfo saved to database - taskId: {}", taskInfo.getTaskId());
+                    } else {
+                        failedCount++;
+                        log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                    }
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("Error saving TaskInfo to database - taskId: {}, error: {}", 
+                            taskInfo.getTaskId(), e.getMessage(), e);
+                }
+            }
+            log.info("Batch saved TaskInfo: {} succeeded, {} failed, total: {}", 
+                    savedCount, failedCount, taskInfoList.size());
+        }
+
         log.info("Processed {} files successfully, {} files failed, {} taskinfo parsed", 
-                fileUrls.size(), failedFiles.size(), taskInfoList.size());
+                fileUrls.size(), failedFiles.size(), taskInfoList != null ? taskInfoList.size() : 0);
         return fileUrls;
     }
 
