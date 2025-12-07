@@ -16,3 +16,5 @@ ADD UNIQUE KEY `uk_gpsi` (`gpsi`);
 ALTER TABLE `test_settings_device_imsi_mapping` 
 COMMENT = 'deviceid和GPSI对应关系表';
 
+
+

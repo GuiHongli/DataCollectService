@@ -8,3 +8,5 @@ ADD COLUMN `directory` varchar(255) DEFAULT NULL COMMENT '目录' AFTER `check_m
 ALTER TABLE `test_settings_network_ftp` 
 ADD COLUMN `directory` varchar(255) DEFAULT NULL COMMENT '目录' AFTER `check_md5`;
 
+
+

@@ -11,3 +11,5 @@ public interface TestSettingsClientFtpMapper extends BaseMapper<TestSettingsClie
 
 
 
+
+
