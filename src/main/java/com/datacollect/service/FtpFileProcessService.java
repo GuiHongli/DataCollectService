@@ -1,7 +1,7 @@
 package com.datacollect.service;
 
 import com.datacollect.dto.TaskInfoDTO;
-import com.datacollect.entity.SpeedData;
+import com.datacollect.entity.ClientTestData;
 import com.datacollect.entity.TestSettingsClientFtp;
 import com.datacollect.entity.TestSettingsNetworkFtp;
 import com.datacollect.util.ClientFileProcessor;
@@ -37,10 +37,10 @@ public class FtpFileProcessService {
     private TestSettingsNetworkFtpService networkFtpService;
 
     @Autowired
-    private TaskInfoService taskInfoService;
+    private ClientTaskInfoService clientTaskInfoService;
 
     @Autowired
-    private SpeedDataService speedDataService;
+    private ClientTestDataService clientTestDataService;
 
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
@@ -87,14 +87,14 @@ public class FtpFileProcessService {
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgDownlinkSpeed") : null);
             // 保存taskInfo到数据库
             try {
-                boolean saved = taskInfoService.saveTaskInfo(taskInfo);
+                boolean saved = clientTaskInfoService.saveTaskInfo(taskInfo);
                 if (saved) {
-                    log.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
+                    log.info("ClientTaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
                 } else {
-                    log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                    log.warn("Failed to save ClientTaskInfo to database - taskId: {}", taskInfo.getTaskId());
                 }
             } catch (Exception e) {
-                log.error("Error saving TaskInfo to database - taskId: {}, error: {}", taskInfo.getTaskId(), e.getMessage(), e);
+                log.error("Error saving ClientTaskInfo to database - taskId: {}, error: {}", taskInfo.getTaskId(), e.getMessage(), e);
             }
 
         }
@@ -243,18 +243,18 @@ public class FtpFileProcessService {
                         
                         // 解析并保存speed-10s.csv
                         try {
-                            List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedCsv(localFilePath);
-                            if (speedDataList != null && !speedDataList.isEmpty()) {
-                                boolean saved = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
+                            List<ClientTestData> clientTestDataList = ClientFileProcessor.extractAndParseSpeedCsv(localFilePath);
+                            if (clientTestDataList != null && !clientTestDataList.isEmpty()) {
+                                boolean saved = clientTestDataService.batchSaveClientTestData(clientTestDataList, taskInfo.getTaskId());
                                 if (saved) {
-                                    log.info("SpeedData saved to database successfully - taskId: {}, count: {}", 
-                                            taskInfo.getTaskId(), speedDataList.size());
+                                    log.info("ClientTestData saved to database successfully - taskId: {}, count: {}", 
+                                            taskInfo.getTaskId(), clientTestDataList.size());
                                 } else {
-                                    log.warn("Failed to save SpeedData to database - taskId: {}", taskInfo.getTaskId());
+                                    log.warn("Failed to save ClientTestData to database - taskId: {}", taskInfo.getTaskId());
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error parsing or saving SpeedData - taskId: {}, error: {}", 
+                            log.error("Error parsing or saving ClientTestData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                             // 不抛出异常，继续处理
                         }
@@ -496,21 +496,21 @@ public class FtpFileProcessService {
             int failedCount = 0;
             for (TaskInfoDTO taskInfo : taskInfoList) {
                 try {
-                    boolean saved = taskInfoService.saveTaskInfo(taskInfo);
+                    boolean saved = clientTaskInfoService.saveTaskInfo(taskInfo);
                     if (saved) {
                         savedCount++;
-                        log.debug("TaskInfo saved to database - taskId: {}", taskInfo.getTaskId());
+                        log.debug("ClientTaskInfo saved to database - taskId: {}", taskInfo.getTaskId());
                     } else {
                         failedCount++;
-                        log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                        log.warn("Failed to save ClientTaskInfo to database - taskId: {}", taskInfo.getTaskId());
                     }
                 } catch (Exception e) {
                     failedCount++;
-                    log.error("Error saving TaskInfo to database - taskId: {}, error: {}", 
+                    log.error("Error saving ClientTaskInfo to database - taskId: {}, error: {}", 
                             taskInfo.getTaskId(), e.getMessage(), e);
                 }
             }
-            log.info("Batch saved TaskInfo: {} succeeded, {} failed, total: {}", 
+            log.info("Batch saved ClientTaskInfo: {} succeeded, {} failed, total: {}", 
                     savedCount, failedCount, taskInfoList.size());
         }
 

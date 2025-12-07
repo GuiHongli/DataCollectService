@@ -7,7 +7,7 @@ import lombok.EqualsAndHashCode;
 import java.time.LocalDateTime;
 
 /**
- * 速率数据实体
+ * 端侧测试数据实体
  * 对应speed-10s.csv文件的数据结构
  * 
  * @author system
@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
-@TableName("speed_data")
-public class SpeedData {
+@TableName("client_test_data")
+public class ClientTestData {
 
     /**
      * 主键ID
@@ -25,7 +25,7 @@ public class SpeedData {
     private Long id;
 
     /**
-     * 任务ID（关联task_info表的task_id）
+     * 任务ID（关联client_task_info表的task_id）
      */
     @TableField("task_id")
     private String taskId;

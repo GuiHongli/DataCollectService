@@ -1,7 +1,7 @@
 package com.datacollect.util;
 
 import com.datacollect.dto.TaskInfoDTO;
-import com.datacollect.entity.SpeedData;
+import com.datacollect.entity.ClientTestData;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
@@ -146,10 +146,10 @@ public class ClientFileProcessor {
      * 解压端侧压缩包并解析speed-10s.csv
      *
      * @param zipFilePath 压缩包文件路径
-     * @return SpeedData列表，如果解析失败返回空列表
+     * @return ClientTestData列表，如果解析失败返回空列表
      * @throws IOException IO异常
      */
-    public static List<SpeedData> extractAndParseSpeedCsv(String zipFilePath) throws IOException {
+    public static List<ClientTestData> extractAndParseSpeedCsv(String zipFilePath) throws IOException {
         log.info("开始解压端侧文件并解析speed-10s.csv: {}", zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
@@ -159,7 +159,7 @@ public class ClientFileProcessor {
 
         // 创建临时解压目录
         Path extractDir = Files.createTempDirectory("client_file_extract_");
-        List<SpeedData> speedDataList = new ArrayList<>();
+        List<ClientTestData> clientTestDataList = new ArrayList<>();
 
         try {
             // 解压文件
@@ -174,8 +174,8 @@ public class ClientFileProcessor {
 
             if (speedCsvPath != null && Files.exists(speedCsvPath)) {
                 log.info("找到speed-10s.csv文件: {}", speedCsvPath);
-                speedDataList = parseSpeedCsv(speedCsvPath);
-                log.info("speed-10s.csv解析成功: 共{}条记录", speedDataList.size());
+                clientTestDataList = parseSpeedCsv(speedCsvPath);
+                log.info("speed-10s.csv解析成功: 共{}条记录", clientTestDataList.size());
             } else {
                 log.warn("未找到speed-10s.csv文件");
             }
@@ -190,7 +190,7 @@ public class ClientFileProcessor {
             }
         }
 
-        return speedDataList;
+        return clientTestDataList;
     }
 
     /**
@@ -211,11 +211,11 @@ public class ClientFileProcessor {
      * 解析speed-10s.csv文件
      *
      * @param csvPath CSV文件路径
-     * @return SpeedData列表
+     * @return ClientTestData列表
      * @throws IOException IO异常
      */
-    private static List<SpeedData> parseSpeedCsv(Path csvPath) throws IOException {
-        List<SpeedData> speedDataList = new ArrayList<>();
+    private static List<ClientTestData> parseSpeedCsv(Path csvPath) throws IOException {
+        List<ClientTestData> clientTestDataList = new ArrayList<>();
 
         try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
             String line;
@@ -241,23 +241,23 @@ public class ClientFileProcessor {
                 // 解析CSV行
                 String[] values = parseCsvLine(line);
                 if (values.length >= 3) {
-                    SpeedData speedData = new SpeedData();
-                    speedData.setDlSpeed(values[0].trim());
-                    speedData.setUlSpeed(values[1].trim());
-                    speedData.setTotal(values[2].trim());
-                    speedDataList.add(speedData);
+                    ClientTestData clientTestData = new ClientTestData();
+                    clientTestData.setDlSpeed(values[0].trim());
+                    clientTestData.setUlSpeed(values[1].trim());
+                    clientTestData.setTotal(values[2].trim());
+                    clientTestDataList.add(clientTestData);
                 } else {
                     log.warn("CSV行格式不正确，跳过: {}", line);
                 }
             }
 
-            log.info("解析speed-10s.csv完成，共{}条记录", speedDataList.size());
+            log.info("解析speed-10s.csv完成，共{}条记录", clientTestDataList.size());
         } catch (Exception e) {
             log.error("解析speed-10s.csv失败: {}", e.getMessage(), e);
             throw new IOException("解析speed-10s.csv失败: " + e.getMessage(), e);
         }
 
-        return speedDataList;
+        return clientTestDataList;
     }
 
     /**

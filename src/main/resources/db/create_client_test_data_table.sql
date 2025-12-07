@@ -1,7 +1,7 @@
--- 创建速率数据表
-CREATE TABLE IF NOT EXISTS `speed_data` (
+-- 创建端侧测试数据表
+CREATE TABLE IF NOT EXISTS `client_test_data` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID（关联task_info表的task_id）',
+  `task_id` varchar(255) DEFAULT NULL COMMENT '任务ID（关联client_task_info表的task_id）',
   `dl_speed` varchar(50) DEFAULT NULL COMMENT '下行速率（bps）',
   `ul_speed` varchar(50) DEFAULT NULL COMMENT '上行速率（bps）',
   `total` varchar(50) DEFAULT NULL COMMENT '总体速率（bps）',
@@ -12,5 +12,5 @@ CREATE TABLE IF NOT EXISTS `speed_data` (
   KEY `idx_task_id` (`task_id`),
   KEY `idx_deleted` (`deleted`),
   KEY `idx_create_time` (`create_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='速率数据表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='端侧测试数据表';
 
