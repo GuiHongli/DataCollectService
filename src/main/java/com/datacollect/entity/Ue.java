@@ -35,6 +35,9 @@ public class Ue {
     @TableField("vendor")
     private String vendor;
 
+    @TableField("model")
+    private String model;
+
     @TableField("port")
     private String port;
 

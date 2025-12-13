@@ -14,3 +14,6 @@ import org.apache.ibatis.annotations.Mapper;
 public interface SpeedDataMapper extends BaseMapper<SpeedData> {
 }
 
+
+
+

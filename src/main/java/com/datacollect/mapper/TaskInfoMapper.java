@@ -14,3 +14,6 @@ import org.apache.ibatis.annotations.Mapper;
 public interface TaskInfoMapper extends BaseMapper<TaskInfo> {
 }
 
+
+
+

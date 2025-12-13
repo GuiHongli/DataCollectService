@@ -23,3 +23,6 @@ public interface VmosDataService extends IService<VmosData> {
     boolean batchSaveVmosData(List<VmosData> vmosDataList, String taskId);
 }
 
+
+
+

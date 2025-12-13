@@ -23,3 +23,6 @@ public interface SpeedDataService extends IService<SpeedData> {
     boolean batchSaveSpeedData(List<SpeedData> speedDataList, String taskId);
 }
 
+
+
+
