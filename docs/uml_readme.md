@@ -95,3 +95,4 @@ client_task_info (1) ----< (N) vmos_data
 3. **数据持久化**: Entity → Mapper → Database
 4. **批量处理**: List<Entity> → Service → Database
 
+

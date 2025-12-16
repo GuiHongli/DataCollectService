@@ -6,3 +6,4 @@ ADD COLUMN `model` varchar(100) DEFAULT NULL COMMENT 'UE型号' AFTER `vendor`;
 ALTER TABLE `ue` 
 ADD INDEX `idx_model` (`model`);
 
+

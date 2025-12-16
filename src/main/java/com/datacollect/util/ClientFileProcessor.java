@@ -1,6 +1,7 @@
 package com.datacollect.util;
 
 import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.RttData;
 import com.datacollect.entity.SpeedData;
 import com.datacollect.entity.VmosData;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -497,6 +498,125 @@ public class ClientFileProcessor {
         } else {
             return String.valueOf(numericValue);
         }
+    }
+
+    /**
+     * 解压端侧压缩包并解析rtt-10s.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return RttData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<RttData> extractAndParseRttCsv(String zipFilePath) throws IOException {
+        log.info("开始解压端侧文件并解析rtt-10s.csv: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<RttData> rttDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析rtt-10s.csv
+            Path rttCsvPath = extractDir.resolve("rtt-10s.csv");
+            if (!Files.exists(rttCsvPath)) {
+                // 尝试在子目录中查找
+                rttCsvPath = findRttCsvFile(extractDir);
+            }
+
+            if (rttCsvPath != null && Files.exists(rttCsvPath)) {
+                log.info("找到rtt-10s.csv文件: {}", rttCsvPath);
+                rttDataList = parseRttCsv(rttCsvPath);
+                log.info("rtt-10s.csv解析成功: 共{}条记录", rttDataList.size());
+            } else {
+                log.warn("未找到rtt-10s.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                log.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                log.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return rttDataList;
+    }
+
+    /**
+     * 递归查找rtt-10s.csv文件
+     *
+     * @param directory 搜索目录
+     * @return rtt-10s.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findRttCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("rtt-10s.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析rtt-10s.csv文件
+     *
+     * @param csvPath CSV文件路径
+     * @return RttData列表
+     * @throws IOException IO异常
+     */
+    private static List<RttData> parseRttCsv(Path csvPath) throws IOException {
+        List<RttData> rttDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("index") || 
+                        line.toLowerCase().contains("dl_delay") || 
+                        line.toLowerCase().contains("ul_delay")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 3) {
+                    RttData rttData = new RttData();
+                    rttData.setIndexTime(values[0].trim());
+                    rttData.setDlDelay(values[1].trim());
+                    rttData.setUlDelay(values[2].trim());
+                    rttDataList.add(rttData);
+                } else {
+                    log.warn("CSV行格式不正确，跳过: {}", line);
+                }
+            }
+
+            log.info("解析rtt-10s.csv完成，共{}条记录", rttDataList.size());
+        } catch (Exception e) {
+            log.error("解析rtt-10s.csv失败: {}", e.getMessage(), e);
+            throw new IOException("解析rtt-10s.csv失败: " + e.getMessage(), e);
+        }
+
+        return rttDataList;
     }
 
     /**
