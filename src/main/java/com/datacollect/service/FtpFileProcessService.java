@@ -1,6 +1,7 @@
 package com.datacollect.service;
 
 import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.LostData;
 import com.datacollect.entity.RttData;
 import com.datacollect.entity.SpeedData;
 import com.datacollect.entity.VmosData;
@@ -49,6 +50,9 @@ public class FtpFileProcessService {
 
     @Autowired
     private RttDataService rttDataService;
+
+    @Autowired
+    private LostDataService lostDataService;
 
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
@@ -299,6 +303,24 @@ public class FtpFileProcessService {
                             }
                         } catch (Exception e) {
                             log.error("Error parsing or saving RttData - taskId: {}, error: {}", 
+                                    taskInfo.getTaskId(), e.getMessage(), e);
+                            // 不抛出异常，继续处理
+                        }
+
+                        // 解析并保存lost-10s.csv
+                        try {
+                            List<LostData> lostDataList = ClientFileProcessor.extractAndParseLostCsv(localFilePath);
+                            if (lostDataList != null && !lostDataList.isEmpty()) {
+                                boolean saved = lostDataService.batchSaveLostData(lostDataList, taskInfo.getTaskId());
+                                if (saved) {
+                                    log.info("LostData saved to database successfully - taskId: {}, count: {}", 
+                                            taskInfo.getTaskId(), lostDataList.size());
+                                } else {
+                                    log.warn("Failed to save LostData to database - taskId: {}", taskInfo.getTaskId());
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("Error parsing or saving LostData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                             // 不抛出异常，继续处理
                         }
