@@ -4,6 +4,7 @@ import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.entity.LostData;
 import com.datacollect.entity.RttData;
 import com.datacollect.entity.SpeedData;
+import com.datacollect.entity.VideoData;
 import com.datacollect.entity.VmosData;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -739,6 +740,123 @@ public class ClientFileProcessor {
         }
 
         return lostDataList;
+    }
+
+    /**
+     * 解压端侧压缩包并解析video-10s.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return VideoData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<VideoData> extractAndParseVideoCsv(String zipFilePath) throws IOException {
+        log.info("开始解压端侧文件并解析video-10s.csv: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<VideoData> videoDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析video-10s.csv
+            Path videoCsvPath = extractDir.resolve("video-10s.csv");
+            if (!Files.exists(videoCsvPath)) {
+                // 尝试在子目录中查找
+                videoCsvPath = findVideoCsvFile(extractDir);
+            }
+
+            if (videoCsvPath != null && Files.exists(videoCsvPath)) {
+                log.info("找到video-10s.csv文件: {}", videoCsvPath);
+                videoDataList = parseVideoCsv(videoCsvPath);
+                log.info("video-10s.csv解析成功: 共{}条记录", videoDataList.size());
+            } else {
+                log.warn("未找到video-10s.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                log.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                log.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return videoDataList;
+    }
+
+    /**
+     * 递归查找video-10s.csv文件
+     *
+     * @param directory 搜索目录
+     * @return video-10s.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findVideoCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("video-10s.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析video-10s.csv文件
+     *
+     * @param csvPath CSV文件路径
+     * @return VideoData列表
+     * @throws IOException IO异常
+     */
+    private static List<VideoData> parseVideoCsv(Path csvPath) throws IOException {
+        List<VideoData> videoDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("time") || 
+                        line.toLowerCase().contains("caton_time")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 2) {
+                    VideoData videoData = new VideoData();
+                    videoData.setTime(values[0].trim());
+                    videoData.setCatonTime(values[1].trim());
+                    videoDataList.add(videoData);
+                } else {
+                    log.warn("CSV行格式不正确，跳过: {}", line);
+                }
+            }
+
+            log.info("解析video-10s.csv完成，共{}条记录", videoDataList.size());
+        } catch (Exception e) {
+            log.error("解析video-10s.csv失败: {}", e.getMessage(), e);
+            throw new IOException("解析video-10s.csv失败: " + e.getMessage(), e);
+        }
+
+        return videoDataList;
     }
 
     /**

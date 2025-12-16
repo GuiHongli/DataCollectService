@@ -4,6 +4,7 @@ import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.entity.LostData;
 import com.datacollect.entity.RttData;
 import com.datacollect.entity.SpeedData;
+import com.datacollect.entity.VideoData;
 import com.datacollect.entity.VmosData;
 import com.datacollect.entity.TestSettingsClientFtp;
 import com.datacollect.entity.TestSettingsNetworkFtp;
@@ -53,6 +54,9 @@ public class FtpFileProcessService {
 
     @Autowired
     private LostDataService lostDataService;
+
+    @Autowired
+    private VideoDataService videoDataService;
 
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
@@ -321,6 +325,24 @@ public class FtpFileProcessService {
                             }
                         } catch (Exception e) {
                             log.error("Error parsing or saving LostData - taskId: {}, error: {}", 
+                                    taskInfo.getTaskId(), e.getMessage(), e);
+                            // 不抛出异常，继续处理
+                        }
+
+                        // 解析并保存video-10s.csv
+                        try {
+                            List<VideoData> videoDataList = ClientFileProcessor.extractAndParseVideoCsv(localFilePath);
+                            if (videoDataList != null && !videoDataList.isEmpty()) {
+                                boolean saved = videoDataService.batchSaveVideoData(videoDataList, taskInfo.getTaskId());
+                                if (saved) {
+                                    log.info("VideoData saved to database successfully - taskId: {}, count: {}", 
+                                            taskInfo.getTaskId(), videoDataList.size());
+                                } else {
+                                    log.warn("Failed to save VideoData to database - taskId: {}", taskInfo.getTaskId());
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("Error parsing or saving VideoData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                             // 不抛出异常，继续处理
                         }
