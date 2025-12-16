@@ -2,6 +2,7 @@ package com.datacollect.service;
 
 import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.entity.LostData;
+import com.datacollect.entity.NetworkData;
 import com.datacollect.entity.RttData;
 import com.datacollect.entity.SpeedData;
 import com.datacollect.entity.VideoData;
@@ -58,6 +59,9 @@ public class FtpFileProcessService {
     @Autowired
     private VideoDataService videoDataService;
 
+    @Autowired
+    private NetworkDataService networkDataService;
+
     /**
      * 从端侧FTP服务器下载文件并上传到gohttpserver
      * 如果是压缩包，会解压并解析taskinfo.json
@@ -85,7 +89,8 @@ public class FtpFileProcessService {
                 ftpConfig.getDirectory(),
                 fileName,
                 ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1,
-                isCompressedFile(fileName) ? taskInfoHolder : null
+                isCompressedFile(fileName) ? taskInfoHolder : null,
+                false  // 端侧FTP
         );
 
         // 如果解析到了taskinfo，保存到数据库
@@ -158,7 +163,9 @@ public class FtpFileProcessService {
                 ftpConfig.getPassword(),
                 ftpConfig.getDirectory(),
                 fileName,
-                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1
+                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1,
+                null,
+                true  // 网络侧FTP
         );
     }
 
@@ -176,7 +183,7 @@ public class FtpFileProcessService {
      */
     private String processFtpFile(String serverAddress, String account, String password,
                                  String directory, String fileName, boolean checkMd5) throws IOException {
-        return processFtpFile(serverAddress, account, password, directory, fileName, checkMd5, null);
+        return processFtpFile(serverAddress, account, password, directory, fileName, checkMd5, null, false);
     }
 
     /**
@@ -189,12 +196,13 @@ public class FtpFileProcessService {
      * @param fileName 文件名
      * @param checkMd5 是否校验MD5
      * @param taskInfoHolder 用于返回解析的taskinfo信息（仅端侧文件使用）
+     * @param isNetworkFtp 是否为网络侧FTP
      * @return 上传后的文件URL
      * @throws IOException IO异常
      */
     private String processFtpFile(String serverAddress, String account, String password,
                                  String directory, String fileName, boolean checkMd5, 
-                                 List<TaskInfoDTO> taskInfoHolder) throws IOException {
+                                 List<TaskInfoDTO> taskInfoHolder, boolean isNetworkFtp) throws IOException {
         // 创建临时目录
         Path tempDir = Files.createTempDirectory("ftp_download_");
         String localFilePath = tempDir.resolve(fileName).toString();
@@ -248,7 +256,27 @@ public class FtpFileProcessService {
                 log.info("MD5 verification passed");
             }
 
-            // 3. 如果是端侧压缩包，解析taskinfo.json和speed-10s.csv
+            // 3. 如果是网络侧压缩包，解析CSV文件
+            if (isNetworkFtp && isCompressedFile(fileName)) {
+                try {
+                    List<NetworkData> networkDataList = ClientFileProcessor.extractAndParseNetworkCsv(localFilePath);
+                    if (networkDataList != null && !networkDataList.isEmpty()) {
+                        boolean saved = networkDataService.batchSaveNetworkData(networkDataList, fileName);
+                        if (saved) {
+                            log.info("NetworkData saved to database successfully - fileName: {}, count: {}", 
+                                    fileName, networkDataList.size());
+                        } else {
+                            log.warn("Failed to save NetworkData to database - fileName: {}", fileName);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Error parsing or saving NetworkData - fileName: {}, error: {}", 
+                            fileName, e.getMessage(), e);
+                    // 不抛出异常，继续处理文件上传
+                }
+            }
+
+            // 4. 如果是端侧压缩包，解析taskinfo.json和speed-10s.csv
             if (taskInfoHolder != null && isCompressedFile(fileName)) {
                 try {
                     TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(localFilePath);
@@ -554,7 +582,8 @@ public class FtpFileProcessService {
                             dateDirectory,
                             fileName,
                             ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1,
-                            fileTaskInfoHolder
+                            fileTaskInfoHolder,
+                            false  // 端侧FTP
                     );
                     fileUrls.add(fileUrl);
                     // 收集taskinfo信息
@@ -632,7 +661,8 @@ public class FtpFileProcessService {
                 ftpConfig.getAccount(),
                 ftpConfig.getPassword(),
                 dateDirectory,
-                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1
+                ftpConfig.getCheckMd5() != null && ftpConfig.getCheckMd5() == 1,
+                true  // 网络侧FTP
         );
     }
 
@@ -675,6 +705,23 @@ public class FtpFileProcessService {
      */
     private List<String> processFtpFilesByDate(String serverAddress, String account, String password,
                                                String dateDirectory, boolean checkMd5) throws IOException {
+        return processFtpFilesByDate(serverAddress, account, password, dateDirectory, checkMd5, false);
+    }
+
+    /**
+     * 处理指定日期目录下的所有FTP文件
+     *
+     * @param serverAddress FTP服务器地址
+     * @param account 账户
+     * @param password 密码
+     * @param dateDirectory 日期目录路径
+     * @param checkMd5 是否校验MD5
+     * @param isNetworkFtp 是否为网络侧FTP
+     * @return 上传后的文件URL列表
+     * @throws IOException IO异常
+     */
+    private List<String> processFtpFilesByDate(String serverAddress, String account, String password,
+                                               String dateDirectory, boolean checkMd5, boolean isNetworkFtp) throws IOException {
         log.info("Processing FTP files from date directory: {}", dateDirectory);
 
         // 1. 列出日期目录下的所有文件
@@ -693,7 +740,7 @@ public class FtpFileProcessService {
 
         for (String fileName : fileNames) {
             try {
-                String fileUrl = processFtpFile(serverAddress, account, password, dateDirectory, fileName, checkMd5);
+                String fileUrl = processFtpFile(serverAddress, account, password, dateDirectory, fileName, checkMd5, null, isNetworkFtp);
                 fileUrls.add(fileUrl);
                 log.info("File processed successfully: {} -> {}", fileName, fileUrl);
             } catch (Exception e) {

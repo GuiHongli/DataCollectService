@@ -2,6 +2,7 @@ package com.datacollect.util;
 
 import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.entity.LostData;
+import com.datacollect.entity.NetworkData;
 import com.datacollect.entity.RttData;
 import com.datacollect.entity.SpeedData;
 import com.datacollect.entity.VideoData;
@@ -857,6 +858,355 @@ public class ClientFileProcessor {
         }
 
         return videoDataList;
+    }
+
+    /**
+     * 解压网络侧压缩包并解析CSV文件
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return NetworkData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<NetworkData> extractAndParseNetworkCsv(String zipFilePath) throws IOException {
+        log.info("开始解压网络侧文件并解析CSV: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("network_file_extract_");
+        List<NetworkData> networkDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找所有CSV文件
+            List<Path> csvFiles = findCsvFiles(extractDir);
+            
+            if (csvFiles.isEmpty()) {
+                log.warn("未找到CSV文件");
+                return networkDataList;
+            }
+
+            // 解析所有CSV文件
+            for (Path csvFile : csvFiles) {
+                log.info("找到CSV文件: {}", csvFile);
+                try {
+                    List<NetworkData> dataList = parseNetworkCsv(csvFile);
+                    networkDataList.addAll(dataList);
+                    log.info("CSV文件解析成功: {}, 共{}条记录", csvFile.getFileName(), dataList.size());
+                } catch (Exception e) {
+                    log.error("解析CSV文件失败: {}, error: {}", csvFile, e.getMessage(), e);
+                    // 继续解析其他文件
+                }
+            }
+
+            log.info("网络侧CSV解析完成，共{}条记录", networkDataList.size());
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                log.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                log.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return networkDataList;
+    }
+
+    /**
+     * 递归查找所有CSV文件
+     *
+     * @param directory 搜索目录
+     * @return CSV文件路径列表
+     * @throws IOException IO异常
+     */
+    private static List<Path> findCsvFiles(Path directory) throws IOException {
+        List<Path> csvFiles = new ArrayList<>();
+        Files.walk(directory)
+                .filter(path -> {
+                    String fileName = path.getFileName() != null ? path.getFileName().toString().toLowerCase() : "";
+                    return Files.isRegularFile(path) && fileName.endsWith(".csv");
+                })
+                .forEach(csvFiles::add);
+        return csvFiles;
+    }
+
+    /**
+     * 解析网络侧CSV文件
+     *
+     * @param csvPath CSV文件路径
+     * @return NetworkData列表
+     * @throws IOException IO异常
+     */
+    private static List<NetworkData> parseNetworkCsv(Path csvPath) throws IOException {
+        List<NetworkData> networkDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+            int[] columnIndexMap = null; // 存储列索引映射
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 解析表头，建立列索引映射
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    columnIndexMap = parseHeader(line);
+                    if (columnIndexMap == null) {
+                        log.warn("CSV表头格式不正确，跳过文件: {}", csvPath);
+                        return networkDataList;
+                    }
+                    continue;
+                }
+
+                // 解析数据行
+                String[] values = parseCsvLine(line);
+                if (values.length > 0) {
+                    NetworkData networkData = createNetworkDataFromRow(values, columnIndexMap);
+                    if (networkData != null) {
+                        networkDataList.add(networkData);
+                    }
+                }
+            }
+
+            log.info("解析网络侧CSV完成，共{}条记录", networkDataList.size());
+        } catch (Exception e) {
+            log.error("解析网络侧CSV失败: {}", e.getMessage(), e);
+            throw new IOException("解析网络侧CSV失败: " + e.getMessage(), e);
+        }
+
+        return networkDataList;
+    }
+
+    /**
+     * 解析CSV表头，建立列索引映射
+     *
+     * @param headerLine 表头行
+     * @return 列索引映射数组，索引对应字段顺序
+     */
+    private static int[] parseHeader(String headerLine) {
+        String[] headers = parseCsvLine(headerLine);
+        int[] columnIndexMap = new int[58]; // 58个字段
+        java.util.Arrays.fill(columnIndexMap, -1);
+
+        // 定义字段名称映射
+        String[] fieldNames = {
+            "serialNo", "TimeStamp", "startTime", "Gpsi", "Dnn", "S_NSSAI", "RatType", "Qci",
+            "ExpOptFlag", "ExpOptStartTime", "AppId", "SubAppId", "AppStatus", "AppQuality",
+            "Tai", "CellId", "DelayAn", "DelayDn", "UplinkBandwidth", "DownlinkBandwidth",
+            "UplinkPkg", "DownlinkPkg", "LostUplinkPkg", "LostDownLinkPkg", "SubAppStartTime",
+            "InfoIndicate", "Upfld", "Pei", "SubAppEffDuration", "MaxDelayAn", "MaxDelayDn",
+            "AvgBandwidthUI", "AvgBandwidthDI", "MaxBandwidthUI", "MaxBandwidthDI", "VolumeUI",
+            "VolumeDI", "ExpOptEndTime", "SubAppEdrStartTime", "UserServiceLoadUIEcn",
+            "UserServiceLoadDIEcn", "AssuranceFailedReason", "GnbQncNotifType", "AvgQoe",
+            "MaxResolution", "MostResolution", "MaxBitRateUI", "AvgBitRateUI", "MaxBitRateDI",
+            "AvgBitRateDI", "StallingDuration", "StallingNumber", "ServiceDelay", "ServiceInitialDuration"
+        };
+
+        // 建立列索引映射
+        for (int i = 0; i < headers.length; i++) {
+            String header = headers[i].trim();
+            for (int j = 0; j < fieldNames.length; j++) {
+                if (header.equalsIgnoreCase(fieldNames[j]) || 
+                    header.replaceAll("[_\\s-]", "").equalsIgnoreCase(fieldNames[j].replaceAll("[_\\s-]", ""))) {
+                    columnIndexMap[j] = i;
+                    break;
+                }
+            }
+        }
+
+        return columnIndexMap;
+    }
+
+    /**
+     * 从CSV行数据创建NetworkData对象
+     *
+     * @param values CSV行数据
+     * @param columnIndexMap 列索引映射
+     * @return NetworkData对象
+     */
+    private static NetworkData createNetworkDataFromRow(String[] values, int[] columnIndexMap) {
+        NetworkData networkData = new NetworkData();
+        
+        try {
+            if (columnIndexMap[0] >= 0 && columnIndexMap[0] < values.length) {
+                networkData.setSerialNo(values[columnIndexMap[0]].trim());
+            }
+            if (columnIndexMap[1] >= 0 && columnIndexMap[1] < values.length) {
+                networkData.setTimeStamp(values[columnIndexMap[1]].trim());
+            }
+            if (columnIndexMap[2] >= 0 && columnIndexMap[2] < values.length) {
+                networkData.setStartTime(values[columnIndexMap[2]].trim());
+            }
+            if (columnIndexMap[3] >= 0 && columnIndexMap[3] < values.length) {
+                networkData.setGpsi(values[columnIndexMap[3]].trim());
+            }
+            if (columnIndexMap[4] >= 0 && columnIndexMap[4] < values.length) {
+                networkData.setDnn(values[columnIndexMap[4]].trim());
+            }
+            if (columnIndexMap[5] >= 0 && columnIndexMap[5] < values.length) {
+                networkData.setSNssai(values[columnIndexMap[5]].trim());
+            }
+            if (columnIndexMap[6] >= 0 && columnIndexMap[6] < values.length) {
+                networkData.setRatType(values[columnIndexMap[6]].trim());
+            }
+            if (columnIndexMap[7] >= 0 && columnIndexMap[7] < values.length) {
+                networkData.setQci(values[columnIndexMap[7]].trim());
+            }
+            if (columnIndexMap[8] >= 0 && columnIndexMap[8] < values.length) {
+                networkData.setExpOptFlag(values[columnIndexMap[8]].trim());
+            }
+            if (columnIndexMap[9] >= 0 && columnIndexMap[9] < values.length) {
+                networkData.setExpOptStartTime(values[columnIndexMap[9]].trim());
+            }
+            if (columnIndexMap[10] >= 0 && columnIndexMap[10] < values.length) {
+                networkData.setAppId(values[columnIndexMap[10]].trim());
+            }
+            if (columnIndexMap[11] >= 0 && columnIndexMap[11] < values.length) {
+                networkData.setSubAppId(values[columnIndexMap[11]].trim());
+            }
+            if (columnIndexMap[12] >= 0 && columnIndexMap[12] < values.length) {
+                networkData.setAppStatus(values[columnIndexMap[12]].trim());
+            }
+            if (columnIndexMap[13] >= 0 && columnIndexMap[13] < values.length) {
+                networkData.setAppQuality(values[columnIndexMap[13]].trim());
+            }
+            if (columnIndexMap[14] >= 0 && columnIndexMap[14] < values.length) {
+                networkData.setTai(values[columnIndexMap[14]].trim());
+            }
+            if (columnIndexMap[15] >= 0 && columnIndexMap[15] < values.length) {
+                networkData.setCellId(values[columnIndexMap[15]].trim());
+            }
+            if (columnIndexMap[16] >= 0 && columnIndexMap[16] < values.length) {
+                networkData.setDelayAn(values[columnIndexMap[16]].trim());
+            }
+            if (columnIndexMap[17] >= 0 && columnIndexMap[17] < values.length) {
+                networkData.setDelayDn(values[columnIndexMap[17]].trim());
+            }
+            if (columnIndexMap[18] >= 0 && columnIndexMap[18] < values.length) {
+                networkData.setUplinkBandwidth(values[columnIndexMap[18]].trim());
+            }
+            if (columnIndexMap[19] >= 0 && columnIndexMap[19] < values.length) {
+                networkData.setDownlinkBandwidth(values[columnIndexMap[19]].trim());
+            }
+            if (columnIndexMap[20] >= 0 && columnIndexMap[20] < values.length) {
+                networkData.setUplinkPkg(values[columnIndexMap[20]].trim());
+            }
+            if (columnIndexMap[21] >= 0 && columnIndexMap[21] < values.length) {
+                networkData.setDownlinkPkg(values[columnIndexMap[21]].trim());
+            }
+            if (columnIndexMap[22] >= 0 && columnIndexMap[22] < values.length) {
+                networkData.setLostUplinkPkg(values[columnIndexMap[22]].trim());
+            }
+            if (columnIndexMap[23] >= 0 && columnIndexMap[23] < values.length) {
+                networkData.setLostDownlinkPkg(values[columnIndexMap[23]].trim());
+            }
+            if (columnIndexMap[24] >= 0 && columnIndexMap[24] < values.length) {
+                networkData.setSubAppStartTime(values[columnIndexMap[24]].trim());
+            }
+            if (columnIndexMap[25] >= 0 && columnIndexMap[25] < values.length) {
+                networkData.setInfoIndicate(values[columnIndexMap[25]].trim());
+            }
+            if (columnIndexMap[26] >= 0 && columnIndexMap[26] < values.length) {
+                networkData.setUpfld(values[columnIndexMap[26]].trim());
+            }
+            if (columnIndexMap[27] >= 0 && columnIndexMap[27] < values.length) {
+                networkData.setPei(values[columnIndexMap[27]].trim());
+            }
+            if (columnIndexMap[28] >= 0 && columnIndexMap[28] < values.length) {
+                networkData.setSubAppEffDuration(values[columnIndexMap[28]].trim());
+            }
+            if (columnIndexMap[29] >= 0 && columnIndexMap[29] < values.length) {
+                networkData.setMaxDelayAn(values[columnIndexMap[29]].trim());
+            }
+            if (columnIndexMap[30] >= 0 && columnIndexMap[30] < values.length) {
+                networkData.setMaxDelayDn(values[columnIndexMap[30]].trim());
+            }
+            if (columnIndexMap[31] >= 0 && columnIndexMap[31] < values.length) {
+                networkData.setAvgBandwidthUI(values[columnIndexMap[31]].trim());
+            }
+            if (columnIndexMap[32] >= 0 && columnIndexMap[32] < values.length) {
+                networkData.setAvgBandwidthDI(values[columnIndexMap[32]].trim());
+            }
+            if (columnIndexMap[33] >= 0 && columnIndexMap[33] < values.length) {
+                networkData.setMaxBandwidthUI(values[columnIndexMap[33]].trim());
+            }
+            if (columnIndexMap[34] >= 0 && columnIndexMap[34] < values.length) {
+                networkData.setMaxBandwidthDI(values[columnIndexMap[34]].trim());
+            }
+            if (columnIndexMap[35] >= 0 && columnIndexMap[35] < values.length) {
+                networkData.setVolumeUI(values[columnIndexMap[35]].trim());
+            }
+            if (columnIndexMap[36] >= 0 && columnIndexMap[36] < values.length) {
+                networkData.setVolumeDI(values[columnIndexMap[36]].trim());
+            }
+            if (columnIndexMap[37] >= 0 && columnIndexMap[37] < values.length) {
+                networkData.setExpOptEndTime(values[columnIndexMap[37]].trim());
+            }
+            if (columnIndexMap[38] >= 0 && columnIndexMap[38] < values.length) {
+                networkData.setSubAppEdrStartTime(values[columnIndexMap[38]].trim());
+            }
+            if (columnIndexMap[39] >= 0 && columnIndexMap[39] < values.length) {
+                networkData.setUserServiceLoadUIEcn(values[columnIndexMap[39]].trim());
+            }
+            if (columnIndexMap[40] >= 0 && columnIndexMap[40] < values.length) {
+                networkData.setUserServiceLoadDIEcn(values[columnIndexMap[40]].trim());
+            }
+            if (columnIndexMap[41] >= 0 && columnIndexMap[41] < values.length) {
+                networkData.setAssuranceFailedReason(values[columnIndexMap[41]].trim());
+            }
+            if (columnIndexMap[42] >= 0 && columnIndexMap[42] < values.length) {
+                networkData.setGnbQncNotifType(values[columnIndexMap[42]].trim());
+            }
+            if (columnIndexMap[43] >= 0 && columnIndexMap[43] < values.length) {
+                networkData.setAvgQoe(values[columnIndexMap[43]].trim());
+            }
+            if (columnIndexMap[44] >= 0 && columnIndexMap[44] < values.length) {
+                networkData.setMaxResolution(values[columnIndexMap[44]].trim());
+            }
+            if (columnIndexMap[45] >= 0 && columnIndexMap[45] < values.length) {
+                networkData.setMostResolution(values[columnIndexMap[45]].trim());
+            }
+            if (columnIndexMap[46] >= 0 && columnIndexMap[46] < values.length) {
+                networkData.setMaxBitRateUI(values[columnIndexMap[46]].trim());
+            }
+            if (columnIndexMap[47] >= 0 && columnIndexMap[47] < values.length) {
+                networkData.setAvgBitRateUI(values[columnIndexMap[47]].trim());
+            }
+            if (columnIndexMap[48] >= 0 && columnIndexMap[48] < values.length) {
+                networkData.setMaxBitRateDI(values[columnIndexMap[48]].trim());
+            }
+            if (columnIndexMap[49] >= 0 && columnIndexMap[49] < values.length) {
+                networkData.setAvgBitRateDI(values[columnIndexMap[49]].trim());
+            }
+            if (columnIndexMap[50] >= 0 && columnIndexMap[50] < values.length) {
+                networkData.setStallingDuration(values[columnIndexMap[50]].trim());
+            }
+            if (columnIndexMap[51] >= 0 && columnIndexMap[51] < values.length) {
+                networkData.setStallingNumber(values[columnIndexMap[51]].trim());
+            }
+            if (columnIndexMap[52] >= 0 && columnIndexMap[52] < values.length) {
+                networkData.setServiceDelay(values[columnIndexMap[52]].trim());
+            }
+            if (columnIndexMap[53] >= 0 && columnIndexMap[53] < values.length) {
+                networkData.setServiceInitialDuration(values[columnIndexMap[53]].trim());
+            }
+            
+            return networkData;
+        } catch (Exception e) {
+            log.warn("创建NetworkData对象失败: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
