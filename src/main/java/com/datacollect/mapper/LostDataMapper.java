@@ -14,3 +14,5 @@ import org.apache.ibatis.annotations.Mapper;
 public interface LostDataMapper extends BaseMapper<LostData> {
 }
 
+
+

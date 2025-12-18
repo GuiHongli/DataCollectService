@@ -23,3 +23,5 @@ public interface LostDataService extends IService<LostData> {
     boolean batchSaveLostData(List<LostData> lostDataList, String taskId);
 }
 
+
+

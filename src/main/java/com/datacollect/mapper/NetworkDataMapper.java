@@ -14,3 +14,5 @@ import org.apache.ibatis.annotations.Mapper;
 public interface NetworkDataMapper extends BaseMapper<NetworkData> {
 }
 
+
+

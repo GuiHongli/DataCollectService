@@ -15,3 +15,5 @@ CREATE TABLE IF NOT EXISTS `lost_data` (
   KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='丢包率数据表';
 
+
+

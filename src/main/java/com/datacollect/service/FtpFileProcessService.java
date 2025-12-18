@@ -22,7 +22,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * FTP文件处理服务
@@ -755,6 +757,206 @@ public class FtpFileProcessService {
 
         log.info("Processed {} files successfully, {} files failed", fileUrls.size(), failedFiles.size());
         return fileUrls;
+    }
+
+    // ========== 本地文件处理（用于测试验证） ==========
+
+    /**
+     * 处理本地端侧文件（用于测试验证，不依赖FTP服务器）
+     * 如果是压缩包，会解压并解析taskinfo.json、speed-10s.csv、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
+     *
+     * @param filePath 本地文件路径
+     * @return 处理结果信息
+     * @throws IOException IO异常
+     */
+    public Map<String, Object> processLocalClientFile(String filePath) throws IOException {
+        log.info("Processing local client file: {}", filePath);
+
+        Path localPath = Paths.get(filePath);
+        if (!Files.exists(localPath)) {
+            throw new IOException("文件不存在: " + filePath);
+        }
+
+        String fileName = localPath.getFileName().toString();
+        Map<String, Object> result = new HashMap<>();
+        result.put("fileName", fileName);
+        result.put("filePath", filePath);
+
+        // 如果是压缩包，解析文件内容
+        if (isCompressedFile(fileName)) {
+            List<TaskInfoDTO> taskInfoList = new ArrayList<>();
+
+            try {
+                // 解析taskinfo.json
+                TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(filePath);
+                if (taskInfo != null) {
+                    taskInfoList.add(taskInfo);
+                    log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
+                            taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
+
+                    // 保存taskinfo到数据库
+                    boolean saved = taskInfoService.saveTaskInfo(taskInfo);
+                    if (saved) {
+                        log.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
+                    } else {
+                        log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                    }
+
+                    // 解析并保存speed-10s.csv
+                    try {
+                        List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedCsv(filePath);
+                        if (speedDataList != null && !speedDataList.isEmpty()) {
+                            boolean savedSpeed = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
+                            if (savedSpeed) {
+                                log.info("SpeedData saved to database successfully - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), speedDataList.size());
+                                result.put("speedDataCount", speedDataList.size());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Error parsing or saving SpeedData - taskId: {}, error: {}",
+                                taskInfo.getTaskId(), e.getMessage(), e);
+                    }
+
+                    // 解析并保存vmos-10s.xlsx
+                    try {
+                        List<VmosData> vmosDataList = ClientFileProcessor.extractAndParseVmosExcel(filePath);
+                        if (vmosDataList != null && !vmosDataList.isEmpty()) {
+                            boolean savedVmos = vmosDataService.batchSaveVmosData(vmosDataList, taskInfo.getTaskId());
+                            if (savedVmos) {
+                                log.info("VmosData saved to database successfully - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), vmosDataList.size());
+                                result.put("vmosDataCount", vmosDataList.size());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Error parsing or saving VmosData - taskId: {}, error: {}",
+                                taskInfo.getTaskId(), e.getMessage(), e);
+                    }
+
+                    // 解析并保存rtt-10s.csv
+                    try {
+                        List<RttData> rttDataList = ClientFileProcessor.extractAndParseRttCsv(filePath);
+                        if (rttDataList != null && !rttDataList.isEmpty()) {
+                            boolean savedRtt = rttDataService.batchSaveRttData(rttDataList, taskInfo.getTaskId());
+                            if (savedRtt) {
+                                log.info("RttData saved to database successfully - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), rttDataList.size());
+                                result.put("rttDataCount", rttDataList.size());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Error parsing or saving RttData - taskId: {}, error: {}",
+                                taskInfo.getTaskId(), e.getMessage(), e);
+                    }
+
+                    // 解析并保存lost-10s.csv
+                    try {
+                        List<LostData> lostDataList = ClientFileProcessor.extractAndParseLostCsv(filePath);
+                        if (lostDataList != null && !lostDataList.isEmpty()) {
+                            boolean savedLost = lostDataService.batchSaveLostData(lostDataList, taskInfo.getTaskId());
+                            if (savedLost) {
+                                log.info("LostData saved to database successfully - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), lostDataList.size());
+                                result.put("lostDataCount", lostDataList.size());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Error parsing or saving LostData - taskId: {}, error: {}",
+                                taskInfo.getTaskId(), e.getMessage(), e);
+                    }
+
+                    // 解析并保存video-10s.csv
+                    try {
+                        List<VideoData> videoDataList = ClientFileProcessor.extractAndParseVideoCsv(filePath);
+                        if (videoDataList != null && !videoDataList.isEmpty()) {
+                            boolean savedVideo = videoDataService.batchSaveVideoData(videoDataList, taskInfo.getTaskId());
+                            if (savedVideo) {
+                                log.info("VideoData saved to database successfully - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), videoDataList.size());
+                                result.put("videoDataCount", videoDataList.size());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Error parsing or saving VideoData - taskId: {}, error: {}",
+                                taskInfo.getTaskId(), e.getMessage(), e);
+                    }
+
+                    result.put("taskInfo", taskInfo);
+                    result.put("taskId", taskInfo.getTaskId());
+                } else {
+                    log.warn("未解析到taskinfo.json");
+                }
+            } catch (Exception e) {
+                log.error("Error parsing taskinfo.json: {}", e.getMessage(), e);
+                result.put("error", "解析taskinfo.json失败: " + e.getMessage());
+            }
+
+            result.put("taskInfoList", taskInfoList);
+        } else {
+            log.info("文件不是压缩包，跳过解析");
+            result.put("message", "文件不是压缩包，跳过解析");
+        }
+
+        result.put("success", true);
+        return result;
+    }
+
+    /**
+     * 处理本地网络侧文件（用于测试验证，不依赖FTP服务器）
+     * 如果是压缩包，会解压并解析CSV文件
+     *
+     * @param filePath 本地文件路径
+     * @return 处理结果信息
+     * @throws IOException IO异常
+     */
+    public Map<String, Object> processLocalNetworkFile(String filePath) throws IOException {
+        log.info("Processing local network file: {}", filePath);
+
+        Path localPath = Paths.get(filePath);
+        if (!Files.exists(localPath)) {
+            throw new IOException("文件不存在: " + filePath);
+        }
+
+        String fileName = localPath.getFileName().toString();
+        Map<String, Object> result = new HashMap<>();
+        result.put("fileName", fileName);
+        result.put("filePath", filePath);
+
+        // 如果是压缩包，解析CSV文件
+        if (isCompressedFile(fileName)) {
+            try {
+                List<NetworkData> networkDataList = ClientFileProcessor.extractAndParseNetworkCsv(filePath);
+                if (networkDataList != null && !networkDataList.isEmpty()) {
+                    boolean saved = networkDataService.batchSaveNetworkData(networkDataList, fileName);
+                    if (saved) {
+                        log.info("NetworkData saved to database successfully - fileName: {}, count: {}",
+                                fileName, networkDataList.size());
+                        result.put("networkDataCount", networkDataList.size());
+                        result.put("success", true);
+                    } else {
+                        log.warn("Failed to save NetworkData to database - fileName: {}", fileName);
+                        result.put("success", false);
+                        result.put("error", "保存到数据库失败");
+                    }
+                } else {
+                    log.warn("未解析到网络侧数据");
+                    result.put("success", false);
+                    result.put("error", "未解析到网络侧数据");
+                }
+            } catch (Exception e) {
+                log.error("Error parsing or saving NetworkData - fileName: {}, error: {}",
+                        fileName, e.getMessage(), e);
+                result.put("success", false);
+                result.put("error", "解析或保存失败: " + e.getMessage());
+            }
+        } else {
+            log.info("文件不是压缩包，跳过解析");
+            result.put("success", false);
+            result.put("error", "文件不是压缩包，跳过解析");
+        }
+
+        return result;
     }
 }
 

@@ -69,3 +69,5 @@ CREATE TABLE IF NOT EXISTS `network_data` (
   KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网络侧数据表';
 
+
+

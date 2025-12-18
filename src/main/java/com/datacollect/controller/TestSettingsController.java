@@ -249,6 +249,44 @@ public class TestSettingsController {
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
+
+    // ========== 本地文件处理（用于测试验证） ==========
+
+    /**
+     * 处理本地端侧文件（用于测试验证，不依赖FTP服务器）
+     * 如果是压缩包，会自动解压并解析taskinfo.json、speed-10s.csv、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
+     *
+     * @param filePath 本地文件路径（绝对路径或相对路径）
+     * @return 处理结果信息
+     */
+    @PostMapping("/local/client-file/process")
+    public Result<Map<String, Object>> processLocalClientFile(@RequestParam @NotNull String filePath) {
+        try {
+            Map<String, Object> result = ftpFileProcessService.processLocalClientFile(filePath);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("Failed to process local client file: {}", e.getMessage(), e);
+            return Result.error("处理文件失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理本地网络侧文件（用于测试验证，不依赖FTP服务器）
+     * 如果是压缩包，会自动解压并解析CSV文件
+     *
+     * @param filePath 本地文件路径（绝对路径或相对路径）
+     * @return 处理结果信息
+     */
+    @PostMapping("/local/network-file/process")
+    public Result<Map<String, Object>> processLocalNetworkFile(@RequestParam @NotNull String filePath) {
+        try {
+            Map<String, Object> result = ftpFileProcessService.processLocalNetworkFile(filePath);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("Failed to process local network file: {}", e.getMessage(), e);
+            return Result.error("处理文件失败: " + e.getMessage());
+        }
+    }
 }
 
 

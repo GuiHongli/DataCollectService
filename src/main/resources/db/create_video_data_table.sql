@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS `video_data` (
   KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视频卡顿数据表';
 
+
+

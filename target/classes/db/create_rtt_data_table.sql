@@ -14,3 +14,5 @@ CREATE TABLE IF NOT EXISTS `rtt_data` (
   KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RTT数据表';
 
+
+

@@ -23,3 +23,5 @@ public interface VideoDataService extends IService<VideoData> {
     boolean batchSaveVideoData(List<VideoData> videoDataList, String taskId);
 }
 
+
+
