@@ -1,5 +1,6 @@
 package com.datacollect.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.VideoData;
 import com.datacollect.mapper.VideoDataMapper;
@@ -33,6 +34,17 @@ public class VideoDataServiceImpl extends ServiceImpl<VideoDataMapper, VideoData
         }
 
         try {
+            // 检查该taskId是否已有数据
+            QueryWrapper<VideoData> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskId);
+            queryWrapper.last("LIMIT 1");
+            VideoData existingData = getOne(queryWrapper);
+            
+            if (existingData != null) {
+                log.info("VideoData already exists for taskId, skip saving - taskId: {}", taskId);
+                return true;
+            }
+
             // 设置任务ID和创建时间
             LocalDateTime now = LocalDateTime.now();
             for (VideoData videoData : videoDataList) {

@@ -34,6 +34,17 @@ public class LostDataServiceImpl extends ServiceImpl<LostDataMapper, LostData> i
         }
 
         try {
+            // 检查该taskId是否已有数据
+            QueryWrapper<LostData> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskId);
+            queryWrapper.last("LIMIT 1");
+            LostData existingData = getOne(queryWrapper);
+            
+            if (existingData != null) {
+                log.info("LostData already exists for taskId, skip saving - taskId: {}", taskId);
+                return true;
+            }
+
             // 设置任务ID和创建时间
             LocalDateTime now = LocalDateTime.now();
             for (LostData lostData : lostDataList) {
