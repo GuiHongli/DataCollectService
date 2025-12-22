@@ -1,5 +1,6 @@
 package com.datacollect.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.LostData;
 import com.datacollect.mapper.LostDataMapper;

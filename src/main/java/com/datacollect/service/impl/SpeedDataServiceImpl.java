@@ -1,5 +1,6 @@
 package com.datacollect.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.SpeedData;
 import com.datacollect.mapper.SpeedDataMapper;
@@ -33,6 +34,17 @@ public class SpeedDataServiceImpl extends ServiceImpl<SpeedDataMapper, SpeedData
         }
 
         try {
+            // 检查该taskId是否已有数据
+            QueryWrapper<SpeedData> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskId);
+            queryWrapper.last("LIMIT 1");
+            SpeedData existingData = getOne(queryWrapper);
+            
+            if (existingData != null) {
+                log.info("SpeedData already exists for taskId, skip saving - taskId: {}", taskId);
+                return true;
+            }
+
             // 设置任务ID和创建时间
             LocalDateTime now = LocalDateTime.now();
             for (SpeedData speedData : speedDataList) {

@@ -1,5 +1,6 @@
 package com.datacollect.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.dto.TaskInfoDTO;
 import com.datacollect.entity.TaskInfo;
@@ -32,6 +33,16 @@ public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, TaskInfo> i
         }
 
         try {
+            // 检查taskId是否已存在
+            QueryWrapper<TaskInfo> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskInfoDTO.getTaskId());
+            TaskInfo existingTaskInfo = getOne(queryWrapper);
+            
+            if (existingTaskInfo != null) {
+                log.info("TaskInfo already exists, skip saving - taskId: {}", taskInfoDTO.getTaskId());
+                return true;
+            }
+
             TaskInfo taskInfo = convertToEntity(taskInfoDTO);
             LocalDateTime now = LocalDateTime.now();
             taskInfo.setCreateTime(now);
