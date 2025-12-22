@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 /**
  * 速率数据实体
- * 对应speed-10s.csv文件的数据结构
+ * 对应speed-10s.xlsx文件的数据结构
  * 
  * @author system
  * @since 2024-01-01

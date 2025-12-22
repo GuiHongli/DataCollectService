@@ -278,7 +278,7 @@ public class FtpFileProcessService {
                 }
             }
 
-            // 4. 如果是端侧压缩包，解析taskinfo.json和speed-10s.csv
+            // 4. 如果是端侧压缩包，解析taskinfo.json和speed-10s.xlsx
             if (taskInfoHolder != null && isCompressedFile(fileName)) {
                 try {
                     TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(localFilePath);
@@ -287,9 +287,9 @@ public class FtpFileProcessService {
                         log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
                                 taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
                         
-                        // 解析并保存speed-10s.csv
+                        // 解析并保存speed-10s.xlsx
                         try {
-                            List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedCsv(localFilePath);
+                            List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedExcel(localFilePath);
                             if (speedDataList != null && !speedDataList.isEmpty()) {
                                 boolean saved = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
                                 if (saved) {
@@ -763,7 +763,7 @@ public class FtpFileProcessService {
 
     /**
      * 处理本地端侧文件（用于测试验证，不依赖FTP服务器）
-     * 如果是压缩包，会解压并解析taskinfo.json、speed-10s.csv、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
+     * 如果是压缩包，会解压并解析taskinfo.json、speed-10s.xlsx、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
      *
      * @param filePath 本地文件路径
      * @return 处理结果信息
@@ -802,9 +802,9 @@ public class FtpFileProcessService {
                         log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
                     }
 
-                    // 解析并保存speed-10s.csv
+                    // 解析并保存speed-10s.xlsx
                     try {
-                        List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedCsv(filePath);
+                        List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedExcel(filePath);
                         if (speedDataList != null && !speedDataList.isEmpty()) {
                             boolean savedSpeed = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
                             if (savedSpeed) {

@@ -23,7 +23,7 @@
 1. 从FTP服务器下载压缩包
 2. MD5校验（可选）
 3. 解析taskinfo.json并保存
-4. 解析speed-10s.csv并保存
+4. 解析speed-10s.xlsx并保存
 5. 解析vmos-10s.xlsx并保存
 6. 上传文件到gohttpserver
 

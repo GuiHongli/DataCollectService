@@ -20,3 +20,4 @@ public interface SpeedDataMapper extends BaseMapper<SpeedData> {
 
 
 
+

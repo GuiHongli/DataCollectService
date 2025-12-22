@@ -156,14 +156,14 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 解压端侧压缩包并解析speed-10s.csv
+     * 解压端侧压缩包并解析speed-10s.xlsx
      *
      * @param zipFilePath 压缩包文件路径
      * @return SpeedData列表，如果解析失败返回空列表
      * @throws IOException IO异常
      */
-    public static List<SpeedData> extractAndParseSpeedCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析speed-10s.csv: {}", zipFilePath);
+    public static List<SpeedData> extractAndParseSpeedExcel(String zipFilePath) throws IOException {
+        log.info("开始解压端侧文件并解析speed-10s.xlsx: {}", zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -178,19 +178,19 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析speed-10s.csv
-            Path speedCsvPath = extractDir.resolve("speed-10s.csv");
-            if (!Files.exists(speedCsvPath)) {
+            // 查找并解析speed-10s.xlsx
+            Path speedExcelPath = extractDir.resolve("speed-10s.xlsx");
+            if (!Files.exists(speedExcelPath)) {
                 // 尝试在子目录中查找
-                speedCsvPath = findSpeedCsvFile(extractDir);
+                speedExcelPath = findSpeedExcelFile(extractDir);
             }
 
-            if (speedCsvPath != null && Files.exists(speedCsvPath)) {
-                log.info("找到speed-10s.csv文件: {}", speedCsvPath);
-                speedDataList = parseSpeedCsv(speedCsvPath);
-                log.info("speed-10s.csv解析成功: 共{}条记录", speedDataList.size());
+            if (speedExcelPath != null && Files.exists(speedExcelPath)) {
+                log.info("找到speed-10s.xlsx文件: {}", speedExcelPath);
+                speedDataList = parseSpeedExcel(speedExcelPath);
+                log.info("speed-10s.xlsx解析成功: 共{}条记录", speedDataList.size());
             } else {
-                log.warn("未找到speed-10s.csv文件");
+                log.warn("未找到speed-10s.xlsx文件");
             }
 
         } finally {
@@ -207,70 +207,103 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 递归查找speed-10s.csv文件
+     * 递归查找speed-10s.xlsx文件
      *
      * @param directory 搜索目录
-     * @return speed-10s.csv文件路径，如果未找到返回null
+     * @return speed-10s.xlsx文件路径，如果未找到返回null
      */
-    private static Path findSpeedCsvFile(Path directory) throws IOException {
+    private static Path findSpeedExcelFile(Path directory) throws IOException {
         return Files.walk(directory)
                 .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("speed-10s.csv"))
+                        path.getFileName().toString().equalsIgnoreCase("speed-10s.xlsx"))
                 .findFirst()
                 .orElse(null);
     }
 
     /**
-     * 解析speed-10s.csv文件
+     * 解析speed-10s.xlsx文件
+     * 列顺序：dl_speed(bps)、ul_speed(bps)、total
      *
-     * @param csvPath CSV文件路径
+     * @param excelPath Excel文件路径
      * @return SpeedData列表
      * @throws IOException IO异常
      */
-    private static List<SpeedData> parseSpeedCsv(Path csvPath) throws IOException {
+    private static List<SpeedData> parseSpeedExcel(Path excelPath) throws IOException {
         List<SpeedData> speedDataList = new ArrayList<>();
 
-        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
-            String line;
-            boolean isFirstLine = true;
+        try (FileInputStream fis = new FileInputStream(excelPath.toFile());
+             Workbook workbook = new XSSFWorkbook(fis)) {
 
-            while ((line = reader.readLine()) != null) {
-                // 跳过空行
-                if (line.trim().isEmpty()) {
+            Sheet sheet = workbook.getSheetAt(0); // 获取第一个工作表
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+
+            // 跳过表头行，从第二行开始读取数据
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) {
                     continue;
                 }
 
-                // 跳过表头
-                if (isFirstLine) {
-                    isFirstLine = false;
-                    // 检查表头格式
-                    if (line.toLowerCase().contains("dl_speed") || 
-                        line.toLowerCase().contains("ul_speed") || 
-                        line.toLowerCase().contains("total")) {
-                        continue;
-                    }
-                }
-
-                // 解析CSV行
-                String[] values = parseCsvLine(line);
-                if (values.length >= 3) {
-                    SpeedData speedData = new SpeedData();
-                    speedData.setDlSpeed(values[0].trim());
-                    speedData.setUlSpeed(values[1].trim());
-                    speedData.setTotal(values[2].trim());
+                SpeedData speedData = parseSpeedRow(row, evaluator);
+                if (speedData != null) {
                     speedDataList.add(speedData);
-                } else {
-                    log.warn("CSV行格式不正确，跳过: {}", line);
                 }
             }
 
-            log.info("解析speed-10s.csv完成，共{}条记录", speedDataList.size());
+            log.info("解析speed-10s.xlsx完成，共{}条记录", speedDataList.size());
         } catch (Exception e) {
-            log.error("解析speed-10s.csv失败: {}", e.getMessage(), e);
-            throw new IOException("解析speed-10s.csv失败: " + e.getMessage(), e);
+            log.error("解析speed-10s.xlsx失败: {}", e.getMessage(), e);
+            throw new IOException("解析speed-10s.xlsx失败: " + e.getMessage(), e);
         }
 
         return speedDataList;
+    }
+
+    /**
+     * 解析速率数据行
+     * 列顺序：dl_speed(bps)、ul_speed(bps)、total
+     *
+     * @param row 行数据
+     * @param evaluator 公式计算器
+     * @return SpeedData对象
+     */
+    private static SpeedData parseSpeedRow(Row row, FormulaEvaluator evaluator) {
+        try {
+            if (isEmptySpeedRow(row, evaluator)) {
+                return null;
+            }
+
+            SpeedData speedData = new SpeedData();
+            speedData.setDlSpeed(getCellValue(row.getCell(0), evaluator));
+            speedData.setUlSpeed(getCellValue(row.getCell(1), evaluator));
+            speedData.setTotal(getCellValue(row.getCell(2), evaluator));
+
+            return speedData;
+        } catch (Exception e) {
+            log.error("Error parsing speed row {}: {}", row.getRowNum() + 1, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 检查是否为空行
+     */
+    private static boolean isEmptySpeedRow(Row row, FormulaEvaluator evaluator) {
+        if (row == null) {
+            return true;
+        }
+
+        // 检查前几列是否都为空
+        for (int i = 0; i < 3; i++) {
+            Cell cell = row.getCell(i);
+            if (cell != null) {
+                String value = getCellValue(cell, evaluator);
+                if (value != null && !value.trim().isEmpty()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**

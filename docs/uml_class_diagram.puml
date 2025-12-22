@@ -114,12 +114,12 @@ class VmosDataServiceImpl {
 class ClientFileProcessor {
   -ObjectMapper objectMapper
   +{static} TaskInfoDTO extractAndParseTaskInfo(String zipFilePath)
-  +{static} List<SpeedData> extractAndParseSpeedCsv(String zipFilePath)
+  +{static} List<SpeedData> extractAndParseSpeedExcel(String zipFilePath)
   +{static} List<VmosData> extractAndParseVmosExcel(String zipFilePath)
   -{static} void extractZipFile(Path zipPath, Path extractDir)
   -{static} Path findTaskInfoFile(Path directory)
   -{static} TaskInfoDTO parseTaskInfoJson(Path taskInfoPath)
-  -{static} List<SpeedData> parseSpeedCsv(Path csvPath)
+  -{static} List<SpeedData> parseSpeedExcel(Path excelPath)
   -{static} List<VmosData> parseVmosExcel(Path excelPath)
   -{static} void deleteDirectory(Path directory)
 }

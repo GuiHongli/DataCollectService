@@ -36,11 +36,11 @@ deactivate DB
 deactivate TIS
 FPS <-- TIS: boolean
 
-FPS -> CFP: extractAndParseSpeedCsv(zipFilePath)
+FPS -> CFP: extractAndParseSpeedExcel(zipFilePath)
 activate CFP
 CFP -> CFP: 解压ZIP文件
-CFP -> CFP: 查找speed-10s.csv
-CFP -> CFP: 解析CSV文件
+CFP -> CFP: 查找speed-10s.xlsx
+CFP -> CFP: 解析Excel文件
 CFP -> CFP: 返回List<SpeedData>
 deactivate CFP
 FPS <-- CFP: List<SpeedData>
@@ -69,4 +69,7 @@ FPS -> FTP: 返回文件URL
 deactivate FPS
 
 @enduml
+
+ 
+
 

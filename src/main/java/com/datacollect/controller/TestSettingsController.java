@@ -254,7 +254,7 @@ public class TestSettingsController {
 
     /**
      * 处理本地端侧文件（用于测试验证，不依赖FTP服务器）
-     * 如果是压缩包，会自动解压并解析taskinfo.json、speed-10s.csv、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
+     * 如果是压缩包，会自动解压并解析taskinfo.json、speed-10s.xlsx、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
      *
      * @param filePath 本地文件路径（绝对路径或相对路径）
      * @return 处理结果信息
