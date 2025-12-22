@@ -18,8 +18,12 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -27,6 +31,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -91,15 +96,32 @@ public class ClientFileProcessor {
     }
 
     /**
+     * 解压压缩文件到指定目录（支持ZIP和GZ格式）
+     *
+     * @param filePath 压缩文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractZipFile(Path filePath, Path extractDir) throws IOException {
+        String fileName = filePath.getFileName().toString().toLowerCase();
+        
+        if (fileName.endsWith(".gz")) {
+            log.info("解压GZ文件: {} -> {}", filePath, extractDir);
+            extractGzFile(filePath, extractDir);
+        } else {
+            log.info("解压ZIP文件: {} -> {}", filePath, extractDir);
+            extractZipFileInternal(filePath, extractDir);
+        }
+    }
+
+    /**
      * 解压ZIP文件到指定目录
      *
      * @param zipPath ZIP文件路径
      * @param extractDir 解压目录
      * @throws IOException IO异常
      */
-    private static void extractZipFile(Path zipPath, Path extractDir) throws IOException {
-        log.info("解压ZIP文件: {} -> {}", zipPath, extractDir);
-
+    private static void extractZipFileInternal(Path zipPath, Path extractDir) throws IOException {
         try (FileInputStream fis = new FileInputStream(zipPath.toFile());
              ZipInputStream zis = new ZipInputStream(fis)) {
 
@@ -118,6 +140,102 @@ public class ClientFileProcessor {
             }
 
             log.info("ZIP文件解压完成");
+        }
+    }
+
+    /**
+     * 解压GZ文件到指定目录
+     * 如果是.tar.gz文件，会先解压gz，再解压tar
+     * 如果是单独的.gz文件，直接解压
+     *
+     * @param gzPath GZ文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractGzFile(Path gzPath, Path extractDir) throws IOException {
+        String fileName = gzPath.getFileName().toString().toLowerCase();
+        
+        // 创建临时文件用于存储解压后的内容
+        Path tempFile = Files.createTempFile("gz_extract_", fileName.replace(".gz", ""));
+        
+        try {
+            // 解压GZ文件
+            try (FileInputStream fis = new FileInputStream(gzPath.toFile());
+                 GZIPInputStream gzis = new GZIPInputStream(fis);
+                 FileOutputStream fos = new FileOutputStream(tempFile.toFile())) {
+                
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = gzis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                }
+            }
+            
+            log.info("GZ文件解压完成，临时文件: {}", tempFile);
+            
+            // 检查是否是tar.gz文件
+            if (fileName.endsWith(".tar.gz")) {
+                // 解压TAR文件
+                extractTarFile(tempFile, extractDir);
+            } else {
+                // 单独的gz文件，直接复制到解压目录
+                String originalFileName = fileName.replace(".gz", "");
+                Path targetFile = extractDir.resolve(originalFileName);
+                Files.createDirectories(targetFile.getParent());
+                Files.copy(tempFile, targetFile);
+                log.info("GZ文件内容已复制到: {}", targetFile);
+            }
+            
+        } finally {
+            // 清理临时文件
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (Exception e) {
+                log.warn("清理临时文件失败: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 解压TAR文件到指定目录
+     * 使用Apache Commons Compress库处理TAR文件
+     *
+     * @param tarPath TAR文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractTarFile(Path tarPath, Path extractDir) throws IOException {
+        log.info("解压TAR文件: {} -> {}", tarPath, extractDir);
+        
+        try (FileInputStream fis = new FileInputStream(tarPath.toFile());
+             TarArchiveInputStream tis = new TarArchiveInputStream(fis)) {
+            
+            TarArchiveEntry entry;
+            while ((entry = tis.getNextTarEntry()) != null) {
+                Path filePath = extractDir.resolve(entry.getName());
+                
+                if (entry.isDirectory()) {
+                    Files.createDirectories(filePath);
+                } else {
+                    Files.createDirectories(filePath.getParent());
+                    try (FileOutputStream fos = new FileOutputStream(filePath.toFile())) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = tis.read(buffer)) != -1) {
+                            fos.write(buffer, 0, bytesRead);
+                        }
+                    }
+                }
+            }
+            
+            log.info("TAR文件解压完成");
+        } catch (Exception e) {
+            // 如果TAR解压失败，尝试直接读取文件内容（可能是单个文件被压缩成gz）
+            log.warn("TAR解压失败，尝试直接读取文件内容: {}", e.getMessage());
+            String fileName = tarPath.getFileName().toString().replace(".tar", "");
+            Path targetFile = extractDir.resolve(fileName);
+            Files.createDirectories(targetFile.getParent());
+            Files.copy(tarPath, targetFile);
         }
     }
 
