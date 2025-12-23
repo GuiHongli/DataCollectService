@@ -16,8 +16,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.web.multipart.MultipartFile;
+
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -267,6 +273,76 @@ public class TestSettingsController {
         } catch (Exception e) {
             log.error("Failed to process local client file: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 上传端侧文件并解析（用于端侧数据管理页面）
+     * 接收文件上传，保存到临时目录，然后解析并保存到数据库
+     *
+     * @param file 上传的文件（ZIP压缩包）
+     * @return 处理结果信息
+     */
+    @PostMapping("/client-data/upload")
+    public Result<Map<String, Object>> uploadClientDataFile(@RequestParam("file") MultipartFile file) {
+        Path tempFilePath = null;
+        try {
+            // 验证文件
+            if (file == null || file.isEmpty()) {
+                return Result.error("文件不能为空");
+            }
+
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename == null || originalFilename.isEmpty()) {
+                return Result.error("文件名不能为空");
+            }
+
+            // 验证文件类型（只接受ZIP、GZ等压缩文件）
+            String lowerFilename = originalFilename.toLowerCase();
+            if (!lowerFilename.endsWith(".zip") && !lowerFilename.endsWith(".gz") && 
+                !lowerFilename.endsWith(".tar.gz") && !lowerFilename.endsWith(".rar")) {
+                return Result.error("只支持ZIP、GZ、TAR.GZ、RAR格式的压缩文件");
+            }
+
+            // 保存文件到临时目录
+            Path tempDir = Files.createTempDirectory("client_data_upload_");
+            tempFilePath = tempDir.resolve(originalFilename);
+            File tempFile = tempFilePath.toFile();
+            if (tempFile != null) {
+                file.transferTo(tempFile);
+            } else {
+                throw new IOException("Failed to create temporary file");
+            }
+            log.info("File saved to temporary directory: {}", tempFilePath);
+
+            // 处理文件并解析
+            Map<String, Object> result = ftpFileProcessService.processLocalClientFile(tempFilePath.toString());
+            result.put("fileName", originalFilename);
+            result.put("fileSize", file.getSize());
+
+            log.info("Client data file processed successfully: {}, result: {}", originalFilename, result);
+            return Result.success(result);
+
+        } catch (IOException e) {
+            log.error("Failed to upload and process client data file: {}", e.getMessage(), e);
+            return Result.error("文件上传或处理失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Error occurred while processing client data file: {}", e.getMessage(), e);
+            return Result.error("处理文件时发生错误: " + e.getMessage());
+        } finally {
+            // 清理临时文件
+            if (tempFilePath != null && Files.exists(tempFilePath)) {
+                try {
+                    Files.deleteIfExists(tempFilePath);
+                    // 尝试删除临时目录
+                    Path tempDir = tempFilePath.getParent();
+                    if (tempDir != null && Files.exists(tempDir)) {
+                        Files.deleteIfExists(tempDir);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to cleanup temporary file: {}", e.getMessage());
+                }
+            }
         }
     }
 
