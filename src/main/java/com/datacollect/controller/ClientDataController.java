@@ -53,15 +53,15 @@ public class ClientDataController {
      * @return 分页结果
      */
     @GetMapping("/page")
-    public Result<Page<TaskInfo>> getTaskInfoPage(
+    public Result<Page<ClientTaskInfo>> getTaskInfoPage(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String taskId,
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String app) {
         try {
-            Page<TaskInfo> page = new Page<>(current, size);
-            QueryWrapper<TaskInfo> queryWrapper = new QueryWrapper<>();
+            Page<ClientTaskInfo> page = new Page<>(current, size);
+            QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
             
             // 搜索条件
             if (taskId != null && !taskId.trim().isEmpty()) {
@@ -77,7 +77,7 @@ public class ClientDataController {
             // 倒序排列（按创建时间倒序）
             queryWrapper.orderByDesc("create_time");
             
-            Page<TaskInfo> result = taskInfoService.page(page, queryWrapper);
+            Page<ClientTaskInfo> result = taskInfoService.page(page, queryWrapper);
             return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to get task info page: {}", e.getMessage(), e);
@@ -97,9 +97,9 @@ public class ClientDataController {
             Map<String, Object> result = new HashMap<>();
             
             // 查询基础信息
-            QueryWrapper<TaskInfo> taskInfoWrapper = new QueryWrapper<>();
+            QueryWrapper<ClientTaskInfo> taskInfoWrapper = new QueryWrapper<>();
             taskInfoWrapper.eq("task_id", taskId);
-            TaskInfo taskInfo = taskInfoService.getOne(taskInfoWrapper);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(taskInfoWrapper);
             result.put("taskInfo", taskInfo);
             
             // 查询vmos数据

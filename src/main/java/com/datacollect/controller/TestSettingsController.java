@@ -363,6 +363,76 @@ public class TestSettingsController {
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
+
+    /**
+     * 上传网络侧文件并解析（用于网络侧数据管理页面）
+     * 接收文件上传，保存到临时目录，然后解析并保存到数据库
+     *
+     * @param file 上传的文件（ZIP、GZ、TAR.GZ、RAR压缩包）
+     * @return 处理结果信息
+     */
+    @PostMapping("/network-data/upload")
+    public Result<Map<String, Object>> uploadNetworkDataFile(@RequestParam("file") MultipartFile file) {
+        Path tempFilePath = null;
+        try {
+            // 验证文件
+            if (file == null || file.isEmpty()) {
+                return Result.error("文件不能为空");
+            }
+
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename == null || originalFilename.isEmpty()) {
+                return Result.error("文件名不能为空");
+            }
+
+            // 验证文件类型（只接受ZIP、GZ等压缩文件）
+            String lowerFilename = originalFilename.toLowerCase();
+            if (!lowerFilename.endsWith(".zip") && !lowerFilename.endsWith(".gz") && 
+                !lowerFilename.endsWith(".tar.gz") && !lowerFilename.endsWith(".rar")) {
+                return Result.error("只支持ZIP、GZ、TAR.GZ、RAR格式的压缩文件");
+            }
+
+            // 保存文件到临时目录
+            Path tempDir = Files.createTempDirectory("network_data_upload_");
+            tempFilePath = tempDir.resolve(originalFilename);
+            File tempFile = tempFilePath.toFile();
+            if (tempFile != null) {
+                file.transferTo(tempFile);
+            } else {
+                throw new IOException("Failed to create temporary file");
+            }
+            log.info("File saved to temporary directory: {}", tempFilePath);
+
+            // 处理文件并解析
+            Map<String, Object> result = ftpFileProcessService.processLocalNetworkFile(tempFilePath.toString());
+            result.put("fileName", originalFilename);
+            result.put("fileSize", file.getSize());
+
+            log.info("Network data file processed successfully: {}, result: {}", originalFilename, result);
+            return Result.success(result);
+
+        } catch (IOException e) {
+            log.error("Failed to upload and process network data file: {}", e.getMessage(), e);
+            return Result.error("文件上传或处理失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Error occurred while processing network data file: {}", e.getMessage(), e);
+            return Result.error("处理文件时发生错误: " + e.getMessage());
+        } finally {
+            // 清理临时文件
+            if (tempFilePath != null && Files.exists(tempFilePath)) {
+                try {
+                    Files.deleteIfExists(tempFilePath);
+                    // 尝试删除临时目录
+                    Path tempDir = tempFilePath.getParent();
+                    if (tempDir != null && Files.exists(tempDir)) {
+                        Files.deleteIfExists(tempDir);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to cleanup temporary file: {}", e.getMessage());
+                }
+            }
+        }
+    }
 }
 
 

@@ -3,7 +3,7 @@ package com.datacollect.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.dto.TaskInfoDTO;
-import com.datacollect.entity.TaskInfo;
+import com.datacollect.entity.ClientTaskInfo;
 import com.datacollect.mapper.TaskInfoMapper;
 import com.datacollect.service.TaskInfoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
  */
 @Slf4j
 @Service
-public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, TaskInfo> implements TaskInfoService {
+public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, ClientTaskInfo> implements TaskInfoService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -34,16 +34,16 @@ public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, TaskInfo> i
 
         try {
             // 检查taskId是否已存在
-            QueryWrapper<TaskInfo> queryWrapper = new QueryWrapper<>();
+            QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("task_id", taskInfoDTO.getTaskId());
-            TaskInfo existingTaskInfo = getOne(queryWrapper);
+            ClientTaskInfo existingTaskInfo = getOne(queryWrapper);
             
             if (existingTaskInfo != null) {
                 log.info("TaskInfo already exists, skip saving - taskId: {}", taskInfoDTO.getTaskId());
                 return true;
             }
 
-            TaskInfo taskInfo = convertToEntity(taskInfoDTO);
+            ClientTaskInfo taskInfo = convertToEntity(taskInfoDTO);
             LocalDateTime now = LocalDateTime.now();
             taskInfo.setCreateTime(now);
             taskInfo.setUpdateTime(now);
@@ -67,8 +67,8 @@ public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, TaskInfo> i
      * @param dto TaskInfoDTO
      * @return TaskInfo实体
      */
-    private TaskInfo convertToEntity(TaskInfoDTO dto) {
-        TaskInfo taskInfo = new TaskInfo();
+    private ClientTaskInfo convertToEntity(TaskInfoDTO dto) {
+        ClientTaskInfo taskInfo = new ClientTaskInfo();
         taskInfo.setTaskId(dto.getTaskId());
         taskInfo.setNation(dto.getNation());
         taskInfo.setOperator(dto.getOperator());
