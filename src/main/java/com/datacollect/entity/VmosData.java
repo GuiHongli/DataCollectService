@@ -97,6 +97,18 @@ public class VmosData {
     private String presentationExperience;
 
     /**
+     * 丢包率（s_lost_packet_rate）
+     */
+    @TableField("s_lost_packet_rate")
+    private String sLostPacketRate;
+
+    /**
+     * 卡顿占比（s_stall_rate）
+     */
+    @TableField("s_stall_rate")
+    private String sStallRate;
+
+    /**
      * α
      */
     @TableField("alpha")
