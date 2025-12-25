@@ -278,18 +278,21 @@ public class FtpFileProcessService {
                 }
             }
 
-            // 4. 如果是端侧压缩包，解析taskinfo.json和speed-10s.xlsx
+            // 4. 如果是端侧压缩包，统一解析所有数据（只解压一次）
             if (taskInfoHolder != null && isCompressedFile(fileName)) {
                 try {
-                    TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(localFilePath);
+                    // 统一解压并解析所有数据
+                    ClientFileProcessor.ClientDataResult clientDataResult = ClientFileProcessor.extractAndParseAllClientData(localFilePath);
+                    
+                    TaskInfoDTO taskInfo = clientDataResult.getTaskInfo();
                     if (taskInfo != null) {
                         taskInfoHolder.add(taskInfo);
                         log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
                                 taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
                         
-                        // 解析并保存speed-10s.xlsx
+                        // 保存speed数据
                         try {
-                            List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedExcel(localFilePath);
+                            List<SpeedData> speedDataList = clientDataResult.getSpeedDataList();
                             if (speedDataList != null && !speedDataList.isEmpty()) {
                                 boolean saved = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
                                 if (saved) {
@@ -300,14 +303,13 @@ public class FtpFileProcessService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error parsing or saving SpeedData - taskId: {}, error: {}", 
+                            log.error("Error saving SpeedData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
-                            // 不抛出异常，继续处理
                         }
 
-                        // 解析并保存vmos-10s.xlsx
+                        // 保存vmos数据
                         try {
-                            List<VmosData> vmosDataList = ClientFileProcessor.extractAndParseVmosExcel(localFilePath);
+                            List<VmosData> vmosDataList = clientDataResult.getVmosDataList();
                             if (vmosDataList != null && !vmosDataList.isEmpty()) {
                                 boolean saved = vmosDataService.batchSaveVmosData(vmosDataList, taskInfo.getTaskId());
                                 if (saved) {
@@ -318,14 +320,13 @@ public class FtpFileProcessService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error parsing or saving VmosData - taskId: {}, error: {}", 
+                            log.error("Error saving VmosData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
-                            // 不抛出异常，继续处理
                         }
 
-                        // 解析并保存rtt-10s.csv
+                        // 保存rtt数据
                         try {
-                            List<RttData> rttDataList = ClientFileProcessor.extractAndParseRttCsv(localFilePath);
+                            List<RttData> rttDataList = clientDataResult.getRttDataList();
                             if (rttDataList != null && !rttDataList.isEmpty()) {
                                 boolean saved = rttDataService.batchSaveRttData(rttDataList, taskInfo.getTaskId());
                                 if (saved) {
@@ -336,14 +337,13 @@ public class FtpFileProcessService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error parsing or saving RttData - taskId: {}, error: {}", 
+                            log.error("Error saving RttData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
-                            // 不抛出异常，继续处理
                         }
 
-                        // 解析并保存lost-10s.csv
+                        // 保存lost数据
                         try {
-                            List<LostData> lostDataList = ClientFileProcessor.extractAndParseLostCsv(localFilePath);
+                            List<LostData> lostDataList = clientDataResult.getLostDataList();
                             if (lostDataList != null && !lostDataList.isEmpty()) {
                                 boolean saved = lostDataService.batchSaveLostData(lostDataList, taskInfo.getTaskId());
                                 if (saved) {
@@ -354,14 +354,13 @@ public class FtpFileProcessService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error parsing or saving LostData - taskId: {}, error: {}", 
+                            log.error("Error saving LostData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
-                            // 不抛出异常，继续处理
                         }
 
-                        // 解析并保存video-10s.csv
+                        // 保存video数据
                         try {
-                            List<VideoData> videoDataList = ClientFileProcessor.extractAndParseVideoCsv(localFilePath);
+                            List<VideoData> videoDataList = clientDataResult.getVideoDataList();
                             if (videoDataList != null && !videoDataList.isEmpty()) {
                                 boolean saved = videoDataService.batchSaveVideoData(videoDataList, taskInfo.getTaskId());
                                 if (saved) {
@@ -372,15 +371,14 @@ public class FtpFileProcessService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error parsing or saving VideoData - taskId: {}, error: {}", 
+                            log.error("Error saving VideoData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
-                            // 不抛出异常，继续处理
                         }
                     } else {
                         log.warn("未能解析taskinfo.json");
                     }
                 } catch (Exception e) {
-                    log.error("解析端侧文件taskinfo.json失败: {}", e.getMessage(), e);
+                    log.error("解析端侧文件失败: {}", e.getMessage(), e);
                     // 不抛出异常，继续处理文件上传
                 }
             }
@@ -787,8 +785,10 @@ public class FtpFileProcessService {
             List<TaskInfoDTO> taskInfoList = new ArrayList<>();
 
             try {
-                // 解析taskinfo.json
-                TaskInfoDTO taskInfo = ClientFileProcessor.extractAndParseTaskInfo(filePath);
+                // 统一解压并解析所有数据（只解压一次）
+                ClientFileProcessor.ClientDataResult clientDataResult = ClientFileProcessor.extractAndParseAllClientData(filePath);
+                
+                TaskInfoDTO taskInfo = clientDataResult.getTaskInfo();
                 if (taskInfo != null) {
                     taskInfoList.add(taskInfo);
                     log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
@@ -802,9 +802,9 @@ public class FtpFileProcessService {
                         log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
                     }
 
-                    // 解析并保存speed-10s.xlsx
+                    // 保存speed数据
                     try {
-                        List<SpeedData> speedDataList = ClientFileProcessor.extractAndParseSpeedExcel(filePath);
+                        List<SpeedData> speedDataList = clientDataResult.getSpeedDataList();
                         if (speedDataList != null && !speedDataList.isEmpty()) {
                             boolean savedSpeed = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
                             if (savedSpeed) {
@@ -814,13 +814,13 @@ public class FtpFileProcessService {
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error parsing or saving SpeedData - taskId: {}, error: {}",
+                        log.error("Error saving SpeedData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 解析并保存vmos-10s.xlsx
+                    // 保存vmos数据
                     try {
-                        List<VmosData> vmosDataList = ClientFileProcessor.extractAndParseVmosExcel(filePath);
+                        List<VmosData> vmosDataList = clientDataResult.getVmosDataList();
                         if (vmosDataList != null && !vmosDataList.isEmpty()) {
                             boolean savedVmos = vmosDataService.batchSaveVmosData(vmosDataList, taskInfo.getTaskId());
                             if (savedVmos) {
@@ -830,13 +830,13 @@ public class FtpFileProcessService {
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error parsing or saving VmosData - taskId: {}, error: {}",
+                        log.error("Error saving VmosData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 解析并保存rtt-10s.csv
+                    // 保存rtt数据
                     try {
-                        List<RttData> rttDataList = ClientFileProcessor.extractAndParseRttCsv(filePath);
+                        List<RttData> rttDataList = clientDataResult.getRttDataList();
                         if (rttDataList != null && !rttDataList.isEmpty()) {
                             boolean savedRtt = rttDataService.batchSaveRttData(rttDataList, taskInfo.getTaskId());
                             if (savedRtt) {
@@ -846,13 +846,13 @@ public class FtpFileProcessService {
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error parsing or saving RttData - taskId: {}, error: {}",
+                        log.error("Error saving RttData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 解析并保存lost-10s.csv
+                    // 保存lost数据
                     try {
-                        List<LostData> lostDataList = ClientFileProcessor.extractAndParseLostCsv(filePath);
+                        List<LostData> lostDataList = clientDataResult.getLostDataList();
                         if (lostDataList != null && !lostDataList.isEmpty()) {
                             boolean savedLost = lostDataService.batchSaveLostData(lostDataList, taskInfo.getTaskId());
                             if (savedLost) {
@@ -862,13 +862,13 @@ public class FtpFileProcessService {
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error parsing or saving LostData - taskId: {}, error: {}",
+                        log.error("Error saving LostData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 解析并保存video-10s.csv
+                    // 保存video数据
                     try {
-                        List<VideoData> videoDataList = ClientFileProcessor.extractAndParseVideoCsv(filePath);
+                        List<VideoData> videoDataList = clientDataResult.getVideoDataList();
                         if (videoDataList != null && !videoDataList.isEmpty()) {
                             boolean savedVideo = videoDataService.batchSaveVideoData(videoDataList, taskInfo.getTaskId());
                             if (savedVideo) {
@@ -878,7 +878,7 @@ public class FtpFileProcessService {
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error parsing or saving VideoData - taskId: {}, error: {}",
+                        log.error("Error saving VideoData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 

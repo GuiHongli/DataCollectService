@@ -45,6 +45,11 @@ public class ClientFileProcessor {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
+     * 文件后缀（时间间隔）
+     */
+    private static final String FILE_SUFFIX = "10s";
+
+    /**
      * 解压端侧压缩包并解析taskinfo.json
      *
      * @param zipFilePath 压缩包文件路径
@@ -281,7 +286,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<SpeedData> extractAndParseSpeedExcel(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析speed-10s.xlsx: {}", zipFilePath);
+        log.info("开始解压端侧文件并解析speed-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -296,19 +301,19 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析speed-10s.xlsx
-            Path speedExcelPath = extractDir.resolve("speed-10s.xlsx");
+            // 查找并解析speed文件
+            Path speedExcelPath = extractDir.resolve("speed-" + FILE_SUFFIX + ".xlsx");
             if (!Files.exists(speedExcelPath)) {
                 // 尝试在子目录中查找
                 speedExcelPath = findSpeedExcelFile(extractDir);
             }
 
             if (speedExcelPath != null && Files.exists(speedExcelPath)) {
-                log.info("找到speed-10s.xlsx文件: {}", speedExcelPath);
+                log.info("找到speed-{}文件: {}", FILE_SUFFIX, speedExcelPath);
                 speedDataList = parseSpeedExcel(speedExcelPath);
-                log.info("speed-10s.xlsx解析成功: 共{}条记录", speedDataList.size());
+                log.info("speed-{}解析成功: 共{}条记录", FILE_SUFFIX, speedDataList.size());
             } else {
-                log.warn("未找到speed-10s.xlsx文件");
+                log.warn("未找到speed-{}文件", FILE_SUFFIX);
             }
 
         } finally {
@@ -333,7 +338,7 @@ public class ClientFileProcessor {
     private static Path findSpeedExcelFile(Path directory) throws IOException {
         return Files.walk(directory)
                 .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("speed-10s.xlsx"))
+                        path.getFileName().toString().equalsIgnoreCase("speed-" + FILE_SUFFIX + ".xlsx"))
                 .findFirst()
                 .orElse(null);
     }
@@ -368,10 +373,10 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析speed-10s.xlsx完成，共{}条记录", speedDataList.size());
+            log.info("解析speed-{}完成，共{}条记录", FILE_SUFFIX, speedDataList.size());
         } catch (Exception e) {
-            log.error("解析speed-10s.xlsx失败: {}", e.getMessage(), e);
-            throw new IOException("解析speed-10s.xlsx失败: " + e.getMessage(), e);
+            log.error("解析speed-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            throw new IOException("解析speed-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
         return speedDataList;
@@ -432,7 +437,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<VmosData> extractAndParseVmosExcel(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析vmos-10s.xlsx: {}", zipFilePath);
+        log.info("开始解压端侧文件并解析vmos-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -447,19 +452,19 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析vmos-10s.xlsx
-            Path vmosExcelPath = extractDir.resolve("vmos-10s.xlsx");
+            // 查找并解析vmos文件
+            Path vmosExcelPath = extractDir.resolve("vmos-" + FILE_SUFFIX + ".xlsx");
             if (!Files.exists(vmosExcelPath)) {
                 // 尝试在子目录中查找
                 vmosExcelPath = findVmosExcelFile(extractDir);
             }
 
             if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
-                log.info("找到vmos-10s.xlsx文件: {}", vmosExcelPath);
+                log.info("找到vmos-{}文件: {}", FILE_SUFFIX, vmosExcelPath);
                 vmosDataList = parseVmosExcel(vmosExcelPath);
-                log.info("vmos-10s.xlsx解析成功: 共{}条记录", vmosDataList.size());
+                log.info("vmos-{}解析成功: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
             } else {
-                log.warn("未找到vmos-10s.xlsx文件");
+                log.warn("未找到vmos-{}文件", FILE_SUFFIX);
             }
 
         } finally {
@@ -484,7 +489,7 @@ public class ClientFileProcessor {
     private static Path findVmosExcelFile(Path directory) throws IOException {
         return Files.walk(directory)
                 .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("vmos-10s.xlsx"))
+                        path.getFileName().toString().equalsIgnoreCase("vmos-" + FILE_SUFFIX + ".xlsx"))
                 .findFirst()
                 .orElse(null);
     }
@@ -518,10 +523,10 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析vmos-10s.xlsx完成，共{}条记录", vmosDataList.size());
+            log.info("解析vmos-{}完成，共{}条记录", FILE_SUFFIX, vmosDataList.size());
         } catch (Exception e) {
-            log.error("解析vmos-10s.xlsx失败: {}", e.getMessage(), e);
-            throw new IOException("解析vmos-10s.xlsx失败: " + e.getMessage(), e);
+            log.error("解析vmos-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            throw new IOException("解析vmos-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
         return vmosDataList;
@@ -665,7 +670,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<RttData> extractAndParseRttCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析rtt-10s.csv: {}", zipFilePath);
+        log.info("开始解压端侧文件并解析rtt-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -680,19 +685,19 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析rtt-10s.csv
-            Path rttCsvPath = extractDir.resolve("rtt-10s.csv");
+            // 查找并解析rtt文件
+            Path rttCsvPath = extractDir.resolve("rtt-" + FILE_SUFFIX + ".csv");
             if (!Files.exists(rttCsvPath)) {
                 // 尝试在子目录中查找
                 rttCsvPath = findRttCsvFile(extractDir);
             }
 
             if (rttCsvPath != null && Files.exists(rttCsvPath)) {
-                log.info("找到rtt-10s.csv文件: {}", rttCsvPath);
+                log.info("找到rtt-{}文件: {}", FILE_SUFFIX, rttCsvPath);
                 rttDataList = parseRttCsv(rttCsvPath);
-                log.info("rtt-10s.csv解析成功: 共{}条记录", rttDataList.size());
+                log.info("rtt-{}解析成功: 共{}条记录", FILE_SUFFIX, rttDataList.size());
             } else {
-                log.warn("未找到rtt-10s.csv文件");
+                log.warn("未找到rtt-{}文件", FILE_SUFFIX);
             }
 
         } finally {
@@ -718,7 +723,7 @@ public class ClientFileProcessor {
     private static Path findRttCsvFile(Path directory) throws IOException {
         return Files.walk(directory)
                 .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("rtt-10s.csv"))
+                        path.getFileName().toString().equalsIgnoreCase("rtt-" + FILE_SUFFIX + ".csv"))
                 .findFirst()
                 .orElse(null);
     }
@@ -767,10 +772,10 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析rtt-10s.csv完成，共{}条记录", rttDataList.size());
+            log.info("解析rtt-{}完成，共{}条记录", FILE_SUFFIX, rttDataList.size());
         } catch (Exception e) {
-            log.error("解析rtt-10s.csv失败: {}", e.getMessage(), e);
-            throw new IOException("解析rtt-10s.csv失败: " + e.getMessage(), e);
+            log.error("解析rtt-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            throw new IOException("解析rtt-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
         return rttDataList;
@@ -784,7 +789,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<LostData> extractAndParseLostCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析lost-10s.csv: {}", zipFilePath);
+        log.info("开始解压端侧文件并解析lost-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -799,19 +804,19 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析lost-10s.csv
-            Path lostCsvPath = extractDir.resolve("lost-10s.csv");
+            // 查找并解析lost文件
+            Path lostCsvPath = extractDir.resolve("lost-" + FILE_SUFFIX + ".csv");
             if (!Files.exists(lostCsvPath)) {
                 // 尝试在子目录中查找
                 lostCsvPath = findLostCsvFile(extractDir);
             }
 
             if (lostCsvPath != null && Files.exists(lostCsvPath)) {
-                log.info("找到lost-10s.csv文件: {}", lostCsvPath);
+                log.info("找到lost-{}文件: {}", FILE_SUFFIX, lostCsvPath);
                 lostDataList = parseLostCsv(lostCsvPath);
-                log.info("lost-10s.csv解析成功: 共{}条记录", lostDataList.size());
+                log.info("lost-{}解析成功: 共{}条记录", FILE_SUFFIX, lostDataList.size());
             } else {
-                log.warn("未找到lost-10s.csv文件");
+                log.warn("未找到lost-{}文件", FILE_SUFFIX);
             }
 
         } finally {
@@ -837,7 +842,7 @@ public class ClientFileProcessor {
     private static Path findLostCsvFile(Path directory) throws IOException {
         return Files.walk(directory)
                 .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("lost-10s.csv"))
+                        path.getFileName().toString().equalsIgnoreCase("lost-" + FILE_SUFFIX + ".csv"))
                 .findFirst()
                 .orElse(null);
     }
@@ -888,10 +893,10 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析lost-10s.csv完成，共{}条记录", lostDataList.size());
+            log.info("解析lost-{}完成，共{}条记录", FILE_SUFFIX, lostDataList.size());
         } catch (Exception e) {
-            log.error("解析lost-10s.csv失败: {}", e.getMessage(), e);
-            throw new IOException("解析lost-10s.csv失败: " + e.getMessage(), e);
+            log.error("解析lost-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            throw new IOException("解析lost-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
         return lostDataList;
@@ -905,7 +910,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<VideoData> extractAndParseVideoCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析video-10s.csv: {}", zipFilePath);
+        log.info("开始解压端侧文件并解析video-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -920,19 +925,19 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析video-10s.csv
-            Path videoCsvPath = extractDir.resolve("video-10s.csv");
+            // 查找并解析video文件
+            Path videoCsvPath = extractDir.resolve("video-" + FILE_SUFFIX + ".csv");
             if (!Files.exists(videoCsvPath)) {
                 // 尝试在子目录中查找
                 videoCsvPath = findVideoCsvFile(extractDir);
             }
 
             if (videoCsvPath != null && Files.exists(videoCsvPath)) {
-                log.info("找到video-10s.csv文件: {}", videoCsvPath);
+                log.info("找到video-{}文件: {}", FILE_SUFFIX, videoCsvPath);
                 videoDataList = parseVideoCsv(videoCsvPath);
-                log.info("video-10s.csv解析成功: 共{}条记录", videoDataList.size());
+                log.info("video-{}解析成功: 共{}条记录", FILE_SUFFIX, videoDataList.size());
             } else {
-                log.warn("未找到video-10s.csv文件");
+                log.warn("未找到video-{}文件", FILE_SUFFIX);
             }
 
         } finally {
@@ -958,7 +963,7 @@ public class ClientFileProcessor {
     private static Path findVideoCsvFile(Path directory) throws IOException {
         return Files.walk(directory)
                 .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("video-10s.csv"))
+                        path.getFileName().toString().equalsIgnoreCase("video-" + FILE_SUFFIX + ".csv"))
                 .findFirst()
                 .orElse(null);
     }
@@ -1005,10 +1010,10 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析video-10s.csv完成，共{}条记录", videoDataList.size());
+            log.info("解析video-{}完成，共{}条记录", FILE_SUFFIX, videoDataList.size());
         } catch (Exception e) {
-            log.error("解析video-10s.csv失败: {}", e.getMessage(), e);
-            throw new IOException("解析video-10s.csv失败: " + e.getMessage(), e);
+            log.error("解析video-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            throw new IOException("解析video-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
         return videoDataList;
@@ -1391,6 +1396,224 @@ public class ClientFileProcessor {
         values.add(currentValue.toString());
 
         return values.toArray(new String[0]);
+    }
+
+    /**
+     * 客户端数据解析结果
+     */
+    public static class ClientDataResult {
+        private TaskInfoDTO taskInfo;
+        private List<SpeedData> speedDataList;
+        private List<VmosData> vmosDataList;
+        private List<RttData> rttDataList;
+        private List<LostData> lostDataList;
+        private List<VideoData> videoDataList;
+
+        public TaskInfoDTO getTaskInfo() {
+            return taskInfo;
+        }
+
+        public void setTaskInfo(TaskInfoDTO taskInfo) {
+            this.taskInfo = taskInfo;
+        }
+
+        public List<SpeedData> getSpeedDataList() {
+            return speedDataList;
+        }
+
+        public void setSpeedDataList(List<SpeedData> speedDataList) {
+            this.speedDataList = speedDataList;
+        }
+
+        public List<VmosData> getVmosDataList() {
+            return vmosDataList;
+        }
+
+        public void setVmosDataList(List<VmosData> vmosDataList) {
+            this.vmosDataList = vmosDataList;
+        }
+
+        public List<RttData> getRttDataList() {
+            return rttDataList;
+        }
+
+        public void setRttDataList(List<RttData> rttDataList) {
+            this.rttDataList = rttDataList;
+        }
+
+        public List<LostData> getLostDataList() {
+            return lostDataList;
+        }
+
+        public void setLostDataList(List<LostData> lostDataList) {
+            this.lostDataList = lostDataList;
+        }
+
+        public List<VideoData> getVideoDataList() {
+            return videoDataList;
+        }
+
+        public void setVideoDataList(List<VideoData> videoDataList) {
+            this.videoDataList = videoDataList;
+        }
+    }
+
+    /**
+     * 解压端侧压缩包并统一解析所有数据（taskInfo、vmos、rtt、video、speed、lost）
+     * 只解压一次，然后统一处理所有数据
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return ClientDataResult对象，包含所有解析结果
+     * @throws IOException IO异常
+     */
+    public static ClientDataResult extractAndParseAllClientData(String zipFilePath) throws IOException {
+        log.info("开始解压端侧文件并统一解析所有数据: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        ClientDataResult result = new ClientDataResult();
+
+        try {
+            // 解压文件（只解压一次）
+            extractZipFile(zipPath, extractDir);
+            log.info("文件解压完成，解压目录: {}", extractDir);
+
+            // 解析taskinfo.json
+            try {
+                Path taskInfoPath = extractDir.resolve("taskinfo.json");
+                if (!Files.exists(taskInfoPath)) {
+                    taskInfoPath = findTaskInfoFile(extractDir);
+                }
+                if (taskInfoPath != null && Files.exists(taskInfoPath)) {
+                    log.info("找到taskinfo.json文件: {}", taskInfoPath);
+                    TaskInfoDTO taskInfo = parseTaskInfoJson(taskInfoPath);
+                    result.setTaskInfo(taskInfo);
+                    log.info("taskinfo.json解析成功: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
+                } else {
+                    log.warn("未找到taskinfo.json文件");
+                }
+            } catch (Exception e) {
+                log.error("解析taskinfo.json失败: {}", e.getMessage(), e);
+            }
+
+            // 解析speed文件
+            try {
+                Path speedExcelPath = extractDir.resolve("speed-" + FILE_SUFFIX + ".xlsx");
+                if (!Files.exists(speedExcelPath)) {
+                    speedExcelPath = findSpeedExcelFile(extractDir);
+                }
+                if (speedExcelPath != null && Files.exists(speedExcelPath)) {
+                    log.info("找到speed-{}文件: {}", FILE_SUFFIX, speedExcelPath);
+                    List<SpeedData> speedDataList = parseSpeedExcel(speedExcelPath);
+                    result.setSpeedDataList(speedDataList);
+                    log.info("speed-{}解析成功: 共{}条记录", FILE_SUFFIX, speedDataList.size());
+                } else {
+                    log.warn("未找到speed-{}文件", FILE_SUFFIX);
+                    result.setSpeedDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                log.error("解析speed-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                result.setSpeedDataList(new ArrayList<>());
+            }
+
+            // 解析vmos文件
+            try {
+                Path vmosExcelPath = extractDir.resolve("vmos-" + FILE_SUFFIX + ".xlsx");
+                if (!Files.exists(vmosExcelPath)) {
+                    vmosExcelPath = findVmosExcelFile(extractDir);
+                }
+                if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
+                    log.info("找到vmos-{}文件: {}", FILE_SUFFIX, vmosExcelPath);
+                    List<VmosData> vmosDataList = parseVmosExcel(vmosExcelPath);
+                    result.setVmosDataList(vmosDataList);
+                    log.info("vmos-{}解析成功: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
+                } else {
+                    log.warn("未找到vmos-{}文件", FILE_SUFFIX);
+                    result.setVmosDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                log.error("解析vmos-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                result.setVmosDataList(new ArrayList<>());
+            }
+
+            // 解析rtt文件
+            try {
+                Path rttCsvPath = extractDir.resolve("rtt-" + FILE_SUFFIX + ".csv");
+                if (!Files.exists(rttCsvPath)) {
+                    rttCsvPath = findRttCsvFile(extractDir);
+                }
+                if (rttCsvPath != null && Files.exists(rttCsvPath)) {
+                    log.info("找到rtt-{}文件: {}", FILE_SUFFIX, rttCsvPath);
+                    List<RttData> rttDataList = parseRttCsv(rttCsvPath);
+                    result.setRttDataList(rttDataList);
+                    log.info("rtt-{}解析成功: 共{}条记录", FILE_SUFFIX, rttDataList.size());
+                } else {
+                    log.warn("未找到rtt-{}文件", FILE_SUFFIX);
+                    result.setRttDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                log.error("解析rtt-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                result.setRttDataList(new ArrayList<>());
+            }
+
+            // 解析lost文件
+            try {
+                Path lostCsvPath = extractDir.resolve("lost-" + FILE_SUFFIX + ".csv");
+                if (!Files.exists(lostCsvPath)) {
+                    lostCsvPath = findLostCsvFile(extractDir);
+                }
+                if (lostCsvPath != null && Files.exists(lostCsvPath)) {
+                    log.info("找到lost-{}文件: {}", FILE_SUFFIX, lostCsvPath);
+                    List<LostData> lostDataList = parseLostCsv(lostCsvPath);
+                    result.setLostDataList(lostDataList);
+                    log.info("lost-{}解析成功: 共{}条记录", FILE_SUFFIX, lostDataList.size());
+                } else {
+                    log.warn("未找到lost-{}文件", FILE_SUFFIX);
+                    result.setLostDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                log.error("解析lost-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                result.setLostDataList(new ArrayList<>());
+            }
+
+            // 解析video文件
+            try {
+                Path videoCsvPath = extractDir.resolve("video-" + FILE_SUFFIX + ".csv");
+                if (!Files.exists(videoCsvPath)) {
+                    videoCsvPath = findVideoCsvFile(extractDir);
+                }
+                if (videoCsvPath != null && Files.exists(videoCsvPath)) {
+                    log.info("找到video-{}文件: {}", FILE_SUFFIX, videoCsvPath);
+                    List<VideoData> videoDataList = parseVideoCsv(videoCsvPath);
+                    result.setVideoDataList(videoDataList);
+                    log.info("video-{}解析成功: 共{}条记录", FILE_SUFFIX, videoDataList.size());
+                } else {
+                    log.warn("未找到video-{}文件", FILE_SUFFIX);
+                    result.setVideoDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                log.error("解析video-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                result.setVideoDataList(new ArrayList<>());
+            }
+
+            log.info("所有数据解析完成");
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                log.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                log.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return result;
     }
 
     /**
