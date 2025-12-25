@@ -529,7 +529,7 @@ public class ClientFileProcessor {
 
     /**
      * 解析vMOS数据行
-     * 列顺序：序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、视频体验、交互体验、呈现体验、α、β、vMOS、avgQOE
+     * 列顺序：序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率（s_lost_packet_rate）、卡顿占比（s_stall_rate）、α、β、vMOS、avgQOE
      *
      * @param row 行数据
      * @param evaluator 公式计算器
@@ -550,13 +550,16 @@ public class ClientFileProcessor {
             vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
             vmosData.setInitialBufferingDelay(getCellValue(row.getCell(6), evaluator));
             vmosData.setBitrate(getCellValue(row.getCell(7), evaluator));
-            vmosData.setVideoExperience(getCellValue(row.getCell(8), evaluator));
-            vmosData.setInteractionExperience(getCellValue(row.getCell(9), evaluator));
-            vmosData.setPresentationExperience(getCellValue(row.getCell(10), evaluator));
-            vmosData.setAlpha(getCellValue(row.getCell(11), evaluator));
-            vmosData.setBeta(getCellValue(row.getCell(12), evaluator));
-            vmosData.setVmos(getCellValue(row.getCell(13), evaluator));
-            vmosData.setAvgQoe(getCellValue(row.getCell(14), evaluator));
+            vmosData.setCalculatedResolution(getCellValue(row.getCell(8), evaluator));
+            vmosData.setVideoExperience(getCellValue(row.getCell(9), evaluator));
+            vmosData.setInteractionExperience(getCellValue(row.getCell(10), evaluator));
+            vmosData.setPresentationExperience(getCellValue(row.getCell(11), evaluator));
+            vmosData.setSLostPacketRate(getCellValue(row.getCell(12), evaluator));
+            vmosData.setSStallRate(getCellValue(row.getCell(13), evaluator));
+            vmosData.setAlpha(getCellValue(row.getCell(14), evaluator));
+            vmosData.setBeta(getCellValue(row.getCell(15), evaluator));
+            vmosData.setVmos(getCellValue(row.getCell(16), evaluator));
+            vmosData.setAvgQoe(getCellValue(row.getCell(17), evaluator));
 
             return vmosData;
         } catch (Exception e) {

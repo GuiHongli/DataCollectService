@@ -79,6 +79,12 @@ public class VmosData {
     private String bitrate;
 
     /**
+     * 计算分辨率
+     */
+    @TableField("calculated_resolution")
+    private String calculatedResolution;
+
+    /**
      * 视频体验
      */
     @TableField("video_experience")
