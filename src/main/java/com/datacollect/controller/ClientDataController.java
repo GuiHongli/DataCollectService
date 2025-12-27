@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -212,6 +214,10 @@ public class ClientDataController {
                 return Result.error("设备ID为空");
             }
             
+            // 转换时间格式和时区：从 UTC+8 的 20251027150500 转换为 UTC+0 的 2025-10-27 07:05:00
+            String convertedStartTime = convertTimeFormatAndTimezone(startTime);
+            String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
             // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
             QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
             mappingWrapper.eq("device_id", deviceId);
@@ -259,19 +265,14 @@ public class ClientDataController {
             
             // 4. 通过gpsi、app_service（service+app的组合）、start_time、end_time去network_data表筛选数据
             // 注意：sub_app_id应该对应app_service（service+app的组合）
-            // 时间格式转换：client_task_info的格式是"20251027150500"，需要转换为"2025-10-27 15:05:00"
-            String appService = (app != null ? app : "")+ "_" + (service != null ? service : "");
+            String appService = (service != null ? service : "") + (app != null ? app : "");
             
             QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
             networkWrapper.eq("gpsi", gpsi);
             if (appService != null && !appService.trim().isEmpty()) {
                 networkWrapper.eq("sub_app_id", appService);
             }
-            
-            // 转换时间格式用于查询
-            String convertedStartTime = convertTimeFormat(startTime);
-            String convertedEndTime = convertTimeFormat(endTime);
-            
+            // 使用转换后的时间格式进行查询
             if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
                 networkWrapper.ge("start_time", convertedStartTime);
             }
@@ -330,33 +331,46 @@ public class ClientDataController {
     }
 
     /**
-     * 转换时间格式
-     * 从 "20251027150500" 格式转换为 "2025-10-27 15:05:00" 格式
+     * 转换时间格式和时区
+     * 从 UTC+8 的 20251027150500 (yyyyMMddHHmmss) 转换为 UTC+0 的 2025-10-27 07:05:00 (yyyy-MM-dd HH:mm:ss)
      * 
-     * @param timeStr 原始时间字符串（格式：yyyyMMddHHmmss）
-     * @return 转换后的时间字符串（格式：yyyy-MM-dd HH:mm:ss），如果转换失败返回null
+     * @param timeStr 原始时间字符串（UTC+8时区）
+     * @return 转换后的时间字符串（UTC+0时区），如果转换失败返回null
      */
-    private String convertTimeFormat(String timeStr) {
+    private String convertTimeFormatAndTimezone(String timeStr) {
         if (timeStr == null || timeStr.trim().isEmpty()) {
             return null;
         }
         
         try {
-            // 如果已经是标准格式，直接返回
+            // 如果已经是标准格式，需要先解析时区再转换
             if (timeStr.contains("-") && timeStr.contains(":")) {
-                return timeStr;
+                // 解析为UTC+8时区的ZonedDateTime
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                LocalDateTime localDateTime = LocalDateTime.parse(timeStr, formatter);
+                ZonedDateTime utc8Time = localDateTime.atZone(ZoneId.of("Asia/Shanghai"));
+                // 转换为UTC+0
+                ZonedDateTime utc0Time = utc8Time.withZoneSameInstant(ZoneId.of("UTC"));
+                return utc0Time.format(formatter);
             }
             
-            // 格式：yyyyMMddHHmmss (14位数字)
-            if (timeStr.length() == 14) {
+            // 如果是14位数字格式 (yyyyMMddHHmmss)，假设是UTC+8时区
+            if (timeStr.length() == 14 && timeStr.matches("\\d{14}")) {
                 DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
                 DateTimeFormatter outputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                LocalDateTime dateTime = LocalDateTime.parse(timeStr, inputFormatter);
-                return dateTime.format(outputFormatter);
+                
+                // 解析为UTC+8时区的ZonedDateTime
+                LocalDateTime localDateTime = LocalDateTime.parse(timeStr, inputFormatter);
+                ZonedDateTime utc8Time = localDateTime.atZone(ZoneId.of("Asia/Shanghai"));
+                
+                // 转换为UTC+0时区
+                ZonedDateTime utc0Time = utc8Time.withZoneSameInstant(ZoneId.of("UTC"));
+                
+                return utc0Time.format(outputFormatter);
             }
             
-            // 如果格式不匹配，返回原字符串
-            log.warn("时间格式无法识别: {}", timeStr);
+            // 如果无法识别格式，返回原值
+            log.warn("无法识别的时间格式: {}", timeStr);
             return timeStr;
         } catch (DateTimeParseException e) {
             log.warn("时间格式转换失败: {}, 错误: {}", timeStr, e.getMessage());
