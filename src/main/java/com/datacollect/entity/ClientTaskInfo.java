@@ -91,6 +91,13 @@ public class ClientTaskInfo {
     private String deviceId;
 
     /**
+     * 网络侧开始时间（用户选择的网络侧开始时间，用于速率对比）
+     * 格式：2025-10-27 07:05:00 (UTC+0)
+     */
+    @TableField("network_start_time")
+    private String networkStartTime;
+
+    /**
      * 数据报告（JSON格式）
      * 包含：stunNumber（卡顿次数）、stunRate（卡顿率）、
      * avgUplinkRtt（平均上行RTT）、avgDownlinkRtt（平均下行RTT）、

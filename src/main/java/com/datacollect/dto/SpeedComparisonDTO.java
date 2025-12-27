@@ -25,6 +25,11 @@ public class SpeedComparisonDTO {
     private List<NetworkSpeedData> networkSpeedList;
     
     /**
+     * 当前保存的网络侧开始时间（用户选择的）
+     */
+    private String networkStartTime;
+    
+    /**
      * 端侧速率数据
      */
     @Data
@@ -54,6 +59,11 @@ public class SpeedComparisonDTO {
          * 时间戳
          */
         private String timeStamp;
+        
+        /**
+         * 开始时间（用于选择匹配）
+         */
+        private String startTime;
         
         /**
          * 上行带宽（Kbps，已除以1024）

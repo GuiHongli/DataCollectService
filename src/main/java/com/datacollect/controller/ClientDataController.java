@@ -272,10 +272,19 @@ public class ClientDataController {
             if (appService != null && !appService.trim().isEmpty()) {
                 networkWrapper.eq("sub_app_id", appService);
             }
-            // 使用转换后的时间格式进行查询
-            if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
-                networkWrapper.ge("start_time", convertedStartTime);
+            
+            // 如果用户选择了网络侧开始时间，使用该时间；否则使用转换后的start_time
+            String networkStartTime = taskInfo.getNetworkStartTime();
+            if (networkStartTime != null && !networkStartTime.trim().isEmpty()) {
+                // 使用用户选择的网络侧开始时间
+                networkWrapper.ge("start_time", networkStartTime);
+            } else {
+                // 使用转换后的时间格式进行查询
+                if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
+                    networkWrapper.ge("start_time", convertedStartTime);
+                }
             }
+            
             if (convertedEndTime != null && !convertedEndTime.trim().isEmpty()) {
                 networkWrapper.le("time_stamp", convertedEndTime);
             }
@@ -288,6 +297,7 @@ public class ClientDataController {
                 for (NetworkData networkData : networkDataList) {
                     SpeedComparisonDTO.NetworkSpeedData networkSpeed = new SpeedComparisonDTO.NetworkSpeedData();
                     networkSpeed.setTimeStamp(networkData.getTimeStamp());
+                    networkSpeed.setStartTime(networkData.getStartTime());
                     
                     // 解析uplink_bandwidth和downlink_bandwidth，除以1024转换为Kbps
                     String uplinkStr = networkData.getUplinkBandwidth();
@@ -324,10 +334,51 @@ public class ClientDataController {
             }
             result.setNetworkSpeedList(networkSpeedList);
             
+            // 设置当前保存的网络侧开始时间
+            result.setNetworkStartTime(taskInfo.getNetworkStartTime());
+            
             return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to get speed comparison: {}", e.getMessage(), e);
             return Result.error("获取速率对比数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 更新任务的网络侧开始时间
+     *
+     * @param taskId 任务ID
+     * @param networkStartTime 网络侧开始时间
+     * @return 更新结果
+     */
+    @PutMapping("/network-start-time/{taskId}")
+    public Result<ClientTaskInfo> updateNetworkStartTime(
+            @PathVariable String taskId,
+            @RequestBody Map<String, String> request) {
+        try {
+            String networkStartTime = request.get("networkStartTime");
+            
+            QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskId);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(queryWrapper);
+            
+            if (taskInfo == null) {
+                return Result.error("任务信息不存在");
+            }
+            
+            taskInfo.setNetworkStartTime(networkStartTime);
+            boolean success = taskInfoService.updateById(taskInfo);
+            
+            if (success) {
+                log.info("Network start time updated successfully - taskId: {}, networkStartTime: {}", taskId, networkStartTime);
+                return Result.success(taskInfo);
+            } else {
+                log.error("Failed to update network start time - taskId: {}", taskId);
+                return Result.error("更新失败");
+            }
+        } catch (Exception e) {
+            log.error("Failed to update network start time - taskId: {}, error: {}", taskId, e.getMessage(), e);
+            return Result.error("更新失败: " + e.getMessage());
         }
     }
 
