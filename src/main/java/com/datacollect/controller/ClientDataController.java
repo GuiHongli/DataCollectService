@@ -6,6 +6,9 @@ import com.datacollect.common.Result;
 import com.datacollect.entity.*;
 import com.datacollect.service.*;
 import com.datacollect.dto.SpeedComparisonDTO;
+import com.datacollect.dto.RttComparisonDTO;
+import com.datacollect.dto.StutterComparisonDTO;
+import com.datacollect.dto.AvgQoeComparisonDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -427,6 +430,415 @@ public class ClientDataController {
         } catch (DateTimeParseException e) {
             log.warn("时间格式转换失败: {}, 错误: {}", timeStr, e.getMessage());
             return timeStr;
+        }
+    }
+
+    /**
+     * 获取RTT对比数据
+     * 
+     * @param taskId 任务ID
+     * @return RTT对比数据
+     */
+    @GetMapping("/rtt-comparison/{taskId}")
+    public Result<RttComparisonDTO> getRttComparison(@PathVariable String taskId) {
+        try {
+            RttComparisonDTO result = new RttComparisonDTO();
+            
+            // 1. 通过taskId在client_task_info表获取device_id、service、app、start_time、end_time
+            QueryWrapper<ClientTaskInfo> taskInfoWrapper = new QueryWrapper<>();
+            taskInfoWrapper.eq("task_id", taskId);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(taskInfoWrapper);
+            
+            if (taskInfo == null) {
+                return Result.error("任务信息不存在");
+            }
+            
+            String deviceId = taskInfo.getDeviceId();
+            String service = taskInfo.getService();
+            String app = taskInfo.getApp();
+            String startTime = taskInfo.getStartTime();
+            String endTime = taskInfo.getEndTime();
+            
+            if (deviceId == null || deviceId.trim().isEmpty()) {
+                return Result.error("设备ID为空");
+            }
+            
+            // 转换时间格式和时区
+            String convertedStartTime = convertTimeFormatAndTimezone(startTime);
+            String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
+            // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
+            QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
+            mappingWrapper.eq("device_id", deviceId);
+            TestSettingsDeviceImsiMapping mapping = deviceImsiMappingService.getOne(mappingWrapper);
+            
+            if (mapping == null) {
+                return Result.error("未找到设备ID对应的GPSI映射");
+            }
+            
+            String gpsi = mapping.getGpsi();
+            
+            // 3. 通过taskId在vmos表获取rtt字段（端侧RTT数据），按sequence_number排序
+            QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
+            vmosWrapper.eq("task_id", taskId);
+            vmosWrapper.orderByAsc("sequence_number");
+            List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
+            
+            List<RttComparisonDTO.ClientRttData> clientRttList = new ArrayList<>();
+            if (vmosDataList != null && !vmosDataList.isEmpty()) {
+                for (VmosData vmosData : vmosDataList) {
+                    RttComparisonDTO.ClientRttData clientRtt = new RttComparisonDTO.ClientRttData();
+                    clientRtt.setSequenceNumber(vmosData.getSequenceNumber());
+                    
+                    // 解析rtt字段
+                    String rttStr = vmosData.getRtt();
+                    if (rttStr != null && !rttStr.trim().isEmpty()) {
+                        try {
+                            BigDecimal rtt = new BigDecimal(rttStr);
+                            clientRtt.setRtt(rtt);
+                        } catch (NumberFormatException e) {
+                            log.warn("无法解析rtt字段: {}", rttStr);
+                            clientRtt.setRtt(BigDecimal.ZERO);
+                        }
+                    } else {
+                        clientRtt.setRtt(BigDecimal.ZERO);
+                    }
+                    
+                    clientRtt.setTimeStamp(vmosData.getSequenceNumber());
+                    clientRttList.add(clientRtt);
+                }
+            }
+            result.setClientRttList(clientRttList);
+            
+            // 4. 查询network_data表获取service_delay字段
+            String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
+            
+            QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
+            networkWrapper.eq("gpsi", gpsi);
+            if (appService != null && !appService.trim().isEmpty()) {
+                networkWrapper.eq("sub_app_id", appService);
+            }
+            
+            // 如果用户选择了网络侧开始时间，使用该时间；否则使用转换后的start_time
+            String networkStartTime = taskInfo.getNetworkStartTime();
+            if (networkStartTime != null && !networkStartTime.trim().isEmpty()) {
+                networkWrapper.ge("start_time", networkStartTime);
+            } else {
+                if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
+                    networkWrapper.ge("start_time", convertedStartTime);
+                }
+            }
+            
+            if (convertedEndTime != null && !convertedEndTime.trim().isEmpty()) {
+                networkWrapper.le("time_stamp", convertedEndTime);
+            }
+            networkWrapper.orderByAsc("start_time");
+            List<NetworkData> networkDataList = networkDataService.list(networkWrapper);
+            
+            List<RttComparisonDTO.NetworkRttData> networkRttList = new ArrayList<>();
+            if (networkDataList != null && !networkDataList.isEmpty()) {
+                for (NetworkData networkData : networkDataList) {
+                    RttComparisonDTO.NetworkRttData networkRtt = new RttComparisonDTO.NetworkRttData();
+                    networkRtt.setTimeStamp(networkData.getTimeStamp());
+                    networkRtt.setStartTime(networkData.getStartTime());
+                    
+                    // 解析service_delay字段
+                    String serviceDelayStr = networkData.getServiceDelay();
+                    if (serviceDelayStr != null && !serviceDelayStr.trim().isEmpty()) {
+                        try {
+                            BigDecimal serviceDelay = new BigDecimal(serviceDelayStr);
+                            networkRtt.setServiceDelay(serviceDelay);
+                        } catch (NumberFormatException e) {
+                            log.warn("无法解析service_delay字段: {}", serviceDelayStr);
+                            networkRtt.setServiceDelay(BigDecimal.ZERO);
+                        }
+                    } else {
+                        networkRtt.setServiceDelay(BigDecimal.ZERO);
+                    }
+                    
+                    networkRttList.add(networkRtt);
+                }
+            }
+            result.setNetworkRttList(networkRttList);
+            result.setNetworkStartTime(taskInfo.getNetworkStartTime());
+            
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("Failed to get RTT comparison: {}", e.getMessage(), e);
+            return Result.error("获取RTT对比数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取卡顿对比数据
+     * 
+     * @param taskId 任务ID
+     * @return 卡顿对比数据
+     */
+    @GetMapping("/stutter-comparison/{taskId}")
+    public Result<StutterComparisonDTO> getStutterComparison(@PathVariable String taskId) {
+        try {
+            StutterComparisonDTO result = new StutterComparisonDTO();
+            
+            // 1. 通过taskId在client_task_info表获取device_id、service、app、start_time、end_time
+            QueryWrapper<ClientTaskInfo> taskInfoWrapper = new QueryWrapper<>();
+            taskInfoWrapper.eq("task_id", taskId);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(taskInfoWrapper);
+            
+            if (taskInfo == null) {
+                return Result.error("任务信息不存在");
+            }
+            
+            String deviceId = taskInfo.getDeviceId();
+            String service = taskInfo.getService();
+            String app = taskInfo.getApp();
+            String startTime = taskInfo.getStartTime();
+            String endTime = taskInfo.getEndTime();
+            
+            if (deviceId == null || deviceId.trim().isEmpty()) {
+                return Result.error("设备ID为空");
+            }
+            
+            // 转换时间格式和时区
+            String convertedStartTime = convertTimeFormatAndTimezone(startTime);
+            String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
+            // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
+            QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
+            mappingWrapper.eq("device_id", deviceId);
+            TestSettingsDeviceImsiMapping mapping = deviceImsiMappingService.getOne(mappingWrapper);
+            
+            if (mapping == null) {
+                return Result.error("未找到设备ID对应的GPSI映射");
+            }
+            
+            String gpsi = mapping.getGpsi();
+            
+            // 3. 通过taskId在vmos表获取stutter_ratio字段（端侧卡顿数据），按sequence_number排序
+            QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
+            vmosWrapper.eq("task_id", taskId);
+            vmosWrapper.orderByAsc("sequence_number");
+            List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
+            
+            List<StutterComparisonDTO.ClientStutterData> clientStutterList = new ArrayList<>();
+            if (vmosDataList != null && !vmosDataList.isEmpty()) {
+                for (VmosData vmosData : vmosDataList) {
+                    StutterComparisonDTO.ClientStutterData clientStutter = new StutterComparisonDTO.ClientStutterData();
+                    clientStutter.setSequenceNumber(vmosData.getSequenceNumber());
+                    
+                    // 解析stutter_ratio字段
+                    String stutterRatioStr = vmosData.getStutterRatio();
+                    if (stutterRatioStr != null && !stutterRatioStr.trim().isEmpty()) {
+                        try {
+                            BigDecimal stutterRatio = new BigDecimal(stutterRatioStr);
+                            clientStutter.setStutterRatio(stutterRatio);
+                        } catch (NumberFormatException e) {
+                            log.warn("无法解析stutter_ratio字段: {}", stutterRatioStr);
+                            clientStutter.setStutterRatio(BigDecimal.ZERO);
+                        }
+                    } else {
+                        clientStutter.setStutterRatio(BigDecimal.ZERO);
+                    }
+                    
+                    clientStutter.setTimeStamp(vmosData.getSequenceNumber());
+                    clientStutterList.add(clientStutter);
+                }
+            }
+            result.setClientStutterList(clientStutterList);
+            
+            // 4. 查询network_data表获取stalling_number字段，除以10
+            String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
+            
+            QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
+            networkWrapper.eq("gpsi", gpsi);
+            if (appService != null && !appService.trim().isEmpty()) {
+                networkWrapper.eq("sub_app_id", appService);
+            }
+            
+            // 如果用户选择了网络侧开始时间，使用该时间；否则使用转换后的start_time
+            String networkStartTime = taskInfo.getNetworkStartTime();
+            if (networkStartTime != null && !networkStartTime.trim().isEmpty()) {
+                networkWrapper.ge("start_time", networkStartTime);
+            } else {
+                if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
+                    networkWrapper.ge("start_time", convertedStartTime);
+                }
+            }
+            
+            if (convertedEndTime != null && !convertedEndTime.trim().isEmpty()) {
+                networkWrapper.le("time_stamp", convertedEndTime);
+            }
+            networkWrapper.orderByAsc("start_time");
+            List<NetworkData> networkDataList = networkDataService.list(networkWrapper);
+            
+            List<StutterComparisonDTO.NetworkStutterData> networkStutterList = new ArrayList<>();
+            if (networkDataList != null && !networkDataList.isEmpty()) {
+                for (NetworkData networkData : networkDataList) {
+                    StutterComparisonDTO.NetworkStutterData networkStutter = new StutterComparisonDTO.NetworkStutterData();
+                    networkStutter.setTimeStamp(networkData.getTimeStamp());
+                    networkStutter.setStartTime(networkData.getStartTime());
+                    
+                    // 解析stalling_number字段，除以10
+                    String stallingNumberStr = networkData.getStallingNumber();
+                    if (stallingNumberStr != null && !stallingNumberStr.trim().isEmpty()) {
+                        try {
+                            BigDecimal stallingNumber = new BigDecimal(stallingNumberStr);
+                            // 除以10
+                            networkStutter.setStallingNumberDiv10(stallingNumber.divide(new BigDecimal("10"), 2, RoundingMode.HALF_UP));
+                        } catch (NumberFormatException e) {
+                            log.warn("无法解析stalling_number字段: {}", stallingNumberStr);
+                            networkStutter.setStallingNumberDiv10(BigDecimal.ZERO);
+                        }
+                    } else {
+                        networkStutter.setStallingNumberDiv10(BigDecimal.ZERO);
+                    }
+                    
+                    networkStutterList.add(networkStutter);
+                }
+            }
+            result.setNetworkStutterList(networkStutterList);
+            result.setNetworkStartTime(taskInfo.getNetworkStartTime());
+            
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("Failed to get stutter comparison: {}", e.getMessage(), e);
+            return Result.error("获取卡顿对比数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取平均QOE对比数据
+     * 
+     * @param taskId 任务ID
+     * @return 平均QOE对比数据
+     */
+    @GetMapping("/avg-qoe-comparison/{taskId}")
+    public Result<AvgQoeComparisonDTO> getAvgQoeComparison(@PathVariable String taskId) {
+        try {
+            AvgQoeComparisonDTO result = new AvgQoeComparisonDTO();
+            
+            // 1. 通过taskId在client_task_info表获取device_id、service、app、start_time、end_time
+            QueryWrapper<ClientTaskInfo> taskInfoWrapper = new QueryWrapper<>();
+            taskInfoWrapper.eq("task_id", taskId);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(taskInfoWrapper);
+            
+            if (taskInfo == null) {
+                return Result.error("任务信息不存在");
+            }
+            
+            String deviceId = taskInfo.getDeviceId();
+            String service = taskInfo.getService();
+            String app = taskInfo.getApp();
+            String startTime = taskInfo.getStartTime();
+            String endTime = taskInfo.getEndTime();
+            
+            if (deviceId == null || deviceId.trim().isEmpty()) {
+                return Result.error("设备ID为空");
+            }
+            
+            // 转换时间格式和时区
+            String convertedStartTime = convertTimeFormatAndTimezone(startTime);
+            String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
+            // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
+            QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
+            mappingWrapper.eq("device_id", deviceId);
+            TestSettingsDeviceImsiMapping mapping = deviceImsiMappingService.getOne(mappingWrapper);
+            
+            if (mapping == null) {
+                return Result.error("未找到设备ID对应的GPSI映射");
+            }
+            
+            String gpsi = mapping.getGpsi();
+            
+            // 3. 通过taskId在vmos表获取avg_qoe字段（端侧平均QOE数据），按sequence_number排序
+            QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
+            vmosWrapper.eq("task_id", taskId);
+            vmosWrapper.orderByAsc("sequence_number");
+            List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
+            
+            List<AvgQoeComparisonDTO.ClientAvgQoeData> clientAvgQoeList = new ArrayList<>();
+            if (vmosDataList != null && !vmosDataList.isEmpty()) {
+                for (VmosData vmosData : vmosDataList) {
+                    AvgQoeComparisonDTO.ClientAvgQoeData clientAvgQoe = new AvgQoeComparisonDTO.ClientAvgQoeData();
+                    clientAvgQoe.setSequenceNumber(vmosData.getSequenceNumber());
+                    
+                    // 解析avg_qoe字段
+                    String avgQoeStr = vmosData.getAvgQoe();
+                    if (avgQoeStr != null && !avgQoeStr.trim().isEmpty()) {
+                        try {
+                            BigDecimal avgQoe = new BigDecimal(avgQoeStr);
+                            clientAvgQoe.setAvgQoe(avgQoe);
+                        } catch (NumberFormatException e) {
+                            log.warn("无法解析avg_qoe字段: {}", avgQoeStr);
+                            clientAvgQoe.setAvgQoe(BigDecimal.ZERO);
+                        }
+                    } else {
+                        clientAvgQoe.setAvgQoe(BigDecimal.ZERO);
+                    }
+                    
+                    clientAvgQoe.setTimeStamp(vmosData.getSequenceNumber());
+                    clientAvgQoeList.add(clientAvgQoe);
+                }
+            }
+            result.setClientAvgQoeList(clientAvgQoeList);
+            
+            // 4. 查询network_data表获取avg_qoe字段
+            String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
+            
+            QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
+            networkWrapper.eq("gpsi", gpsi);
+            if (appService != null && !appService.trim().isEmpty()) {
+                networkWrapper.eq("sub_app_id", appService);
+            }
+            
+            // 如果用户选择了网络侧开始时间，使用该时间；否则使用转换后的start_time
+            String networkStartTime = taskInfo.getNetworkStartTime();
+            if (networkStartTime != null && !networkStartTime.trim().isEmpty()) {
+                networkWrapper.ge("start_time", networkStartTime);
+            } else {
+                if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
+                    networkWrapper.ge("start_time", convertedStartTime);
+                }
+            }
+            
+            if (convertedEndTime != null && !convertedEndTime.trim().isEmpty()) {
+                networkWrapper.le("time_stamp", convertedEndTime);
+            }
+            networkWrapper.orderByAsc("start_time");
+            List<NetworkData> networkDataList = networkDataService.list(networkWrapper);
+            
+            List<AvgQoeComparisonDTO.NetworkAvgQoeData> networkAvgQoeList = new ArrayList<>();
+            if (networkDataList != null && !networkDataList.isEmpty()) {
+                for (NetworkData networkData : networkDataList) {
+                    AvgQoeComparisonDTO.NetworkAvgQoeData networkAvgQoe = new AvgQoeComparisonDTO.NetworkAvgQoeData();
+                    networkAvgQoe.setTimeStamp(networkData.getTimeStamp());
+                    networkAvgQoe.setStartTime(networkData.getStartTime());
+                    
+                    // 解析avg_qoe字段
+                    String avgQoeStr = networkData.getAvgQoe();
+                    if (avgQoeStr != null && !avgQoeStr.trim().isEmpty()) {
+                        try {
+                            BigDecimal avgQoe = new BigDecimal(avgQoeStr);
+                            networkAvgQoe.setAvgQoe(avgQoe);
+                        } catch (NumberFormatException e) {
+                            log.warn("无法解析avg_qoe字段: {}", avgQoeStr);
+                            networkAvgQoe.setAvgQoe(BigDecimal.ZERO);
+                        }
+                    } else {
+                        networkAvgQoe.setAvgQoe(BigDecimal.ZERO);
+                    }
+                    
+                    networkAvgQoeList.add(networkAvgQoe);
+                }
+            }
+            result.setNetworkAvgQoeList(networkAvgQoeList);
+            result.setNetworkStartTime(taskInfo.getNetworkStartTime());
+            
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("Failed to get avg QOE comparison: {}", e.getMessage(), e);
+            return Result.error("获取平均QOE对比数据失败: " + e.getMessage());
         }
     }
 }
