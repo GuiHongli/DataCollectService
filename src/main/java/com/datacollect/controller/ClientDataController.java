@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -256,18 +259,24 @@ public class ClientDataController {
             
             // 4. 通过gpsi、app_service（service+app的组合）、start_time、end_time去network_data表筛选数据
             // 注意：sub_app_id应该对应app_service（service+app的组合）
-            String appService = (service != null ? service : "") + (app != null ? app : "");
+            // 时间格式转换：client_task_info的格式是"20251027150500"，需要转换为"2025-10-27 15:05:00"
+            String appService = (app != null ? app : "")+ "_" + (service != null ? service : "");
             
             QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
             networkWrapper.eq("gpsi", gpsi);
             if (appService != null && !appService.trim().isEmpty()) {
                 networkWrapper.eq("sub_app_id", appService);
             }
-            if (startTime != null && !startTime.trim().isEmpty()) {
-                networkWrapper.ge("start_time", startTime);
+            
+            // 转换时间格式用于查询
+            String convertedStartTime = convertTimeFormat(startTime);
+            String convertedEndTime = convertTimeFormat(endTime);
+            
+            if (convertedStartTime != null && !convertedStartTime.trim().isEmpty()) {
+                networkWrapper.ge("start_time", convertedStartTime);
             }
-            if (endTime != null && !endTime.trim().isEmpty()) {
-                networkWrapper.le("time_stamp", endTime);
+            if (convertedEndTime != null && !convertedEndTime.trim().isEmpty()) {
+                networkWrapper.le("time_stamp", convertedEndTime);
             }
             networkWrapper.orderByAsc("time_stamp");
             List<NetworkData> networkDataList = networkDataService.list(networkWrapper);
@@ -317,6 +326,41 @@ public class ClientDataController {
         } catch (Exception e) {
             log.error("Failed to get speed comparison: {}", e.getMessage(), e);
             return Result.error("获取速率对比数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 转换时间格式
+     * 从 "20251027150500" 格式转换为 "2025-10-27 15:05:00" 格式
+     * 
+     * @param timeStr 原始时间字符串（格式：yyyyMMddHHmmss）
+     * @return 转换后的时间字符串（格式：yyyy-MM-dd HH:mm:ss），如果转换失败返回null
+     */
+    private String convertTimeFormat(String timeStr) {
+        if (timeStr == null || timeStr.trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // 如果已经是标准格式，直接返回
+            if (timeStr.contains("-") && timeStr.contains(":")) {
+                return timeStr;
+            }
+            
+            // 格式：yyyyMMddHHmmss (14位数字)
+            if (timeStr.length() == 14) {
+                DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+                DateTimeFormatter outputFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                LocalDateTime dateTime = LocalDateTime.parse(timeStr, inputFormatter);
+                return dateTime.format(outputFormatter);
+            }
+            
+            // 如果格式不匹配，返回原字符串
+            log.warn("时间格式无法识别: {}", timeStr);
+            return timeStr;
+        } catch (DateTimeParseException e) {
+            log.warn("时间格式转换失败: {}, 错误: {}", timeStr, e.getMessage());
+            return timeStr;
         }
     }
 }
