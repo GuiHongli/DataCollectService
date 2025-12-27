@@ -229,10 +229,10 @@ public class ClientDataController {
             
             String gpsi = mapping.getGpsi();
             
-            // 3. 通过taskId在vmos表获取speed字段（端侧速率数据）
+            // 3. 通过taskId在vmos表获取speed字段（端侧速率数据），按sequence_number排序
             QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
             vmosWrapper.eq("task_id", taskId);
-            vmosWrapper.orderByAsc("id");
+            vmosWrapper.orderByAsc("sequence_number");
             List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
             
             List<SpeedComparisonDTO.ClientSpeedData> clientSpeedList = new ArrayList<>();
@@ -265,7 +265,7 @@ public class ClientDataController {
             
             // 4. 通过gpsi、app_service（service+app的组合）、start_time、end_time去network_data表筛选数据
             // 注意：sub_app_id应该对应app_service（service+app的组合）
-            String appService = (service != null ? service : "") + (app != null ? app : "");
+            String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
             
             QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
             networkWrapper.eq("gpsi", gpsi);
@@ -279,7 +279,8 @@ public class ClientDataController {
             if (convertedEndTime != null && !convertedEndTime.trim().isEmpty()) {
                 networkWrapper.le("time_stamp", convertedEndTime);
             }
-            networkWrapper.orderByAsc("time_stamp");
+            // 按start_time排序
+            networkWrapper.orderByAsc("start_time");
             List<NetworkData> networkDataList = networkDataService.list(networkWrapper);
             
             List<SpeedComparisonDTO.NetworkSpeedData> networkSpeedList = new ArrayList<>();
