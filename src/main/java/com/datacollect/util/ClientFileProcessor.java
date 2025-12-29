@@ -1105,6 +1105,7 @@ public class ClientFileProcessor {
      */
     private static List<NetworkData> parseNetworkCsv(Path csvPath) throws IOException {
         List<NetworkData> networkDataList = new ArrayList<>();
+        int filteredCount = 0; // 记录被过滤的数据条数
 
         try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
             String line;
@@ -1133,12 +1134,19 @@ public class ClientFileProcessor {
                 if (values.length > 0) {
                     NetworkData networkData = createNetworkDataFromRow(values, columnIndexMap);
                     if (networkData != null) {
-                        networkDataList.add(networkData);
+                        // 只导入infoIndicate为2的数据
+                        String infoIndicate = networkData.getInfoIndicate();
+                        if (infoIndicate != null && "2".equals(infoIndicate.trim())) {
+                            networkDataList.add(networkData);
+                        } else {
+                            filteredCount++;
+                        }
                     }
                 }
             }
 
-            log.info("解析网络侧CSV完成，共{}条记录", networkDataList.size());
+            log.info("解析网络侧CSV完成，共{}条记录，过滤掉{}条infoIndicate不为2的记录", 
+                    networkDataList.size(), filteredCount);
         } catch (Exception e) {
             log.error("解析网络侧CSV失败: {}", e.getMessage(), e);
             throw new IOException("解析网络侧CSV失败: " + e.getMessage(), e);
