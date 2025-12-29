@@ -36,6 +36,11 @@ import java.util.Map;
 @RequestMapping("/client-data")
 public class ClientDataController {
 
+    /**
+     * 端侧数据时间戳偏移量（三分钟，单位：秒）
+     */
+    private static final long CLIENT_DATA_TIME_OFFSET_SECONDS = 3 * 60; // 3分钟 = 180秒
+
     @Autowired
     private TaskInfoService taskInfoService;
 
@@ -258,8 +263,9 @@ public class ClientDataController {
                         clientSpeed.setSpeed(BigDecimal.ZERO);
                     }
                     
-                    // 使用序号作为时间戳（可以根据实际需求调整）
-                    clientSpeed.setTimeStamp(vmosData.getSequenceNumber());
+                    // 使用序号作为时间戳，并减去三分钟
+                    String convertedTimeStamp = convertClientTimeStamp(vmosData.getSequenceNumber(), startTime);
+                    clientSpeed.setTimeStamp(convertedTimeStamp);
                     
                     clientSpeedList.add(clientSpeed);
                 }
@@ -386,6 +392,77 @@ public class ClientDataController {
     }
 
     /**
+     * 转换端侧数据时间戳，减去三分钟
+     * 
+     * @param sequenceNumber 序号或时间戳字符串
+     * @param startTime 任务开始时间（用于计算序号对应的时间）
+     * @return 转换后的时间戳（减去三分钟），如果无法转换则返回原值
+     */
+    private String convertClientTimeStamp(String sequenceNumber, String startTime) {
+        if (sequenceNumber == null || sequenceNumber.trim().isEmpty()) {
+            return sequenceNumber;
+        }
+        
+        try {
+            // 尝试将sequenceNumber解析为时间格式
+            LocalDateTime baseTime = null;
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            
+            // 如果sequenceNumber是标准时间格式
+            if (sequenceNumber.contains("-") && sequenceNumber.contains(":")) {
+                baseTime = LocalDateTime.parse(sequenceNumber, formatter);
+            }
+            // 如果sequenceNumber是14位数字格式 (yyyyMMddHHmmss)
+            else if (sequenceNumber.length() == 14 && sequenceNumber.matches("\\d{14}")) {
+                DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+                baseTime = LocalDateTime.parse(sequenceNumber, inputFormatter);
+            }
+            // 如果sequenceNumber是数字序号，根据startTime计算
+            else if (sequenceNumber.matches("\\d+")) {
+                // 解析startTime
+                LocalDateTime taskStartTime = null;
+                if (startTime != null && !startTime.trim().isEmpty()) {
+                    if (startTime.contains("-") && startTime.contains(":")) {
+                        taskStartTime = LocalDateTime.parse(startTime, formatter);
+                    } else if (startTime.length() == 14 && startTime.matches("\\d{14}")) {
+                        DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+                        taskStartTime = LocalDateTime.parse(startTime, inputFormatter);
+                    }
+                }
+                
+                if (taskStartTime != null) {
+                    // 假设每个序号间隔10秒（根据vmos-10s.xlsx的命名推测）
+                    int sequence = Integer.parseInt(sequenceNumber);
+                    baseTime = taskStartTime.plusSeconds(sequence * 10L);
+                } else {
+                    // 如果无法解析startTime，返回原值
+                    return sequenceNumber;
+                }
+            }
+            
+            if (baseTime != null) {
+                // 减去三分钟
+                LocalDateTime adjustedTime = baseTime.minusSeconds(CLIENT_DATA_TIME_OFFSET_SECONDS);
+                // 转换为字符串格式（保持原格式）
+                if (sequenceNumber.contains("-") && sequenceNumber.contains(":")) {
+                    return adjustedTime.format(formatter);
+                } else if (sequenceNumber.length() == 14 && sequenceNumber.matches("\\d{14}")) {
+                    DateTimeFormatter outputFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+                    return adjustedTime.format(outputFormatter);
+                } else {
+                    // 如果是序号格式，转换为标准时间格式
+                    return adjustedTime.format(formatter);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("转换端侧数据时间戳失败: {}, 错误: {}", sequenceNumber, e.getMessage());
+        }
+        
+        // 如果无法转换，返回原值
+        return sequenceNumber;
+    }
+
+    /**
      * 转换时间格式和时区
      * 从 UTC+8 的 20251027150500 (yyyyMMddHHmmss) 转换为 UTC+0 的 2025-10-27 07:05:00 (yyyy-MM-dd HH:mm:ss)
      * 
@@ -504,7 +581,9 @@ public class ClientDataController {
                         clientRtt.setRtt(BigDecimal.ZERO);
                     }
                     
-                    clientRtt.setTimeStamp(vmosData.getSequenceNumber());
+                    // 转换时间戳，减去三分钟
+                    String convertedTimeStamp = convertClientTimeStamp(vmosData.getSequenceNumber(), startTime);
+                    clientRtt.setTimeStamp(convertedTimeStamp);
                     clientRttList.add(clientRtt);
                 }
             }
@@ -640,7 +719,9 @@ public class ClientDataController {
                         clientStutter.setStutterRatio(BigDecimal.ZERO);
                     }
                     
-                    clientStutter.setTimeStamp(vmosData.getSequenceNumber());
+                    // 转换时间戳，减去三分钟
+                    String convertedTimeStamp = convertClientTimeStamp(vmosData.getSequenceNumber(), startTime);
+                    clientStutter.setTimeStamp(convertedTimeStamp);
                     clientStutterList.add(clientStutter);
                 }
             }
@@ -777,7 +858,9 @@ public class ClientDataController {
                         clientAvgQoe.setAvgQoe(BigDecimal.ZERO);
                     }
                     
-                    clientAvgQoe.setTimeStamp(vmosData.getSequenceNumber());
+                    // 转换时间戳，减去三分钟
+                    String convertedTimeStamp = convertClientTimeStamp(vmosData.getSequenceNumber(), startTime);
+                    clientAvgQoe.setTimeStamp(convertedTimeStamp);
                     clientAvgQoeList.add(clientAvgQoe);
                 }
             }
