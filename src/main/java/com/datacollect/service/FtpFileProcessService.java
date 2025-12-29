@@ -217,6 +217,8 @@ public class FtpFileProcessService {
             );
 
             if (!downloadSuccess) {
+                log.error("FTP文件下载失败 - fileName: {}, serverAddress: {}, directory: {}, account: {}",
+                        fileName, serverAddress, directory, account);
                 throw new IOException("Failed to download file from FTP server: " + fileName);
             }
 
@@ -885,20 +887,24 @@ public class FtpFileProcessService {
                     result.put("taskInfo", taskInfo);
                     result.put("taskId", taskInfo.getTaskId());
                 } else {
-                    log.warn("未解析到taskinfo.json");
+                    log.warn("未解析到taskinfo.json - fileName: {}", fileName);
+                    result.put("error", "未解析到taskinfo.json");
+                    result.put("success", false);
                 }
             } catch (Exception e) {
-                log.error("Error parsing taskinfo.json: {}", e.getMessage(), e);
-                result.put("error", "解析taskinfo.json失败: " + e.getMessage());
+                log.error("Error parsing client file - fileName: {}, error: {}", fileName, e.getMessage(), e);
+                result.put("success", false);
+                result.put("error", "解析文件失败: " + e.getMessage());
+                // 不抛出异常，返回错误信息给前台
             }
 
             result.put("taskInfoList", taskInfoList);
         } else {
             log.info("文件不是压缩包，跳过解析");
-            result.put("message", "文件不是压缩包，跳过解析");
+            result.put("success", false);
+            result.put("error", "文件不是压缩包，跳过解析");
         }
 
-        result.put("success", true);
         return result;
     }
 

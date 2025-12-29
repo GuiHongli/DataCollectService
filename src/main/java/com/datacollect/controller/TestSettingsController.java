@@ -320,6 +320,13 @@ public class TestSettingsController {
             result.put("fileName", originalFilename);
             result.put("fileSize", file.getSize());
 
+            // 检查解析结果，如果有错误信息，返回错误
+            if (result.containsKey("error") && result.get("error") != null) {
+                String errorMsg = (String) result.get("error");
+                log.error("Client data file parsing failed: {}, error: {}", originalFilename, errorMsg);
+                return Result.error(errorMsg);
+            }
+
             log.info("Client data file processed successfully: {}, result: {}", originalFilename, result);
             return Result.success(result);
 
