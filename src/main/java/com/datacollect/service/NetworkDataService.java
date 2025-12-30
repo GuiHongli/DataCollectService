@@ -29,9 +29,12 @@ public interface NetworkDataService extends IService<NetworkData> {
      * 
      * @param current 当前页
      * @param size 每页大小
+     * @param gpsi GPSI筛选条件（可选）
+     * @param date 日期筛选条件（可选，格式：YYYY-MM-DD）
+     * @param subAppId 子应用ID筛选条件（可选）
      * @return 分页结果
      */
-    Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size);
+    Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size, String gpsi, String date, String subAppId);
 }
 
 

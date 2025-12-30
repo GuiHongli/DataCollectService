@@ -78,14 +78,20 @@ public class NetworkDataController {
      *
      * @param current 当前页
      * @param size 每页大小
+     * @param gpsi GPSI筛选条件（可选）
+     * @param date 日期筛选条件（可选，格式：YYYY-MM-DD）
+     * @param subAppId 子应用ID筛选条件（可选）
      * @return 分页结果
      */
     @GetMapping("/group/page")
     public Result<Page<NetworkDataGroupDTO>> getGroupedNetworkDataPage(
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "10") Integer size) {
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String gpsi,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String subAppId) {
         try {
-            Page<NetworkDataGroupDTO> result = networkDataService.getGroupedNetworkDataPage(current, size);
+            Page<NetworkDataGroupDTO> result = networkDataService.getGroupedNetworkDataPage(current, size, gpsi, date, subAppId);
             return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to get grouped network data page: {}", e.getMessage(), e);

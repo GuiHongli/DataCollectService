@@ -123,9 +123,9 @@ public class NetworkDataServiceImpl extends ServiceImpl<NetworkDataMapper, Netwo
     }
 
     @Override
-    public Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size) {
+    public Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size, String gpsi, String date, String subAppId) {
         Page<NetworkDataGroupDTO> page = new Page<>(current, size);
-        return baseMapper.selectGroupedNetworkDataPage(page);
+        return baseMapper.selectGroupedNetworkDataPage(page, gpsi, date, subAppId);
     }
 }
 

@@ -22,9 +22,13 @@ public interface NetworkDataMapper extends BaseMapper<NetworkData> {
      * 使用LEFT函数提取前10个字符作为日期部分
      * 
      * @param page 分页对象
+     * @param gpsi GPSI筛选条件（可选）
+     * @param date 日期筛选条件（可选，格式：YYYY-MM-DD）
+     * @param subAppId 子应用ID筛选条件（可选）
      * @return 分页结果
      */
-    @Select("SELECT " +
+    @Select("<script>" +
+            "SELECT " +
             "gpsi, " +
             "LEFT(start_time, 10) as date, " +
             "sub_app_id as subAppId, " +
@@ -36,9 +40,23 @@ public interface NetworkDataMapper extends BaseMapper<NetworkData> {
             "AND start_time != '' " +
             "AND sub_app_id IS NOT NULL " +
             "AND sub_app_id != '' " +
+            "<if test='gpsi != null and gpsi != \"\"'>" +
+            "AND gpsi = #{gpsi} " +
+            "</if>" +
+            "<if test='date != null and date != \"\"'>" +
+            "AND LEFT(start_time, 10) = #{date} " +
+            "</if>" +
+            "<if test='subAppId != null and subAppId != \"\"'>" +
+            "AND sub_app_id = #{subAppId} " +
+            "</if>" +
             "GROUP BY gpsi, LEFT(start_time, 10), sub_app_id " +
-            "ORDER BY date DESC, gpsi, sub_app_id")
-    Page<NetworkDataGroupDTO> selectGroupedNetworkDataPage(Page<NetworkDataGroupDTO> page);
+            "ORDER BY date DESC, gpsi, sub_app_id" +
+            "</script>")
+    Page<NetworkDataGroupDTO> selectGroupedNetworkDataPage(
+            Page<NetworkDataGroupDTO> page,
+            @org.apache.ibatis.annotations.Param("gpsi") String gpsi,
+            @org.apache.ibatis.annotations.Param("date") String date,
+            @org.apache.ibatis.annotations.Param("subAppId") String subAppId);
 }
 
 
