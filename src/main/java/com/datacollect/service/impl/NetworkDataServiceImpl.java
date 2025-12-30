@@ -1,7 +1,9 @@
 package com.datacollect.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.datacollect.dto.NetworkDataGroupDTO;
 import com.datacollect.entity.NetworkData;
 import com.datacollect.mapper.NetworkDataMapper;
 import com.datacollect.service.NetworkDataService;
@@ -118,6 +120,12 @@ public class NetworkDataServiceImpl extends ServiceImpl<NetworkDataMapper, Netwo
         // 查询是否存在记录
         long count = count(queryWrapper);
         return count > 0;
+    }
+
+    @Override
+    public Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size) {
+        Page<NetworkDataGroupDTO> page = new Page<>(current, size);
+        return baseMapper.selectGroupedNetworkDataPage(page);
     }
 }
 

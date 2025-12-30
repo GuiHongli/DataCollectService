@@ -3,6 +3,7 @@ package com.datacollect.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
+import com.datacollect.dto.NetworkDataGroupDTO;
 import com.datacollect.entity.NetworkData;
 import com.datacollect.service.NetworkDataService;
 import lombok.extern.slf4j.Slf4j;
@@ -68,6 +69,26 @@ public class NetworkDataController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("Failed to get network data page: {}", e.getMessage(), e);
+            return Result.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 分页查询网络侧数据聚合（按GPSI+日期+子应用ID分组）
+     *
+     * @param current 当前页
+     * @param size 每页大小
+     * @return 分页结果
+     */
+    @GetMapping("/group/page")
+    public Result<Page<NetworkDataGroupDTO>> getGroupedNetworkDataPage(
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size) {
+        try {
+            Page<NetworkDataGroupDTO> result = networkDataService.getGroupedNetworkDataPage(current, size);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("Failed to get grouped network data page: {}", e.getMessage(), e);
             return Result.error("查询失败: " + e.getMessage());
         }
     }
