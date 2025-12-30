@@ -242,6 +242,11 @@ public class ClientDataController {
             // 3. 通过taskId在vmos表获取speed字段（端侧速率数据），按sequence_number排序
             QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
             vmosWrapper.eq("task_id", taskId);
+            // 如果用户选择了端侧开始序号，从该序号开始查询
+            Integer clientStartSequence = taskInfo.getClientStartSequence();
+            if (clientStartSequence != null) {
+                vmosWrapper.ge("sequence_number", clientStartSequence);
+            }
             vmosWrapper.orderByAsc("sequence_number");
             List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
             
@@ -344,8 +349,9 @@ public class ClientDataController {
             }
             result.setNetworkSpeedList(networkSpeedList);
             
-            // 设置当前保存的网络侧开始时间
+            // 设置当前保存的网络侧开始时间和端侧开始序号
             result.setNetworkStartTime(taskInfo.getNetworkStartTime());
+            result.setClientStartSequence(taskInfo.getClientStartSequence());
             
             return Result.success(result);
         } catch (Exception e) {
@@ -364,9 +370,26 @@ public class ClientDataController {
     @PutMapping("/network-start-time/{taskId}")
     public Result<ClientTaskInfo> updateNetworkStartTime(
             @PathVariable String taskId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, Object> request) {
         try {
-            String networkStartTime = request.get("networkStartTime");
+            String networkStartTime = request.get("networkStartTime") != null ? 
+                    request.get("networkStartTime").toString() : null;
+            Object clientStartSequenceObj = request.get("clientStartSequence");
+            Integer clientStartSequence = null;
+            if (clientStartSequenceObj != null) {
+                if (clientStartSequenceObj instanceof Integer) {
+                    clientStartSequence = (Integer) clientStartSequenceObj;
+                } else if (clientStartSequenceObj instanceof String) {
+                    String seqStr = ((String) clientStartSequenceObj).trim();
+                    if (!seqStr.isEmpty()) {
+                        try {
+                            clientStartSequence = Integer.parseInt(seqStr);
+                        } catch (NumberFormatException e) {
+                            log.warn("Invalid clientStartSequence format: {}", seqStr);
+                        }
+                    }
+                }
+            }
             
             QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("task_id", taskId);
@@ -376,18 +399,24 @@ public class ClientDataController {
                 return Result.error("任务信息不存在");
             }
             
-            taskInfo.setNetworkStartTime(networkStartTime);
+            if (networkStartTime != null) {
+                taskInfo.setNetworkStartTime(networkStartTime);
+            }
+            if (clientStartSequenceObj != null) {
+                taskInfo.setClientStartSequence(clientStartSequence);
+            }
             boolean success = taskInfoService.updateById(taskInfo);
             
             if (success) {
-                log.info("Network start time updated successfully - taskId: {}, networkStartTime: {}", taskId, networkStartTime);
+                log.info("Network start time and client start sequence updated successfully - taskId: {}, networkStartTime: {}, clientStartSequence: {}", 
+                        taskId, networkStartTime, clientStartSequence);
                 return Result.success(taskInfo);
             } else {
-                log.error("Failed to update network start time - taskId: {}", taskId);
+                log.error("Failed to update network start time and client start sequence - taskId: {}", taskId);
                 return Result.error("更新失败");
             }
         } catch (Exception e) {
-            log.error("Failed to update network start time - taskId: {}, error: {}", taskId, e.getMessage(), e);
+            log.error("Failed to update network start time and client start sequence - taskId: {}, error: {}", taskId, e.getMessage(), e);
             return Result.error("更新失败: " + e.getMessage());
         }
     }
@@ -495,6 +524,11 @@ public class ClientDataController {
             // 3. 通过taskId在vmos表获取rtt字段（端侧RTT数据），按sequence_number排序
             QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
             vmosWrapper.eq("task_id", taskId);
+            // 如果用户选择了端侧开始序号，从该序号开始查询
+            Integer clientStartSequence = taskInfo.getClientStartSequence();
+            if (clientStartSequence != null) {
+                vmosWrapper.ge("sequence_number", clientStartSequence);
+            }
             vmosWrapper.orderByAsc("sequence_number");
             List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
             
@@ -631,6 +665,11 @@ public class ClientDataController {
             // 3. 通过taskId在vmos表获取stutter_ratio字段（端侧卡顿数据），按sequence_number排序
             QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
             vmosWrapper.eq("task_id", taskId);
+            // 如果用户选择了端侧开始序号，从该序号开始查询
+            Integer clientStartSequence = taskInfo.getClientStartSequence();
+            if (clientStartSequence != null) {
+                vmosWrapper.ge("sequence_number", clientStartSequence);
+            }
             vmosWrapper.orderByAsc("sequence_number");
             List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
             
@@ -768,6 +807,11 @@ public class ClientDataController {
             // 3. 通过taskId在vmos表获取avg_qoe字段（端侧平均QOE数据），按sequence_number排序
             QueryWrapper<VmosData> vmosWrapper = new QueryWrapper<>();
             vmosWrapper.eq("task_id", taskId);
+            // 如果用户选择了端侧开始序号，从该序号开始查询
+            Integer clientStartSequence = taskInfo.getClientStartSequence();
+            if (clientStartSequence != null) {
+                vmosWrapper.ge("sequence_number", clientStartSequence);
+            }
             vmosWrapper.orderByAsc("sequence_number");
             List<VmosData> vmosDataList = vmosDataService.list(vmosWrapper);
             

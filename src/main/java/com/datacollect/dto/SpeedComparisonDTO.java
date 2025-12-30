@@ -30,6 +30,11 @@ public class SpeedComparisonDTO {
     private String networkStartTime;
     
     /**
+     * 当前保存的端侧开始序号（用户选择的）
+     */
+    private Integer clientStartSequence;
+    
+    /**
      * 端侧速率数据
      */
     @Data

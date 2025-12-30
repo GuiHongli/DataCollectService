@@ -30,6 +30,11 @@ public class RttComparisonDTO {
     private String networkStartTime;
     
     /**
+     * 当前保存的端侧开始序号（用户选择的）
+     */
+    private Integer clientStartSequence;
+    
+    /**
      * 端侧RTT数据
      */
     @Data
@@ -71,6 +76,7 @@ public class RttComparisonDTO {
         private BigDecimal serviceDelay;
     }
 }
+
 
 
 

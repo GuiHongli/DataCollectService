@@ -98,6 +98,13 @@ public class ClientTaskInfo {
     private String networkStartTime;
 
     /**
+     * 端侧开始序号（用户选择的端侧开始序号，用于端网数据对比）
+     * 查询端侧数据时，从该序号开始查询
+     */
+    @TableField("client_start_sequence")
+    private Integer clientStartSequence;
+
+    /**
      * 数据报告（JSON格式）
      * 包含：stunNumber（卡顿次数）、stunRate（卡顿率）、
      * avgUplinkRtt（平均上行RTT）、avgDownlinkRtt（平均下行RTT）、

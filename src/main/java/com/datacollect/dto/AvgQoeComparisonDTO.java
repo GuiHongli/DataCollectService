@@ -30,6 +30,11 @@ public class AvgQoeComparisonDTO {
     private String networkStartTime;
     
     /**
+     * 当前保存的端侧开始序号（用户选择的）
+     */
+    private Integer clientStartSequence;
+    
+    /**
      * 端侧平均QOE数据
      */
     @Data
@@ -71,6 +76,7 @@ public class AvgQoeComparisonDTO {
         private BigDecimal avgQoe;
     }
 }
+
 
 
 
