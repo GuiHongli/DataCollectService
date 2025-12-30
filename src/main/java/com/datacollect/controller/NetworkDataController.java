@@ -26,13 +26,13 @@ public class NetworkDataController {
 
     /**
      * 分页查询网络侧数据
-     * 支持按 gpsi、time_stamp、start_time、sub_app_id 查询
+     * 支持按 gpsi、start_time 范围、sub_app_id 查询
      *
      * @param current 当前页
      * @param size 每页大小
      * @param gpsi GPSI（可选，用于搜索）
-     * @param timeStamp 时间戳（可选，用于搜索）
-     * @param startTime 开始时间（可选，用于搜索）
+     * @param startTimeBegin 开始时间范围-开始（可选，用于搜索，格式：YYYY-MM-DD HH:mm:ss）
+     * @param startTimeEnd 开始时间范围-结束（可选，用于搜索，格式：YYYY-MM-DD HH:mm:ss）
      * @param subAppId 子应用ID（可选，用于搜索）
      * @return 分页结果
      */
@@ -41,8 +41,8 @@ public class NetworkDataController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String gpsi,
-            @RequestParam(required = false) String timeStamp,
-            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String startTimeBegin,
+            @RequestParam(required = false) String startTimeEnd,
             @RequestParam(required = false) String subAppId) {
         try {
             Page<NetworkData> page = new Page<>(current, size);
@@ -52,11 +52,12 @@ public class NetworkDataController {
             if (gpsi != null && !gpsi.trim().isEmpty()) {
                 queryWrapper.eq("gpsi", gpsi);
             }
-            if (timeStamp != null && !timeStamp.trim().isEmpty()) {
-                queryWrapper.eq("time_stamp", timeStamp);
+            // 开始时间范围查询：start_time >= startTimeBegin AND start_time <= startTimeEnd
+            if (startTimeBegin != null && !startTimeBegin.trim().isEmpty()) {
+                queryWrapper.ge("start_time", startTimeBegin);
             }
-            if (startTime != null && !startTime.trim().isEmpty()) {
-                queryWrapper.eq("start_time", startTime);
+            if (startTimeEnd != null && !startTimeEnd.trim().isEmpty()) {
+                queryWrapper.le("start_time", startTimeEnd);
             }
             if (subAppId != null && !subAppId.trim().isEmpty()) {
                 queryWrapper.eq("sub_app_id", subAppId);
