@@ -11,6 +11,8 @@ import com.datacollect.service.FtpFileProcessService;
 import com.datacollect.service.TestSettingsClientFtpService;
 import com.datacollect.service.TestSettingsDeviceImsiMappingService;
 import com.datacollect.service.TestSettingsNetworkFtpService;
+import com.datacollect.service.TestSettingsTimeConfigService;
+import com.datacollect.entity.TestSettingsTimeConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -46,6 +48,28 @@ public class TestSettingsController {
 
     @Autowired
     private FtpFileProcessService ftpFileProcessService;
+
+    @Autowired
+    private TestSettingsTimeConfigService timeConfigService;
+
+    // ========== 端侧和网络侧时间配置 ==========
+    
+    @GetMapping("/time-config")
+    public Result<TestSettingsTimeConfig> getTimeConfig() {
+        TestSettingsTimeConfig config = timeConfigService.getTimeConfig();
+        return Result.success(config);
+    }
+
+    @PostMapping("/time-config")
+    public Result<TestSettingsTimeConfig> saveOrUpdateTimeConfig(@Valid @RequestBody TestSettingsTimeConfig config) {
+        boolean success = timeConfigService.saveOrUpdateTimeConfig(config);
+        if (success) {
+            TestSettingsTimeConfig saved = timeConfigService.getTimeConfig();
+            return Result.success(saved);
+        } else {
+            return Result.error("保存失败");
+        }
+    }
 
     // ========== 端侧FTP服务器配置 ==========
     
