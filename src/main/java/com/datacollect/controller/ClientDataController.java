@@ -67,6 +67,9 @@ public class ClientDataController {
     @Autowired
     private TestSettingsDeviceImsiMappingService deviceImsiMappingService;
 
+    @Autowired
+    private TestSettingsTimeConfigService timeConfigService;
+
     /**
      * 分页查询端侧任务信息列表（倒序）
      *
@@ -227,6 +230,11 @@ public class ClientDataController {
             // 转换时间格式和时区：从 UTC+8 的 20251027150500 转换为 UTC+0 的 2025-10-27 07:05:00
             String convertedStartTime = convertTimeFormatAndTimezone(startTime);
             String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
+            // 获取时间配置，调整开始时间和结束时间
+            int timeDiff = getTimeDiff();
+            convertedStartTime = adjustTime(convertedStartTime, -timeDiff); // 开始时间向前增加（减去分钟）
+            convertedEndTime = adjustTime(convertedEndTime, timeDiff); // 结束时间向后增加（加上分钟）
             
             // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
             QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
@@ -422,6 +430,48 @@ public class ClientDataController {
     }
 
     /**
+     * 获取时间差配置
+     * 从test_settings_time_config表获取端侧匹配网络侧时间差，如果没有配置则返回默认值3分钟
+     * 
+     * @return 时间差（分钟）
+     */
+    private int getTimeDiff() {
+        try {
+            TestSettingsTimeConfig timeConfig = timeConfigService.getTimeConfig();
+            if (timeConfig != null && timeConfig.getTimeDiff() != null) {
+                return timeConfig.getTimeDiff();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get time config, using default value: {}", e.getMessage());
+        }
+        // 默认返回3分钟
+        return 3;
+    }
+
+    /**
+     * 调整时间（增加或减少指定分钟数）
+     * 
+     * @param timeStr 时间字符串（格式：yyyy-MM-dd HH:mm:ss）
+     * @param minutes 要调整的分钟数（正数表示向后增加，负数表示向前减少）
+     * @return 调整后的时间字符串，如果调整失败返回原值
+     */
+    private String adjustTime(String timeStr, int minutes) {
+        if (timeStr == null || timeStr.trim().isEmpty()) {
+            return timeStr;
+        }
+        
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            LocalDateTime dateTime = LocalDateTime.parse(timeStr, formatter);
+            LocalDateTime adjustedDateTime = dateTime.plusMinutes(minutes);
+            return adjustedDateTime.format(formatter);
+        } catch (DateTimeParseException e) {
+            log.warn("Time adjustment failed: {}, error: {}", timeStr, e.getMessage());
+            return timeStr;
+        }
+    }
+
+    /**
      * 转换时间格式和时区
      * 从 UTC+8 的 20251027150500 (yyyyMMddHHmmss) 转换为 UTC+0 的 2025-10-27 07:05:00 (yyyy-MM-dd HH:mm:ss)
      * 转换后需要减去三分钟（CLIENT_DATA_TIME_OFFSET）
@@ -509,6 +559,11 @@ public class ClientDataController {
             // 转换时间格式和时区
             String convertedStartTime = convertTimeFormatAndTimezone(startTime);
             String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
+            // 获取时间配置，调整开始时间和结束时间
+            int timeDiff = getTimeDiff();
+            convertedStartTime = adjustTime(convertedStartTime, -timeDiff); // 开始时间向前增加（减去分钟）
+            convertedEndTime = adjustTime(convertedEndTime, timeDiff); // 结束时间向后增加（加上分钟）
             
             // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
             QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
@@ -651,6 +706,11 @@ public class ClientDataController {
             String convertedStartTime = convertTimeFormatAndTimezone(startTime);
             String convertedEndTime = convertTimeFormatAndTimezone(endTime);
             
+            // 获取时间配置，调整开始时间和结束时间
+            int timeDiff = getTimeDiff();
+            convertedStartTime = adjustTime(convertedStartTime, -timeDiff); // 开始时间向前增加（减去分钟）
+            convertedEndTime = adjustTime(convertedEndTime, timeDiff); // 结束时间向后增加（加上分钟）
+            
             // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
             QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
             mappingWrapper.eq("device_id", deviceId);
@@ -792,6 +852,11 @@ public class ClientDataController {
             // 转换时间格式和时区
             String convertedStartTime = convertTimeFormatAndTimezone(startTime);
             String convertedEndTime = convertTimeFormatAndTimezone(endTime);
+            
+            // 获取时间配置，调整开始时间和结束时间
+            int timeDiff = getTimeDiff();
+            convertedStartTime = adjustTime(convertedStartTime, -timeDiff); // 开始时间向前增加（减去分钟）
+            convertedEndTime = adjustTime(convertedEndTime, timeDiff); // 结束时间向后增加（加上分钟）
             
             // 2. 通过device_id去test_settings_device_imsi_mapping表获取gpsi
             QueryWrapper<TestSettingsDeviceImsiMapping> mappingWrapper = new QueryWrapper<>();
