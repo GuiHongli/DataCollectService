@@ -14,3 +14,4 @@ import org.apache.ibatis.annotations.Mapper;
 public interface TestSettingsTimeConfigMapper extends BaseMapper<TestSettingsTimeConfig> {
 }
 
+

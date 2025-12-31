@@ -37,12 +37,6 @@ import java.util.Map;
 @RequestMapping("/client-data")
 public class ClientDataController {
 
-    /**
-     * 端侧数据时间偏移量：三分钟
-     * 在转换端侧数据的start_time和end_time时，需要减去三分钟
-     */
-    private static final Duration CLIENT_DATA_TIME_OFFSET = Duration.ofMinutes(3);
-
     @Autowired
     private TaskInfoService taskInfoService;
 
@@ -474,10 +468,9 @@ public class ClientDataController {
     /**
      * 转换时间格式和时区
      * 从 UTC+8 的 20251027150500 (yyyyMMddHHmmss) 转换为 UTC+0 的 2025-10-27 07:05:00 (yyyy-MM-dd HH:mm:ss)
-     * 转换后需要减去三分钟（CLIENT_DATA_TIME_OFFSET）
      * 
      * @param timeStr 原始时间字符串（UTC+8时区）
-     * @return 转换后的时间字符串（UTC+0时区，已减去三分钟），如果转换失败返回null
+     * @return 转换后的时间字符串（UTC+0时区），如果转换失败返回null
      */
     private String convertTimeFormatAndTimezone(String timeStr) {
         if (timeStr == null || timeStr.trim().isEmpty()) {
@@ -513,10 +506,9 @@ public class ClientDataController {
                 return timeStr;
             }
             
-            // 减去三分钟
+            // 直接返回转换后的时间，不再减去三分钟
             if (utc0Time != null) {
-                ZonedDateTime adjustedTime = utc0Time.minus(CLIENT_DATA_TIME_OFFSET);
-                return adjustedTime.format(outputFormatter);
+                return utc0Time.format(outputFormatter);
             }
             
             return timeStr;

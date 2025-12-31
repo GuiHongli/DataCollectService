@@ -11,3 +11,4 @@ CREATE TABLE IF NOT EXISTS `test_settings_time_config` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='端侧和网络侧时间配置表';
 
+

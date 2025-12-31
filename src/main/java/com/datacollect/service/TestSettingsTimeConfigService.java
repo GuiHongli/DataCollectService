@@ -22,3 +22,4 @@ public interface TestSettingsTimeConfigService extends IService<TestSettingsTime
   boolean saveOrUpdateTimeConfig(TestSettingsTimeConfig config);
 }
 
+
