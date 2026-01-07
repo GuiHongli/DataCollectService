@@ -1,4 +1,4 @@
-package com.datacollect.mapper;
+ package com.datacollect.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -37,7 +37,8 @@ public interface NetworkDataMapper extends BaseMapper<NetworkData> {
             "WHERE deleted = 0 " +
             "AND gpsi IS NOT NULL " +
             "AND start_time IS NOT NULL " +
-            "AND start_time != '' " +
+            "AND LENGTH(TRIM(start_time)) >= 10 " +
+            "AND LEFT(start_time, 10) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' " +
             "AND sub_app_id IS NOT NULL " +
             "AND sub_app_id != '' " +
             "<if test='gpsi != null and gpsi != \"\"'>" +
@@ -50,7 +51,7 @@ public interface NetworkDataMapper extends BaseMapper<NetworkData> {
             "AND sub_app_id = #{subAppId} " +
             "</if>" +
             "GROUP BY gpsi, LEFT(start_time, 10), sub_app_id " +
-            "ORDER BY date DESC, gpsi, sub_app_id" +
+            "ORDER BY LEFT(start_time, 10) DESC, gpsi ASC, sub_app_id ASC" +
             "</script>")
     Page<NetworkDataGroupDTO> selectGroupedNetworkDataPage(
             Page<NetworkDataGroupDTO> page,
