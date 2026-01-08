@@ -19,4 +19,28 @@ public interface UeService extends IService<Ue> {
      * 获取用于下拉选择的UE选项（包含详细信息）
      */
     List<Map<String, Object>> getUeOptionsForSelect();
+    
+    /**
+     * 标记UE为使用中
+     * 
+     * @param ueIds UE ID列表
+     * @return 是否成功
+     */
+    boolean markUesInUse(List<Long> ueIds);
+    
+    /**
+     * 标记UE为可用（未使用）
+     * 
+     * @param ueIds UE ID列表
+     * @return 是否成功
+     */
+    boolean markUesAvailable(List<Long> ueIds);
+    
+    /**
+     * 检查UE是否可用（未使用中且状态为可用）
+     * 
+     * @param ueIds UE ID列表
+     * @return 不可用的UE ID列表
+     */
+    List<Long> checkUesAvailability(List<Long> ueIds);
 }

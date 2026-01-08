@@ -26,3 +26,4 @@ public class NetworkElementDTO {
     private List<NetworkElementAttribute> attributes;
 }
 
+

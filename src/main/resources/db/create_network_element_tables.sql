@@ -36,3 +36,4 @@ CREATE TABLE IF NOT EXISTS `network_element_attribute` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网元属性表';
 
+

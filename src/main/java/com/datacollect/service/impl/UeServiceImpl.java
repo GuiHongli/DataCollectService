@@ -10,6 +10,8 @@ import com.datacollect.enums.UeBrandEnum;
 import com.datacollect.mapper.UeMapper;
 import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.UeService;
+import com.datacollect.service.CollectTaskProcessService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,11 +21,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeService {
 
     @Autowired
     private NetworkTypeService networkTypeService;
+    
+    @Autowired(required = false)
+    private CollectTaskProcessService collectTaskProcessService;
 
     @Override
     public Page<UeDTO> getUePageWithNetworkType(Integer current, Integer size, String name, String ueId, String purpose, Long networkTypeId) {
@@ -183,5 +189,87 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             ue.getUeId(), 
             ue.getPurpose());
         option.put("displayName", displayName);
+    }
+    
+    @Override
+    public boolean markUesInUse(List<Long> ueIds) {
+        if (ueIds == null || ueIds.isEmpty()) {
+            return true;
+        }
+        
+        try {
+            for (Long ueId : ueIds) {
+                Ue ue = getById(ueId);
+                if (ue != null) {
+                    ue.setInUse(1);
+                    updateById(ue);
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("标记UE为使用中失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            return false;
+        }
+    }
+    
+    @Override
+    public boolean markUesAvailable(List<Long> ueIds) {
+        if (ueIds == null || ueIds.isEmpty()) {
+            return true;
+        }
+        
+        try {
+            for (Long ueId : ueIds) {
+                Ue ue = getById(ueId);
+                if (ue != null) {
+                    ue.setInUse(0);
+                    updateById(ue);
+                }
+            }
+            
+            // 通知任务处理服务处理排队任务
+            if (collectTaskProcessService instanceof com.datacollect.service.impl.CollectTaskProcessServiceImpl) {
+                try {
+                    ((com.datacollect.service.impl.CollectTaskProcessServiceImpl) collectTaskProcessService)
+                        .processQueuedTasksAfterUeAvailable(ueIds);
+                } catch (Exception e) {
+                    log.warn("通知任务处理服务处理排队任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage());
+                }
+            }
+            
+            return true;
+        } catch (Exception e) {
+            log.error("标记UE为可用失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            return false;
+        }
+    }
+    
+    @Override
+    public List<Long> checkUesAvailability(List<Long> ueIds) {
+        List<Long> unavailableUeIds = new ArrayList<>();
+        
+        if (ueIds == null || ueIds.isEmpty()) {
+            return unavailableUeIds;
+        }
+        
+        try {
+            List<Ue> ues = listByIds(ueIds);
+            for (Ue ue : ues) {
+                if (ue == null) {
+                    continue;
+                }
+                // 检查UE是否可用：状态为可用(1)且未使用中(0)
+                if (ue.getStatus() == null || ue.getStatus() != 1 || 
+                    (ue.getInUse() != null && ue.getInUse() == 1)) {
+                    unavailableUeIds.add(ue.getId());
+                }
+            }
+        } catch (Exception e) {
+            log.error("检查UE可用性失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            // 如果检查失败，将所有UE标记为不可用，以确保安全
+            unavailableUeIds.addAll(ueIds);
+        }
+        
+        return unavailableUeIds;
     }
 }

@@ -14,3 +14,4 @@ import org.apache.ibatis.annotations.Mapper;
 public interface NetworkElementMapper extends BaseMapper<NetworkElement> {
 }
 
+

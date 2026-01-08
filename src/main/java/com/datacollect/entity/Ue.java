@@ -47,6 +47,12 @@ public class Ue {
     @TableField("status")
     private Integer status; // 0: 不可用, 1: 可用
 
+    /**
+     * 是否正在使用中 (0: 未使用, 1: 使用中)
+     */
+    @TableField("in_use")
+    private Integer inUse;
+
     @TableField("create_by")
     private String createBy;
 

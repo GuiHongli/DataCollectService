@@ -39,6 +39,9 @@ import com.alibaba.fastjson.JSON;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.HashSet;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -113,6 +116,44 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      * 用于存储任务级别的用例配置（执行次数和自定义参数）
      */
     private final java.util.concurrent.ConcurrentHashMap<Long, Map<Long, TestCaseConfig>> testCaseConfigCache = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    /**
+     * 任务队列：按逻辑环境ID分组，存储等待执行的任务
+     */
+    private final Map<Long, BlockingQueue<QueuedTask>> taskQueues = new ConcurrentHashMap<>();
+    
+    /**
+     * 排队任务信息
+     */
+    private static class QueuedTask {
+        private final String taskId;
+        private final List<TestCaseExecutionInstance> instances;
+        private final Long logicEnvironmentId;
+        private final long queueTime;
+        
+        public QueuedTask(String taskId, List<TestCaseExecutionInstance> instances, Long logicEnvironmentId) {
+            this.taskId = taskId;
+            this.instances = instances;
+            this.logicEnvironmentId = logicEnvironmentId;
+            this.queueTime = System.currentTimeMillis();
+        }
+        
+        public String getTaskId() {
+            return taskId;
+        }
+        
+        public List<TestCaseExecutionInstance> getInstances() {
+            return instances;
+        }
+        
+        public Long getLogicEnvironmentId() {
+            return logicEnvironmentId;
+        }
+        
+        public long getQueueTime() {
+            return queueTime;
+        }
+    }
     
     /**
      * 用例配置内部类
@@ -1173,6 +1214,15 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = buildTestCaseList(instances);
             // 获取逻辑环境绑定的UE信息
             List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
+            
+            // 检查UE是否可用
+            if (!checkAndHandleUeAvailability(ueList, logicEnvironmentId)) {
+                log.warn("UE不可用，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, taskId);
+                // 将任务加入队列，等待UE可用
+                addTaskToQueue(logicEnvironmentId, instances, taskId);
+                return false; // 返回false表示任务未立即执行，已加入队列
+            }
+            
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
             
@@ -2102,5 +2152,212 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         return appIsNewMap;
+    }
+    
+    /**
+     * 检查UE是否可用，如果不可用则标记逻辑环境为不可用
+     * 
+     * @param ueList UE信息列表
+     * @param logicEnvironmentId 逻辑环境ID
+     * @return true表示UE可用，false表示UE不可用
+     */
+    private boolean checkAndHandleUeAvailability(List<TestCaseExecutionRequest.UeInfo> ueList, Long logicEnvironmentId) {
+        if (ueList == null || ueList.isEmpty()) {
+            log.warn("UE列表为空，无法检查可用性 - 逻辑环境ID: {}", logicEnvironmentId);
+            return false;
+        }
+        
+        // 提取UE ID列表
+        List<Long> ueIds = new ArrayList<>();
+        for (TestCaseExecutionRequest.UeInfo ueInfo : ueList) {
+            if (ueInfo.getId() != null) {
+                ueIds.add(ueInfo.getId());
+            }
+        }
+        
+        if (ueIds.isEmpty()) {
+            log.warn("UE ID列表为空，无法检查可用性 - 逻辑环境ID: {}", logicEnvironmentId);
+            return false;
+        }
+        
+        // 检查UE是否可用
+        List<Long> unavailableUeIds = ueService.checkUesAvailability(ueIds);
+        
+        if (!unavailableUeIds.isEmpty()) {
+            log.warn("部分UE不可用 - 逻辑环境ID: {}, 不可用UE IDs: {}", logicEnvironmentId, unavailableUeIds);
+            // 标记逻辑环境为不可用
+            LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+            if (logicEnvironment != null) {
+                logicEnvironment.setStatus(0); // 0: 不可用
+                logicEnvironmentService.updateById(logicEnvironment);
+                log.info("逻辑环境已标记为不可用 - 逻辑环境ID: {}", logicEnvironmentId);
+            }
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 将任务加入队列，等待UE可用
+     * 
+     * @param logicEnvironmentId 逻辑环境ID
+     * @param instances 执行实例列表
+     * @param taskId 任务ID
+     */
+    private void addTaskToQueue(Long logicEnvironmentId, List<TestCaseExecutionInstance> instances, String taskId) {
+        try {
+            // 获取或创建该逻辑环境的任务队列
+            BlockingQueue<QueuedTask> queue = taskQueues.computeIfAbsent(logicEnvironmentId, k -> new LinkedBlockingQueue<>());
+            
+            // 创建排队任务
+            QueuedTask queuedTask = new QueuedTask(taskId, instances, logicEnvironmentId);
+            
+            // 加入队列
+            queue.offer(queuedTask);
+            log.info("任务已加入队列 - 逻辑环境ID: {}, 任务ID: {}, 队列大小: {}", logicEnvironmentId, taskId, queue.size());
+            
+            // 启动异步任务处理队列（如果还没有启动）
+            startQueueProcessor(logicEnvironmentId);
+            
+        } catch (Exception e) {
+            log.error("将任务加入队列失败 - 逻辑环境ID: {}, 任务ID: {}, 错误: {}", logicEnvironmentId, taskId, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 启动队列处理器，异步处理排队任务
+     * 
+     * @param logicEnvironmentId 逻辑环境ID
+     */
+    private void startQueueProcessor(Long logicEnvironmentId) {
+        // 使用CompletableFuture异步处理队列
+        CompletableFuture.runAsync(() -> {
+            BlockingQueue<QueuedTask> queue = taskQueues.get(logicEnvironmentId);
+            if (queue == null) {
+                return;
+            }
+            
+            while (!queue.isEmpty()) {
+                try {
+                    QueuedTask queuedTask = queue.peek(); // 查看队列头部任务，不取出
+                    if (queuedTask == null) {
+                        break;
+                    }
+                    
+                    // 检查UE是否可用
+                    List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
+                    if (checkUeAvailabilityForQueue(ueList, logicEnvironmentId)) {
+                        // UE可用，取出任务并执行
+                        QueuedTask task = queue.poll();
+                        if (task != null) {
+                            log.info("从队列中取出任务执行 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, task.getTaskId());
+                            // 重新执行任务创建流程
+                            createExecutionTaskForLogicEnvironment(logicEnvironmentId, task.getInstances());
+                        }
+                    } else {
+                        // UE不可用，等待一段时间后重试
+                        Thread.sleep(5000); // 等待5秒后重试
+                    }
+                    
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("队列处理器被中断 - 逻辑环境ID: {}", logicEnvironmentId);
+                    break;
+                } catch (Exception e) {
+                    log.error("处理队列任务失败 - 逻辑环境ID: {}, 错误: {}", logicEnvironmentId, e.getMessage(), e);
+                    // 发生错误时，等待一段时间后继续
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        });
+    }
+    
+    /**
+     * 检查UE是否可用（用于队列处理，不更新逻辑环境状态）
+     * 
+     * @param ueList UE信息列表
+     * @param logicEnvironmentId 逻辑环境ID
+     * @return true表示UE可用，false表示UE不可用
+     */
+    private boolean checkUeAvailabilityForQueue(List<TestCaseExecutionRequest.UeInfo> ueList, Long logicEnvironmentId) {
+        if (ueList == null || ueList.isEmpty()) {
+            return false;
+        }
+        
+        // 提取UE ID列表
+        List<Long> ueIds = new ArrayList<>();
+        for (TestCaseExecutionRequest.UeInfo ueInfo : ueList) {
+            if (ueInfo.getId() != null) {
+                ueIds.add(ueInfo.getId());
+            }
+        }
+        
+        if (ueIds.isEmpty()) {
+            return false;
+        }
+        
+        // 检查UE是否可用
+        List<Long> unavailableUeIds = ueService.checkUesAvailability(ueIds);
+        
+        return unavailableUeIds.isEmpty();
+    }
+    
+    /**
+     * 处理UE状态更新后的队列任务
+     * 当UE从使用中变为可用时，检查是否有排队任务需要执行
+     * 
+     * @param ueIds 更新的UE ID列表
+     */
+    public void processQueuedTasksAfterUeAvailable(List<Long> ueIds) {
+        if (ueIds == null || ueIds.isEmpty()) {
+            return;
+        }
+        
+        try {
+            // 查找包含这些UE的逻辑环境
+            QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+            ueQuery.in("ue_id", ueIds);
+            List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+            
+            if (logicEnvironmentUes.isEmpty()) {
+                return;
+            }
+            
+            // 获取所有相关的逻辑环境ID
+            Set<Long> logicEnvironmentIds = logicEnvironmentUes.stream()
+                    .map(LogicEnvironmentUe::getLogicEnvironmentId)
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            // 为每个逻辑环境启动队列处理器
+            for (Long logicEnvironmentId : logicEnvironmentIds) {
+                BlockingQueue<QueuedTask> queue = taskQueues.get(logicEnvironmentId);
+                if (queue != null && !queue.isEmpty()) {
+                    log.info("UE可用，检查排队任务 - 逻辑环境ID: {}, 队列大小: {}", logicEnvironmentId, queue.size());
+                    
+                    // 检查UE是否可用，如果可用则恢复逻辑环境状态
+                    List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
+                    if (checkUeAvailabilityForQueue(ueList, logicEnvironmentId)) {
+                        // UE可用，恢复逻辑环境状态
+                        LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+                        if (logicEnvironment != null && logicEnvironment.getStatus() != null && logicEnvironment.getStatus() == 0) {
+                            logicEnvironment.setStatus(1); // 1: 可用
+                            logicEnvironmentService.updateById(logicEnvironment);
+                            log.info("逻辑环境已恢复为可用 - 逻辑环境ID: {}", logicEnvironmentId);
+                        }
+                    }
+                    
+                    startQueueProcessor(logicEnvironmentId);
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("处理UE可用后的队列任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+        }
     }
 }
