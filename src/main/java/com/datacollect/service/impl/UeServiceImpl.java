@@ -11,6 +11,10 @@ import com.datacollect.mapper.UeMapper;
 import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.UeService;
 import com.datacollect.service.CollectTaskProcessService;
+import com.datacollect.service.LogicEnvironmentService;
+import com.datacollect.service.LogicEnvironmentUeService;
+import com.datacollect.entity.LogicEnvironment;
+import com.datacollect.entity.LogicEnvironmentUe;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -32,6 +36,12 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     @Lazy
     @Autowired(required = false)
     private CollectTaskProcessService collectTaskProcessService;
+    
+    @Autowired
+    private LogicEnvironmentService logicEnvironmentService;
+    
+    @Autowired
+    private LogicEnvironmentUeService logicEnvironmentUeService;
 
     @Override
     public Page<UeDTO> getUePageWithNetworkType(Integer current, Integer size, String name, String ueId, String purpose, Long networkTypeId) {
@@ -200,15 +210,17 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
         }
         
         try {
-            // 将Integer转换为Long（因为实体ID是Long类型）
-            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
-            for (Long ueId : longUeIds) {
+            for (Integer ueId : ueIds) {
                 Ue ue = getById(ueId);
                 if (ue != null) {
                     ue.setInUse(1);
                     updateById(ue);
                 }
             }
+            
+            // 更新相关逻辑环境状态为禁用
+            updateLogicEnvironmentStatusAfterUeInUse(ueIds);
+            
             return true;
         } catch (Exception e) {
             log.error("标记UE为使用中失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
@@ -223,9 +235,7 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
         }
         
         try {
-            // 将Integer转换为Long（因为实体ID是Long类型）
-            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
-            for (Long ueId : longUeIds) {
+            for (Integer ueId : ueIds) {
                 Ue ue = getById(ueId);
                 if (ue != null) {
                     ue.setInUse(0);
@@ -233,11 +243,14 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
                 }
             }
             
+            // 更新相关逻辑环境状态为可用
+            updateLogicEnvironmentStatusAfterUeAvailable(ueIds);
+            
             // 通知任务处理服务处理排队任务
             if (collectTaskProcessService instanceof com.datacollect.service.impl.CollectTaskProcessServiceImpl) {
                 try {
                     ((com.datacollect.service.impl.CollectTaskProcessServiceImpl) collectTaskProcessService)
-                        .processQueuedTasksAfterUeAvailable(longUeIds);
+                        .processQueuedTasksAfterUeAvailable(ueIds);
                 } catch (Exception e) {
                     log.warn("通知任务处理服务处理排队任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage());
                 }
@@ -279,5 +292,120 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
         }
         
         return unavailableUeIds;
+    }
+    
+    /**
+     * 当UE使用中时，更新相关逻辑环境状态为禁用
+     * 
+     * @param ueIds UE ID列表
+     */
+    private void updateLogicEnvironmentStatusAfterUeInUse(List<Integer> ueIds) {
+        if (ueIds == null || ueIds.isEmpty()) {
+            return;
+        }
+        
+        try {
+            // 将Integer转换为Long（因为数据库字段是Long类型）
+            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
+            
+            // 查找包含这些UE的逻辑环境
+            QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+            ueQuery.in("ue_id", longUeIds);
+            List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+            
+            if (logicEnvironmentUes.isEmpty()) {
+                return;
+            }
+            
+            // 获取所有相关的逻辑环境ID
+            java.util.Set<Long> logicEnvironmentIds = logicEnvironmentUes.stream()
+                    .map(LogicEnvironmentUe::getLogicEnvironmentId)
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            // 更新所有相关逻辑环境状态为禁用
+            for (Long logicEnvironmentId : logicEnvironmentIds) {
+                try {
+                    LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+                    if (logicEnvironment != null && logicEnvironment.getStatus() != null && logicEnvironment.getStatus() == 1) {
+                        logicEnvironment.setStatus(0); // 0: 禁用
+                        logicEnvironmentService.updateById(logicEnvironment);
+                        log.info("UE使用中，逻辑环境已更新为禁用 - 逻辑环境ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
+                    }
+                } catch (Exception e) {
+                    log.warn("更新逻辑环境状态失败 - 逻辑环境ID: {}, 错误: {}", logicEnvironmentId, e.getMessage());
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("更新逻辑环境状态失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 当UE可用后，更新相关逻辑环境状态为可用
+     * 
+     * @param ueIds UE ID列表
+     */
+    private void updateLogicEnvironmentStatusAfterUeAvailable(List<Integer> ueIds) {
+        if (ueIds == null || ueIds.isEmpty()) {
+            return;
+        }
+        
+        try {
+            // 将Integer转换为Long（因为数据库字段是Long类型）
+            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
+            
+            // 查找包含这些UE的逻辑环境
+            QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
+            ueQuery.in("ue_id", longUeIds);
+            List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
+            
+            if (logicEnvironmentUes.isEmpty()) {
+                return;
+            }
+            
+            // 获取所有相关的逻辑环境ID
+            java.util.Set<Long> logicEnvironmentIds = logicEnvironmentUes.stream()
+                    .map(LogicEnvironmentUe::getLogicEnvironmentId)
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            // 检查每个逻辑环境的所有UE是否都可用
+            for (Long logicEnvironmentId : logicEnvironmentIds) {
+                try {
+                    // 获取该逻辑环境关联的所有UE
+                    QueryWrapper<LogicEnvironmentUe> envQuery = new QueryWrapper<>();
+                    envQuery.eq("logic_environment_id", logicEnvironmentId);
+                    List<LogicEnvironmentUe> envUes = logicEnvironmentUeService.list(envQuery);
+                    
+                    if (envUes.isEmpty()) {
+                        continue;
+                    }
+                    
+                    // 获取所有UE ID
+                    List<Long> allUeIds = envUes.stream()
+                            .map(LogicEnvironmentUe::getUeId)
+                            .collect(java.util.stream.Collectors.toList());
+                    
+                    // 检查所有UE是否都可用（状态为可用且未使用中）
+                    List<Integer> allUeIdsInteger = allUeIds.stream().map(Long::intValue).collect(java.util.stream.Collectors.toList());
+                    List<Integer> unavailableUeIds = checkUesAvailability(allUeIdsInteger);
+                    
+                    // 如果所有UE都可用，则更新逻辑环境状态为可用
+                    if (unavailableUeIds.isEmpty()) {
+                        LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
+                        if (logicEnvironment != null && logicEnvironment.getStatus() != null && logicEnvironment.getStatus() == 0) {
+                            logicEnvironment.setStatus(1); // 1: 可用
+                            logicEnvironmentService.updateById(logicEnvironment);
+                            log.info("UE可用后，逻辑环境已更新为可用 - 逻辑环境ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("更新逻辑环境状态失败 - 逻辑环境ID: {}, 错误: {}", logicEnvironmentId, e.getMessage());
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("更新逻辑环境状态失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+        }
     }
 }
