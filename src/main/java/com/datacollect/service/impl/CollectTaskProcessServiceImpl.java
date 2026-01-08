@@ -2168,11 +2168,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return false;
         }
         
-        // 提取UE ID列表
-        List<Long> ueIds = new ArrayList<>();
+        // 提取UE ID列表（转换为Integer）
+        List<Integer> ueIds = new ArrayList<>();
         for (TestCaseExecutionRequest.UeInfo ueInfo : ueList) {
             if (ueInfo.getId() != null) {
-                ueIds.add(ueInfo.getId());
+                ueIds.add(ueInfo.getId().intValue());
             }
         }
         
@@ -2182,7 +2182,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         // 检查UE是否可用
-        List<Long> unavailableUeIds = ueService.checkUesAvailability(ueIds);
+        List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
         
         if (!unavailableUeIds.isEmpty()) {
             log.warn("部分UE不可用 - 逻辑环境ID: {}, 不可用UE IDs: {}", logicEnvironmentId, unavailableUeIds);
@@ -2291,11 +2291,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return false;
         }
         
-        // 提取UE ID列表
-        List<Long> ueIds = new ArrayList<>();
+        // 提取UE ID列表（转换为Integer）
+        List<Integer> ueIds = new ArrayList<>();
         for (TestCaseExecutionRequest.UeInfo ueInfo : ueList) {
             if (ueInfo.getId() != null) {
-                ueIds.add(ueInfo.getId());
+                ueIds.add(ueInfo.getId().intValue());
             }
         }
         
@@ -2304,7 +2304,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         // 检查UE是否可用
-        List<Long> unavailableUeIds = ueService.checkUesAvailability(ueIds);
+        List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
         
         return unavailableUeIds.isEmpty();
     }
@@ -2313,7 +2313,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      * 处理UE状态更新后的队列任务
      * 当UE从使用中变为可用时，检查是否有排队任务需要执行
      * 
-     * @param ueIds 更新的UE ID列表
+     * @param ueIds 更新的UE ID列表（Long类型，因为从UeServiceImpl传入）
      */
     public void processQueuedTasksAfterUeAvailable(List<Long> ueIds) {
         if (ueIds == null || ueIds.isEmpty()) {

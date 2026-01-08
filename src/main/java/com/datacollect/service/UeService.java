@@ -26,7 +26,7 @@ public interface UeService extends IService<Ue> {
      * @param ueIds UE ID列表
      * @return 是否成功
      */
-    boolean markUesInUse(List<Long> ueIds);
+    boolean markUesInUse(List<Integer> ueIds);
     
     /**
      * 标记UE为可用（未使用）
@@ -34,7 +34,7 @@ public interface UeService extends IService<Ue> {
      * @param ueIds UE ID列表
      * @return 是否成功
      */
-    boolean markUesAvailable(List<Long> ueIds);
+    boolean markUesAvailable(List<Integer> ueIds);
     
     /**
      * 检查UE是否可用（未使用中且状态为可用）
@@ -42,5 +42,5 @@ public interface UeService extends IService<Ue> {
      * @param ueIds UE ID列表
      * @return 不可用的UE ID列表
      */
-    List<Long> checkUesAvailability(List<Long> ueIds);
+    List<Integer> checkUesAvailability(List<Integer> ueIds);
 }

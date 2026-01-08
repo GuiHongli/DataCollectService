@@ -194,13 +194,15 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     }
     
     @Override
-    public boolean markUesInUse(List<Long> ueIds) {
+    public boolean markUesInUse(List<Integer> ueIds) {
         if (ueIds == null || ueIds.isEmpty()) {
             return true;
         }
         
         try {
-            for (Long ueId : ueIds) {
+            // 将Integer转换为Long（因为实体ID是Long类型）
+            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
+            for (Long ueId : longUeIds) {
                 Ue ue = getById(ueId);
                 if (ue != null) {
                     ue.setInUse(1);
@@ -215,13 +217,15 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     }
     
     @Override
-    public boolean markUesAvailable(List<Long> ueIds) {
+    public boolean markUesAvailable(List<Integer> ueIds) {
         if (ueIds == null || ueIds.isEmpty()) {
             return true;
         }
         
         try {
-            for (Long ueId : ueIds) {
+            // 将Integer转换为Long（因为实体ID是Long类型）
+            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
+            for (Long ueId : longUeIds) {
                 Ue ue = getById(ueId);
                 if (ue != null) {
                     ue.setInUse(0);
@@ -233,7 +237,7 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             if (collectTaskProcessService instanceof com.datacollect.service.impl.CollectTaskProcessServiceImpl) {
                 try {
                     ((com.datacollect.service.impl.CollectTaskProcessServiceImpl) collectTaskProcessService)
-                        .processQueuedTasksAfterUeAvailable(ueIds);
+                        .processQueuedTasksAfterUeAvailable(longUeIds);
                 } catch (Exception e) {
                     log.warn("通知任务处理服务处理排队任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage());
                 }
@@ -247,15 +251,17 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     }
     
     @Override
-    public List<Long> checkUesAvailability(List<Long> ueIds) {
-        List<Long> unavailableUeIds = new ArrayList<>();
+    public List<Integer> checkUesAvailability(List<Integer> ueIds) {
+        List<Integer> unavailableUeIds = new ArrayList<>();
         
         if (ueIds == null || ueIds.isEmpty()) {
             return unavailableUeIds;
         }
         
         try {
-            List<Ue> ues = listByIds(ueIds);
+            // 将Integer转换为Long（因为实体ID是Long类型）
+            List<Long> longUeIds = ueIds.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
+            List<Ue> ues = listByIds(longUeIds);
             for (Ue ue : ues) {
                 if (ue == null) {
                     continue;
@@ -263,7 +269,7 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
                 // 检查UE是否可用：状态为可用(1)且未使用中(0)
                 if (ue.getStatus() == null || ue.getStatus() != 1 || 
                     (ue.getInUse() != null && ue.getInUse() == 1)) {
-                    unavailableUeIds.add(ue.getId());
+                    unavailableUeIds.add(ue.getId().intValue());
                 }
             }
         } catch (Exception e) {

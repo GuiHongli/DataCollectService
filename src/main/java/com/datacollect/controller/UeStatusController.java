@@ -34,7 +34,7 @@ public class UeStatusController {
     public Result<Map<String, Object>> markUesInUse(@RequestBody Map<String, Object> request) {
         try {
             @SuppressWarnings("unchecked")
-            List<Long> ueIds = (List<Long>) request.get("ueIds");
+            List<Integer> ueIds = (List<Integer>) request.get("ueIds");
             
             if (ueIds == null || ueIds.isEmpty()) {
                 return Result.error("UE ID列表不能为空");
@@ -67,7 +67,7 @@ public class UeStatusController {
     public Result<Map<String, Object>> markUesAvailable(@RequestBody Map<String, Object> request) {
         try {
             @SuppressWarnings("unchecked")
-            List<Long> ueIds = (List<Long>) request.get("ueIds");
+            List<Integer> ueIds = (List<Integer>) request.get("ueIds");
             
             if (ueIds == null || ueIds.isEmpty()) {
                 return Result.error("UE ID列表不能为空");
