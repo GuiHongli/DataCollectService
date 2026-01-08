@@ -1791,11 +1791,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         log.info("Calling CaseExecuteService via HTTP - URL: {}, task ID: {}", caseExecuteServiceUrl, taskId);
         
         try {
-            ResponseEntity<Map> response = httpClientUtil.post(caseExecuteServiceUrl, request, Map.class);
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            org.springframework.http.HttpEntity<Object> entity = new org.springframework.http.HttpEntity<>(request, headers);
             
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> result = (Map<String, Object>) response.getBody();
+            ResponseEntity<Map> response = restTemplate.postForEntity(caseExecuteServiceUrl, entity, Map.class);
+            
+            int statusCode = response.getStatusCode().value();
+            if (statusCode >= 200 && statusCode < 300) {
+                Map body = response.getBody();
+                if (body != null) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> result = (Map<String, Object>) body;
                 Integer code = (Integer) result.get("code");
                 
                 if (code != null && code == 200) {
