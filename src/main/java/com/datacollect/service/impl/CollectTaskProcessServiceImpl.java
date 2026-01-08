@@ -1793,8 +1793,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         try {
             ResponseEntity<Map> response = httpClientUtil.post(caseExecuteServiceUrl, request, Map.class);
             
-            int statusCode = response.getStatusCode().value();
-            if (statusCode >= 200 && statusCode < 300 && response.getBody() != null) {
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> result = (Map<String, Object>) response.getBody();
                 Integer code = (Integer) result.get("code");
