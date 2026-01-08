@@ -45,6 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -1790,11 +1791,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         log.info("Calling CaseExecuteService via HTTP - URL: {}, task ID: {}", caseExecuteServiceUrl, taskId);
         
         try {
-            org.springframework.http.ResponseEntity<Map> response = 
-                httpClientUtil.post(caseExecuteServiceUrl, request, Map.class);
+            ResponseEntity<Map> response = httpClientUtil.post(caseExecuteServiceUrl, request, Map.class);
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Map<String, Object> result = response.getBody();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> result = (Map<String, Object>) response.getBody();
                 Integer code = (Integer) result.get("code");
                 
                 if (code != null && code == 200) {
