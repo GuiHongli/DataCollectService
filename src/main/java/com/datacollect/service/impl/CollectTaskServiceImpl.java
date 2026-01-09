@@ -45,6 +45,10 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         CollectTask collectTask = new CollectTask();
         collectTask.setName(request.getName());
         collectTask.setDescription(request.getDescription());
+        // 将网元ID列表转换为JSON字符串存储
+        if (request.getNetworkElementIds() != null && !request.getNetworkElementIds().isEmpty()) {
+            collectTask.setNetworkElementIds(com.alibaba.fastjson.JSON.toJSONString(request.getNetworkElementIds()));
+        }
         collectTask.setCollectStrategyId(request.getCollectStrategyId());
         collectTask.setCollectStrategyName(strategy.getName());
         collectTask.setTestCaseSetId(strategy.getTestCaseSetId());

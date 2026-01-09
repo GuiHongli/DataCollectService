@@ -27,6 +27,11 @@ public class CollectTaskRequest {
     private String description;
     
     /**
+     * 网元ID列表（可选）
+     */
+    private List<Long> networkElementIds;
+    
+    /**
      * 采集策略ID
      */
     @NotNull(message = "采集策略ID不能为空")

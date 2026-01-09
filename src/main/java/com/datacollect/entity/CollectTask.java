@@ -35,6 +35,12 @@ public class CollectTask {
     private String description;
     
     /**
+     * 网元ID列表（JSON格式，如：[1,2,3]）
+     */
+    @TableField("network_element_id")
+    private String networkElementIds;
+    
+    /**
      * 采集策略ID
      */
     @TableField("collect_strategy_id")

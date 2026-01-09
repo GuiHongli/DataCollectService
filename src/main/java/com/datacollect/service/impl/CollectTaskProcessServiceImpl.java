@@ -20,6 +20,7 @@ import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.LogicEnvironmentUeService;
 import com.datacollect.service.UeService;
 import com.datacollect.service.NetworkTypeService;
+import com.datacollect.service.NetworkElementService;
 import com.datacollect.service.ExternalApiService;
 import com.datacollect.service.ExecutorWebSocketService;
 import com.datacollect.entity.LogicEnvironmentUe;
@@ -104,6 +105,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     
     @Autowired
     private NetworkTypeService networkTypeService;
+    
+    @Autowired
+    private NetworkElementService networkElementService;
     
     @Autowired
     private ExternalApiService externalApiService;
@@ -1229,9 +1233,23 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
             
+            // 获取采集任务的网元ID列表
+            List<Long> networkElementIds = null;
+            if (!instances.isEmpty()) {
+                Long collectTaskId = instances.get(0).getCollectTaskId();
+                CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                if (collectTask != null && collectTask.getNetworkElementIds() != null && !collectTask.getNetworkElementIds().trim().isEmpty()) {
+                    try {
+                        networkElementIds = com.alibaba.fastjson.JSON.parseArray(collectTask.getNetworkElementIds(), Long.class);
+                    } catch (Exception e) {
+                        log.warn("Failed to parse network element IDs from JSON - Task ID: {}, Error: {}", collectTaskId, e.getMessage());
+                    }
+                }
+            }
+            
             logExecutorInfo(executorIp, ueList, collectStrategyInfo, testCaseSetInfo.getCollectStrategyId());
             
-            TestCaseExecutionRequest request = buildExecutionRequest(taskId, executorIp, testCaseSetInfo, testCaseList, ueList, collectStrategyInfo, taskCustomParams);
+            TestCaseExecutionRequest request = buildExecutionRequest(taskId, executorIp, testCaseSetInfo, testCaseList, ueList, collectStrategyInfo, taskCustomParams, networkElementIds);
             return sendExecutionRequest(request, instances, taskId, executorIp);
             
         } catch (Exception e) {
@@ -1684,7 +1702,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private TestCaseExecutionRequest buildExecutionRequest(String taskId, String executorIp, TestCaseSetInfo testCaseSetInfo, 
             List<TestCaseExecutionRequest.TestCaseInfo> testCaseList, List<TestCaseExecutionRequest.UeInfo> ueList, 
-            TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, String taskCustomParams) {
+            TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, String taskCustomParams, List<Long> networkElementIds) {
         
         TestCaseExecutionRequest request = new TestCaseExecutionRequest();
         request.setTaskId(taskId);
@@ -1696,6 +1714,45 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         request.setCollectStrategyInfo(collectStrategyInfo);
         request.setTaskCustomParams(taskCustomParams);
         request.setResultReportUrl(dataCollectServiceBaseUrl + "/api/test-result/report");
+        
+        // 设置网元信息列表
+        if (networkElementIds != null && !networkElementIds.isEmpty()) {
+            List<TestCaseExecutionRequest.NetworkElementInfo> networkElementInfoList = new ArrayList<>();
+            for (Long networkElementId : networkElementIds) {
+                try {
+                    com.datacollect.dto.NetworkElementDTO networkElementDTO = networkElementService.getNetworkElementWithAttributes(networkElementId);
+                    if (networkElementDTO != null && networkElementDTO.getNetworkElement() != null) {
+                        TestCaseExecutionRequest.NetworkElementInfo networkElementInfo = new TestCaseExecutionRequest.NetworkElementInfo();
+                        networkElementInfo.setId(networkElementDTO.getNetworkElement().getId());
+                        networkElementInfo.setName(networkElementDTO.getNetworkElement().getName());
+                        networkElementInfo.setDescription(networkElementDTO.getNetworkElement().getDescription());
+                        networkElementInfo.setStatus(networkElementDTO.getNetworkElement().getStatus());
+                        
+                        // 设置网元属性
+                        if (networkElementDTO.getAttributes() != null && !networkElementDTO.getAttributes().isEmpty()) {
+                            List<TestCaseExecutionRequest.NetworkElementInfo.AttributeInfo> attributeInfos = new ArrayList<>();
+                            for (com.datacollect.entity.NetworkElementAttribute attribute : networkElementDTO.getAttributes()) {
+                                TestCaseExecutionRequest.NetworkElementInfo.AttributeInfo attrInfo = new TestCaseExecutionRequest.NetworkElementInfo.AttributeInfo();
+                                attrInfo.setName(attribute.getAttributeName());
+                                attrInfo.setValue(attribute.getAttributeValue());
+                                attributeInfos.add(attrInfo);
+                            }
+                            networkElementInfo.setAttributes(attributeInfos);
+                        }
+                        
+                        networkElementInfoList.add(networkElementInfo);
+                        log.info("Network element information added to execution request - Network element ID: {}, Name: {}", 
+                                networkElementId, networkElementDTO.getNetworkElement().getName());
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to get network element information - Network element ID: {}, Error: {}", networkElementId, e.getMessage());
+                }
+            }
+            if (!networkElementInfoList.isEmpty()) {
+                request.setNetworkElementInfoList(networkElementInfoList);
+                log.info("Network element information list added to execution request - Count: {}", networkElementInfoList.size());
+            }
+        }
         
         // 使用gohttpserver地址作为日志上报URL，这样CaseExecuteService就可以上传日志文件到gohttpserver
         String goHttpServerUrl = extractGoHttpServerUrl(testCaseSetInfo.getTestCaseSetPath());
