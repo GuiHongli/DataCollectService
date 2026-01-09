@@ -45,6 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -97,6 +98,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     @Autowired
     private LogicEnvironmentUeService logicEnvironmentUeService;
     
+    @Lazy
     @Autowired
     private UeService ueService;
     
@@ -2315,7 +2317,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      * 
      * @param ueIds 更新的UE ID列表（Long类型，因为从UeServiceImpl传入）
      */
-    public void processQueuedTasksAfterUeAvailable(List<Long> ueIds) {
+    public void processQueuedTasksAfterUeAvailable(List<Integer> ueIds) {
         if (ueIds == null || ueIds.isEmpty()) {
             return;
         }
