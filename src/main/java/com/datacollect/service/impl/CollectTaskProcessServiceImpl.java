@@ -110,6 +110,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private NetworkElementService networkElementService;
     
     @Autowired
+    private com.datacollect.service.RegionService regionService;
+    
+    @Autowired
     private ExternalApiService externalApiService;
     
     @Autowired
@@ -1233,11 +1236,13 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
             
-            // 获取采集任务的网元ID列表
+            // 获取采集任务的网元ID列表、任务名称、任务描述、网络信息
             List<Long> networkElementIds = null;
+            CollectTask collectTask = null;
+            String network = null;
             if (!instances.isEmpty()) {
                 Long collectTaskId = instances.get(0).getCollectTaskId();
-                CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                collectTask = collectTaskService.getCollectTaskById(collectTaskId);
                 if (collectTask != null && collectTask.getNetworkElementIds() != null && !collectTask.getNetworkElementIds().trim().isEmpty()) {
                     try {
                         networkElementIds = com.alibaba.fastjson.JSON.parseArray(collectTask.getNetworkElementIds(), Long.class);
@@ -1247,9 +1252,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 }
             }
             
+            // 获取执行机城市信息（拼音）
+            String executorCityPinyin = getExecutorCityPinyin(executorIp);
+            
+            // 获取网络信息（从逻辑环境的物理组网中提取，或从任务自定义参数中获取）
+            if (network == null) {
+                network = extractNetworkFromLogicEnvironment(logicEnvironment);
+            }
+            
             logExecutorInfo(executorIp, ueList, collectStrategyInfo, testCaseSetInfo.getCollectStrategyId());
             
-            TestCaseExecutionRequest request = buildExecutionRequest(taskId, executorIp, testCaseSetInfo, testCaseList, ueList, collectStrategyInfo, taskCustomParams, networkElementIds);
+            TestCaseExecutionRequest request = buildExecutionRequest(taskId, executorIp, testCaseSetInfo, testCaseList, ueList, collectStrategyInfo, taskCustomParams, networkElementIds, executorCityPinyin, network, collectTask);
             return sendExecutionRequest(request, instances, taskId, executorIp);
             
         } catch (Exception e) {
@@ -1702,7 +1715,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private TestCaseExecutionRequest buildExecutionRequest(String taskId, String executorIp, TestCaseSetInfo testCaseSetInfo, 
             List<TestCaseExecutionRequest.TestCaseInfo> testCaseList, List<TestCaseExecutionRequest.UeInfo> ueList, 
-            TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, String taskCustomParams, List<Long> networkElementIds) {
+            TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, String taskCustomParams, List<Long> networkElementIds,
+            String executorCityPinyin, String network, CollectTask collectTask) {
         
         TestCaseExecutionRequest request = new TestCaseExecutionRequest();
         request.setTaskId(taskId);
@@ -1714,6 +1728,18 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         request.setCollectStrategyInfo(collectStrategyInfo);
         request.setTaskCustomParams(taskCustomParams);
         request.setResultReportUrl(dataCollectServiceBaseUrl + "/api/test-result/report");
+        
+        // 设置执行机城市信息（拼音）
+        request.setExecutorCityPinyin(executorCityPinyin);
+        
+        // 设置网络信息
+        request.setNetwork(network);
+        
+        // 设置采集任务名称和描述
+        if (collectTask != null) {
+            request.setCollectTaskName(collectTask.getName());
+            request.setCollectTaskDescription(collectTask.getDescription());
+        }
         
         // 设置网元信息列表
         if (networkElementIds != null && !networkElementIds.isEmpty()) {
@@ -1766,6 +1792,107 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         return request;
+    }
+    
+    /**
+     * 获取执行机城市信息（拼音）
+     * 
+     * @param executorIp 执行机IP
+     * @return 城市拼音，如果获取失败则返回null
+     */
+    private String getExecutorCityPinyin(String executorIp) {
+        try {
+            // 通过执行机IP获取执行机信息
+            QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
+            executorQuery.eq("ip_address", executorIp);
+            Executor executor = executorService.getOne(executorQuery);
+            
+            if (executor == null || executor.getRegionId() == null) {
+                log.warn("Executor not found or region ID is null - Executor IP: {}", executorIp);
+                return null;
+            }
+            
+            // 获取地域信息
+            com.datacollect.entity.Region region = regionService.getById(executor.getRegionId());
+            if (region == null) {
+                log.warn("Region not found - Region ID: {}", executor.getRegionId());
+                return null;
+            }
+            
+            // 如果地域级别是城市（level=4），直接使用；否则查找城市
+            String cityName = null;
+            if (region.getLevel() != null && region.getLevel() == 4) {
+                cityName = region.getName();
+            } else {
+                // 如果不是城市，尝试查找城市（向上查找或向下查找）
+                // 这里简化处理，如果level=3（省份），尝试查找其子城市
+                if (region.getLevel() != null && region.getLevel() == 3) {
+                    // 查找该省份下的第一个城市
+                    QueryWrapper<com.datacollect.entity.Region> cityQuery = new QueryWrapper<>();
+                    cityQuery.eq("parent_id", region.getId());
+                    cityQuery.eq("level", 4);
+                    cityQuery.last("LIMIT 1");
+                    com.datacollect.entity.Region city = regionService.getOne(cityQuery);
+                    if (city != null) {
+                        cityName = city.getName();
+                    }
+                }
+            }
+            
+            if (cityName == null || cityName.trim().isEmpty()) {
+                log.warn("City name not found for executor - Executor IP: {}, Region ID: {}", executorIp, executor.getRegionId());
+                return null;
+            }
+            
+            // 将城市名称转换为拼音
+            String pinyin = com.datacollect.util.PinyinUtil.toPinyin(cityName);
+            log.info("Executor city pinyin - Executor IP: {}, City: {}, Pinyin: {}", executorIp, cityName, pinyin);
+            return pinyin;
+            
+        } catch (Exception e) {
+            log.error("Failed to get executor city pinyin - Executor IP: {}, Error: {}", executorIp, e.getMessage(), e);
+            return null;
+        }
+    }
+    
+    /**
+     * 从逻辑环境的物理组网中提取网络信息
+     * 
+     * @param logicEnvironment 逻辑环境
+     * @return 网络信息，如果提取失败则返回null
+     */
+    private String extractNetworkFromLogicEnvironment(LogicEnvironment logicEnvironment) {
+        if (logicEnvironment == null || logicEnvironment.getPhysicalNetwork() == null 
+                || logicEnvironment.getPhysicalNetwork().trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // 解析物理组网JSON数组
+            List<String> physicalNetworks = JSON.parseArray(logicEnvironment.getPhysicalNetwork(), String.class);
+            if (physicalNetworks == null || physicalNetworks.isEmpty()) {
+                return null;
+            }
+            
+            // 物理组网格式：逻辑组网_网络_厂商
+            // 从第一个物理组网中提取网络信息
+            String firstPhysicalNetwork = physicalNetworks.get(0);
+            if (firstPhysicalNetwork != null && firstPhysicalNetwork.contains("_")) {
+                String[] parts = firstPhysicalNetwork.split("_");
+                if (parts.length >= 2) {
+                    // parts[1] 是网络信息
+                    String network = parts[1];
+                    log.info("Extracted network from logic environment - Logic Environment ID: {}, Network: {}", 
+                            logicEnvironment.getId(), network);
+                    return network;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract network from logic environment - Logic Environment ID: {}, Error: {}", 
+                    logicEnvironment.getId(), e.getMessage());
+        }
+        
+        return null;
     }
 
     /**
