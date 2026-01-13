@@ -33,6 +33,9 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
     
     @Autowired
     private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
+    
+    @Autowired
+    private com.datacollect.service.CollectTaskProcessService collectTaskProcessService;
 
     @Override
     public boolean saveTestCaseExecutionResult(TestCaseExecutionResult result) {
@@ -265,6 +268,14 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 
                 // 5. 更新任务执行进度
                 updateTaskExecutionProgress(collectTaskId, instances);
+                
+                // 6. 释放任务占用的UE锁，并处理UE队列中的任务
+                try {
+                    collectTaskProcessService.releaseUeLocksForTask(taskId);
+                    log.info("任务完成，已释放UE锁 - 任务ID: {}", taskId);
+                } catch (Exception e) {
+                    log.error("释放任务UE锁失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+                }
             }
             
         } catch (Exception e) {

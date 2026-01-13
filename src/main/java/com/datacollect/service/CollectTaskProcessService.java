@@ -55,4 +55,12 @@ public interface CollectTaskProcessService {
      * @return 是否调用成功
      */
     boolean callExecutorServices(List<TestCaseExecutionInstance> instances);
+    
+    /**
+     * 释放任务对应的UE锁
+     * 当任务完成时调用此方法，释放任务占用的UE锁，并处理UE队列中的任务
+     * 
+     * @param taskId 任务ID
+     */
+    void releaseUeLocksForTask(String taskId);
 }
