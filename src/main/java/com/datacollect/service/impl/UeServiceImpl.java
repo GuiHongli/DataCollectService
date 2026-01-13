@@ -42,6 +42,9 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     
     @Autowired
     private LogicEnvironmentUeService logicEnvironmentUeService;
+    
+    @Autowired(required = false)
+    private com.datacollect.service.ConfigService configService;
 
     @Override
     public Page<UeDTO> getUePageWithNetworkType(Integer current, Integer size, String name, String ueId, String purpose, Long networkTypeId) {
@@ -296,11 +299,26 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
     
     /**
      * 当UE使用中时，更新相关逻辑环境状态为禁用
+     * 根据配置决定是否禁用环境
      * 
      * @param ueIds UE ID列表
      */
     private void updateLogicEnvironmentStatusAfterUeInUse(List<Integer> ueIds) {
         if (ueIds == null || ueIds.isEmpty()) {
+            return;
+        }
+        
+        // 检查配置：如果配置为false，则不禁用环境
+        boolean shouldDisableEnvironment = true; // 默认值
+        if (configService != null) {
+            Boolean configValue = configService.getUeDisableEnvironmentWhenInUse();
+            if (configValue != null) {
+                shouldDisableEnvironment = configValue;
+            }
+        }
+        
+        if (!shouldDisableEnvironment) {
+            log.debug("配置为不禁用环境，跳过逻辑环境状态更新 - UE IDs: {}", ueIds);
             return;
         }
         
