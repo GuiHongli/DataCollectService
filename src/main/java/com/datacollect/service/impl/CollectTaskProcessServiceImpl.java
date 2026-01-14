@@ -2810,12 +2810,26 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     return;
                 }
                 
-                while (!queue.isEmpty()) {
+                // 持续处理队列，直到队列为空且没有新任务加入
+                // 使用循环处理，确保能处理所有排队任务
+                int emptyCount = 0; // 连续空队列次数
+                while (true) {
                     try {
                         QueuedTask queuedTask = queue.peek(); // 查看队列头部任务，不取出
                         if (queuedTask == null) {
-                            break;
+                            // 队列为空，检查是否需要退出
+                            emptyCount++;
+                            if (emptyCount >= 3) {
+                                // 连续3次检查队列都为空，退出处理器
+                                log.debug("UE队列连续为空，退出处理器 - UE ID: {}", ueId);
+                                break;
+                            }
+                            Thread.sleep(2000); // 等待2秒后重试
+                            continue;
                         }
+                        
+                        // 重置空队列计数
+                        emptyCount = 0;
                         
                         // 在尝试执行前，先检查任务状态
                         if (!checkTaskStatus(queuedTask.getInstances())) {
@@ -2886,6 +2900,13 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 // 处理完成后，清除运行标志
                 ueQueueProcessorRunning.remove(ueId);
                 log.debug("UE队列处理器处理完成 - UE ID: {}", ueId);
+                
+                // 检查队列中是否还有任务，如果有则重新启动处理器
+                BlockingQueue<QueuedTask> queue = ueTaskQueues.get(ueId);
+                if (queue != null && !queue.isEmpty()) {
+                    log.info("UE队列中还有任务，重新启动处理器 - UE ID: {}, 队列大小: {}", ueId, queue.size());
+                    startUeQueueProcessor(ueId);
+                }
             }
         });
     }
