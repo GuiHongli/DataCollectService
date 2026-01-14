@@ -1169,28 +1169,15 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 }
                 
                 // 检查该逻辑环境的所有UE是否都空闲（未使用中）
-                // 1. 检查数据库中的UE状态
+                // 只检查数据库中的UE状态，不检查内存占用状态
+                // 内存占用状态（ueOccupiedByTask）是在获取锁时使用的，用于防止并发
+                // 如果UE在数据库中显示为未使用（inUse == 0），那么它应该是可用的
                 List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
                 
-                // 2. 检查内存中的UE占用状态（ueOccupiedByTask）
-                List<Integer> occupiedUeIds = new ArrayList<>();
-                for (Integer ueId : ueIds) {
-                    String occupiedBy = ueOccupiedByTask.get(ueId);
-                    if (occupiedBy != null) {
-                        occupiedUeIds.add(ueId);
-                        log.debug("UE在内存中被占用 - UE ID: {}, 占用任务ID: {}", ueId, occupiedBy);
-                    }
-                }
-                
-                // 合并不可用的UE列表（数据库状态或内存占用状态）
-                java.util.Set<Integer> allUnavailableUeIds = new java.util.HashSet<>();
-                allUnavailableUeIds.addAll(unavailableUeIds);
-                allUnavailableUeIds.addAll(occupiedUeIds);
-                
-                if (!allUnavailableUeIds.isEmpty()) {
-                    // 有UE使用中或被占用，该逻辑环境的任务需要排队等待
-                    log.warn("逻辑环境的UE使用中或被占用，任务将排队等待 - 逻辑环境ID: {}, 不可用UE IDs: {} (数据库: {}, 内存占用: {}), 总UE IDs: {}", 
-                            logicEnvironmentId, allUnavailableUeIds, unavailableUeIds, occupiedUeIds, ueIds);
+                if (!unavailableUeIds.isEmpty()) {
+                    // 有UE使用中，该逻辑环境的任务需要排队等待
+                    log.warn("逻辑环境的UE使用中，任务将排队等待 - 逻辑环境ID: {}, 不可用UE IDs: {}, 总UE IDs: {}", 
+                            logicEnvironmentId, unavailableUeIds, ueIds);
                     queuedEnvironments.put(logicEnvironmentId, envInstances);
                 } else {
                     // 所有UE都空闲，可以下发
