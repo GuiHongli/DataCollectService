@@ -2679,6 +2679,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         break;
                     }
                     
+                    // 在尝试执行前，先检查任务状态
+                    if (!checkTaskStatus(queuedTask.getInstances())) {
+                        // 任务已停止，从队列中移除并记录日志
+                        QueuedTask removedTask = queue.poll();
+                        if (removedTask != null) {
+                            log.info("任务在队列中等待时已被停止，从UE队列中移除 - UE ID: {}, 任务ID: {}", ueId, removedTask.getTaskId());
+                        }
+                        continue; // 继续处理下一个任务
+                    }
+                    
                     // 获取任务使用的所有UE ID
                     List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(queuedTask.getLogicEnvironmentId());
                     List<Integer> taskUeIds = extractUeIds(ueList);
@@ -2689,6 +2699,14 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         // 成功获取锁，取出任务并执行
                         QueuedTask task = queue.poll();
                         if (task != null) {
+                            // 再次检查任务状态（可能在获取锁的过程中任务被停止）
+                            if (!checkTaskStatus(task.getInstances())) {
+                                log.info("任务在获取锁后已被停止，取消执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
+                                // 释放已获取的锁
+                                releaseUeLocks(taskUeIds);
+                                continue;
+                            }
+                            
                             log.info("从UE队列中取出任务执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
                             // 重新执行任务创建流程
                             createExecutionTaskForLogicEnvironment(task.getLogicEnvironmentId(), task.getInstances());
@@ -2801,12 +2819,28 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         break;
                     }
                     
+                    // 在尝试执行前，先检查任务状态
+                    if (!checkTaskStatus(queuedTask.getInstances())) {
+                        // 任务已停止，从队列中移除并记录日志
+                        QueuedTask removedTask = queue.poll();
+                        if (removedTask != null) {
+                            log.info("任务在队列中等待时已被停止，从队列中移除 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, removedTask.getTaskId());
+                        }
+                        continue; // 继续处理下一个任务
+                    }
+                    
                     // 检查UE是否可用
                     List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
                     if (checkUeAvailabilityForQueue(ueList, logicEnvironmentId)) {
                         // UE可用，取出任务并执行
                         QueuedTask task = queue.poll();
                         if (task != null) {
+                            // 再次检查任务状态（可能在检查UE可用性的过程中任务被停止）
+                            if (!checkTaskStatus(task.getInstances())) {
+                                log.info("任务在检查UE可用性后已被停止，取消执行 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, task.getTaskId());
+                                continue;
+                            }
+                            
                             log.info("从队列中取出任务执行 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, task.getTaskId());
                             // 重新执行任务创建流程
                             createExecutionTaskForLogicEnvironment(logicEnvironmentId, task.getInstances());
