@@ -1186,7 +1186,15 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     /**
      * 为逻辑环境创建执行任务
      */
+    /**
+     * 为逻辑环境创建执行任务
+     * 改进：允许部分逻辑环境失败，只要至少有一个成功就返回true
+     */
     private boolean createExecutionTasksForLogicEnvironments(java.util.Map<Long, List<TestCaseExecutionInstance>> instancesByLogicEnvironment) {
+        int totalEnvironments = instancesByLogicEnvironment.size();
+        int successCount = 0;
+        int failureCount = 0;
+        
         for (java.util.Map.Entry<Long, List<TestCaseExecutionInstance>> entry : instancesByLogicEnvironment.entrySet()) {
             Long logicEnvironmentId = entry.getKey();
             List<TestCaseExecutionInstance> environmentInstances = entry.getValue();
@@ -1194,18 +1202,34 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 再次检查任务状态，确保在调用执行机前任务未被停止
             if (!checkTaskStatus(environmentInstances)) {
                 log.warn("Task stopped, skip test case distribution for logic environment {}", logicEnvironmentId);
+                failureCount++;
                 continue;
             }
             
-            boolean success = createExecutionTaskForLogicEnvironment(logicEnvironmentId, environmentInstances);
-            if (!success) {
-                log.error("Failed to create execution task for logic environment - logic environment ID: {}", logicEnvironmentId);
-                return false;
+            try {
+                boolean success = createExecutionTaskForLogicEnvironment(logicEnvironmentId, environmentInstances);
+                if (success) {
+                    successCount++;
+                    log.info("Successfully created execution task for logic environment - logic environment ID: {}", logicEnvironmentId);
+                } else {
+                    failureCount++;
+                    log.error("Failed to create execution task for logic environment - logic environment ID: {}", logicEnvironmentId);
+                    // 继续处理其他逻辑环境，不立即返回false
+                }
+            } catch (Exception e) {
+                failureCount++;
+                log.error("Exception creating execution task for logic environment - logic environment ID: {}, error: {}", 
+                        logicEnvironmentId, e.getMessage(), e);
+                // 继续处理其他逻辑环境
             }
         }
         
-        log.info("Logic environment service call completed");
-        return true;
+        log.info("Logic environment service call completed - total: {}, success: {}, failure: {}", 
+                totalEnvironments, successCount, failureCount);
+        
+        // 只要至少有一个逻辑环境成功，就返回true
+        // 这样可以避免因为一个逻辑环境失败而导致整个任务失败
+        return successCount > 0;
     }
     
     private boolean createExecutionTaskForLogicEnvironment(Long logicEnvironmentId, List<TestCaseExecutionInstance> instances) {
@@ -1239,6 +1263,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
             
             String taskId = generateTaskId(executorIp);
+            
+            // 检查任务ID是否已存在，如果存在则生成新的任务ID（避免并发冲突）
+            int retryCount = 0;
+            while (taskIdToUeIdsMap.containsKey(taskId) && retryCount < 10) {
+                log.warn("任务ID冲突，重新生成 - 原任务ID: {}, 执行机IP: {}, 重试次数: {}", taskId, executorIp, retryCount);
+                taskId = generateTaskId(executorIp);
+                retryCount++;
+            }
+            if (retryCount >= 10) {
+                log.error("任务ID生成失败，重试次数过多 - 执行机IP: {}", executorIp);
+                return false;
+            }
+            
             TestCaseSetInfo testCaseSetInfo = getTestCaseSetInfo(instances);
             if (!validateTestCaseSetInfo(testCaseSetInfo, executorIp)) {
                 return false;
@@ -1328,8 +1365,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
     }
 
+    /**
+     * 生成唯一的任务ID
+     * 使用时间戳、执行机IP、随机数和线程ID确保唯一性
+     */
     private String generateTaskId(String executorIp) {
-        return "TASK_" + System.currentTimeMillis() + "_" + executorIp.replace(".", "_");
+        // 使用时间戳、执行机IP、随机数和线程ID确保唯一性
+        long timestamp = System.currentTimeMillis();
+        int random = (int) (Math.random() * 10000);
+        long threadId = Thread.currentThread().getId();
+        return "TASK_" + timestamp + "_" + executorIp.replace(".", "_") + "_" + random + "_" + threadId;
     }
 
     private void logExecutorInfo(String executorIp, List<TestCaseExecutionRequest.UeInfo> ueList, TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, Long collectStrategyId) {
