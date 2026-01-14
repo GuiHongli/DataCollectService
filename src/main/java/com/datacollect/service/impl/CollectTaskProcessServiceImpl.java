@@ -1144,8 +1144,56 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 按逻辑环境分组
             java.util.Map<Long, List<TestCaseExecutionInstance>> instancesByLogicEnvironment = groupInstancesByLogicEnvironment(instances);
             
-            // 为每个逻辑环境创建执行任务
-            return createExecutionTasksForLogicEnvironments(instancesByLogicEnvironment);
+            // 在异步下发执行机前，检查每个逻辑环境的UE使用状态
+            // 对于每个逻辑环境，如果该逻辑环境的所有UE都空闲，则下发；否则排队等待
+            java.util.Map<Long, List<TestCaseExecutionInstance>> readyEnvironments = new java.util.HashMap<>();
+            java.util.Map<Long, List<TestCaseExecutionInstance>> queuedEnvironments = new java.util.HashMap<>();
+            
+            for (java.util.Map.Entry<Long, List<TestCaseExecutionInstance>> entry : instancesByLogicEnvironment.entrySet()) {
+                Long logicEnvironmentId = entry.getKey();
+                List<TestCaseExecutionInstance> envInstances = entry.getValue();
+                
+                // 获取该逻辑环境的所有UE
+                List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
+                List<Integer> ueIds = extractUeIds(ueList);
+                
+                if (ueIds.isEmpty()) {
+                    log.warn("逻辑环境没有UE，跳过 - 逻辑环境ID: {}", logicEnvironmentId);
+                    continue;
+                }
+                
+                // 检查该逻辑环境的所有UE是否都空闲（未使用中）
+                List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
+                
+                if (!unavailableUeIds.isEmpty()) {
+                    // 有UE使用中，该逻辑环境的任务需要排队等待
+                    log.warn("逻辑环境的UE使用中，任务将排队等待 - 逻辑环境ID: {}, 使用中的UE IDs: {}, 总UE IDs: {}", 
+                            logicEnvironmentId, unavailableUeIds, ueIds);
+                    queuedEnvironments.put(logicEnvironmentId, envInstances);
+                } else {
+                    // 所有UE都空闲，可以下发
+                    log.info("逻辑环境的所有UE都空闲，可以下发 - 逻辑环境ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
+                    readyEnvironments.put(logicEnvironmentId, envInstances);
+                }
+            }
+            
+            // 将需要排队的任务加入队列
+            for (java.util.Map.Entry<Long, List<TestCaseExecutionInstance>> entry : queuedEnvironments.entrySet()) {
+                Long logicEnvironmentId = entry.getKey();
+                List<TestCaseExecutionInstance> envInstances = entry.getValue();
+                String taskId = generateTaskId("queue"); // 临时任务ID，用于排队
+                addTaskToQueue(logicEnvironmentId, envInstances, taskId);
+                log.info("任务已加入队列等待UE空闲 - 逻辑环境ID: {}, 任务实例数: {}", logicEnvironmentId, envInstances.size());
+            }
+            
+            // 为所有UE都空闲的逻辑环境创建执行任务
+            if (!readyEnvironments.isEmpty()) {
+                return createExecutionTasksForLogicEnvironments(readyEnvironments);
+            } else {
+                // 所有逻辑环境的任务都已加入队列
+                log.info("所有逻辑环境的任务都已加入队列等待UE空闲");
+                return false; // 返回false表示任务已加入队列，等待UE空闲
+            }
             
         } catch (Exception e) {
             log.error("Executor service call exception - error: {}", e.getMessage(), e);
