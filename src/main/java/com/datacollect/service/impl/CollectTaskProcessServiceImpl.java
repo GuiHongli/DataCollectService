@@ -2771,6 +2771,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         try {
+            // 获取任务ID并更新任务状态为等待中
+            if (!instances.isEmpty()) {
+                Long collectTaskId = instances.get(0).getCollectTaskId();
+                if (collectTaskId != null) {
+                    CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                    if (collectTask != null && !"WAITING".equals(collectTask.getStatus()) && !"STOPPED".equals(collectTask.getStatus())) {
+                        // 只有在任务不是等待中或已停止时，才更新为等待中
+                        collectTaskService.updateTaskStatus(collectTaskId, "WAITING");
+                        log.info("任务状态已更新为等待中 - 任务ID: {}, 原因: UE被占用", collectTaskId);
+                    }
+                }
+            }
+            
             // 将任务加入所有相关UE的队列（使用第一个UE作为主队列）
             Integer primaryUeId = ueIds.get(0);
             BlockingQueue<QueuedTask> queue = ueTaskQueues.computeIfAbsent(primaryUeId, k -> new LinkedBlockingQueue<>());
@@ -2846,6 +2859,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 }
                                 
                                 log.info("从UE队列中取出任务执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
+                                
+                                // 更新任务状态为运行中（如果任务在等待中）
+                                if (!task.getInstances().isEmpty()) {
+                                    Long collectTaskId = task.getInstances().get(0).getCollectTaskId();
+                                    if (collectTaskId != null) {
+                                        CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                                        if (collectTask != null && "WAITING".equals(collectTask.getStatus())) {
+                                            collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
+                                            log.info("任务状态已从等待中更新为运行中 - 任务ID: {}", collectTaskId);
+                                        }
+                                    }
+                                }
+                                
                                 // 重新执行任务创建流程
                                 createExecutionTaskForLogicEnvironment(task.getLogicEnvironmentId(), task.getInstances());
                             }
@@ -2924,6 +2950,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private void addTaskToQueue(Long logicEnvironmentId, List<TestCaseExecutionInstance> instances, String taskId) {
         try {
+            // 获取任务ID并更新任务状态为等待中
+            if (!instances.isEmpty()) {
+                Long collectTaskId = instances.get(0).getCollectTaskId();
+                if (collectTaskId != null) {
+                    CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                    if (collectTask != null && !"WAITING".equals(collectTask.getStatus()) && !"STOPPED".equals(collectTask.getStatus())) {
+                        // 只有在任务不是等待中或已停止时，才更新为等待中
+                        collectTaskService.updateTaskStatus(collectTaskId, "WAITING");
+                        log.info("任务状态已更新为等待中 - 任务ID: {}, 原因: UE不可用", collectTaskId);
+                    }
+                }
+            }
+            
             // 获取或创建该逻辑环境的任务队列
             BlockingQueue<QueuedTask> queue = taskQueues.computeIfAbsent(logicEnvironmentId, k -> new LinkedBlockingQueue<>());
             
@@ -2985,6 +3024,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                             }
                             
                             log.info("从队列中取出任务执行 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, task.getTaskId());
+                            
+                            // 更新任务状态为运行中（如果任务在等待中）
+                            if (!task.getInstances().isEmpty()) {
+                                Long collectTaskId = task.getInstances().get(0).getCollectTaskId();
+                                if (collectTaskId != null) {
+                                    CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
+                                    if (collectTask != null && "WAITING".equals(collectTask.getStatus())) {
+                                        collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
+                                        log.info("任务状态已从等待中更新为运行中 - 任务ID: {}", collectTaskId);
+                                    }
+                                }
+                            }
+                            
                             // 重新执行任务创建流程
                             createExecutionTaskForLogicEnvironment(logicEnvironmentId, task.getInstances());
                         }

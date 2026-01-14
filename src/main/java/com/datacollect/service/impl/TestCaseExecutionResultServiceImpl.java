@@ -33,7 +33,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
     
     @Autowired
     private TestCaseExecutionInstanceService testCaseExecutionInstanceService;
-    
+
     @Autowired
     private com.datacollect.service.CollectTaskProcessService collectTaskProcessService;
 

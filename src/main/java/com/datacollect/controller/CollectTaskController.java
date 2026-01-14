@@ -537,6 +537,8 @@ public class CollectTaskController {
     private boolean isValidStatusTransition(String currentStatus, String newStatus) {
         // 定义有效的状态转换规则
         if ("PENDING".equals(currentStatus)) {
+            return "RUNNING".equals(newStatus) || "WAITING".equals(newStatus) || "STOPPED".equals(newStatus);
+        } else if ("WAITING".equals(currentStatus)) {
             return "RUNNING".equals(newStatus) || "STOPPED".equals(newStatus);
         } else if ("RUNNING".equals(currentStatus)) {
             return "COMPLETED".equals(newStatus) || "STOPPED".equals(newStatus) || "PAUSED".equals(newStatus);

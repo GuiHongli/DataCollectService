@@ -63,4 +63,12 @@ public interface CollectTaskProcessService {
      * @param taskId 任务ID
      */
     void releaseUeLocksForTask(String taskId);
+    
+    /**
+     * 处理UE可用后的队列任务
+     * 当UE从使用中变为可用时，检查是否有排队任务需要执行
+     * 
+     * @param ueIds 更新的UE ID列表
+     */
+    void processQueuedTasksAfterUeAvailable(List<Integer> ueIds);
 }

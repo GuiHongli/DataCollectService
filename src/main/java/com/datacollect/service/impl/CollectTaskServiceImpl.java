@@ -141,7 +141,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
             return false;
         }
         
-        String[] validStatuses = {"PENDING", "RUNNING", "COMPLETED", "STOPPED", "PAUSED"};
+        String[] validStatuses = {"PENDING", "WAITING", "RUNNING", "COMPLETED", "STOPPED", "PAUSED"};
         for (String validStatus : validStatuses) {
             if (validStatus.equals(status)) {
                 return true;

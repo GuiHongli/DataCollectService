@@ -251,10 +251,9 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             updateLogicEnvironmentStatusAfterUeAvailable(ueIds);
             
             // 通知任务处理服务处理排队任务
-            if (collectTaskProcessService instanceof com.datacollect.service.impl.CollectTaskProcessServiceImpl) {
+            if (collectTaskProcessService != null) {
                 try {
-                    ((com.datacollect.service.impl.CollectTaskProcessServiceImpl) collectTaskProcessService)
-                        .processQueuedTasksAfterUeAvailable(ueIds);
+                    collectTaskProcessService.processQueuedTasksAfterUeAvailable(ueIds);
                 } catch (Exception e) {
                     log.warn("通知任务处理服务处理排队任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage());
                 }
