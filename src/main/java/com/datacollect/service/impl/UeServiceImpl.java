@@ -116,6 +116,7 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
         dto.setPort(ue.getPort());
         dto.setDescription(ue.getDescription());
         dto.setStatus(ue.getStatus());
+        dto.setInUse(ue.getInUse());
         dto.setCreateBy(ue.getCreateBy());
         dto.setUpdateBy(ue.getUpdateBy());
         dto.setCreateTime(ue.getCreateTime());

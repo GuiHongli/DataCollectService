@@ -18,6 +18,7 @@ public class UeDTO {
     private String port;
     private String description;
     private Integer status;
+    private Integer inUse; // 是否正在使用中 (0: 未使用, 1: 使用中)
     private String createBy;
     private String updateBy;
     private LocalDateTime createTime;

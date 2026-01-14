@@ -102,4 +102,28 @@ public class UeController {
         }
         return Result.success(vendors);
     }
+
+    /**
+     * 释放UE（标记为可用）
+     * 
+     * @param id UE ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/release")
+    public Result<Boolean> releaseUe(@PathVariable @NotNull Long id) {
+        try {
+            List<Integer> ueIds = new ArrayList<>();
+            ueIds.add(id.intValue());
+            boolean success = ueService.markUesAvailable(ueIds);
+            if (success) {
+                log.info("UE已释放 - UE ID: {}", id);
+                return Result.success(true);
+            } else {
+                return Result.error("释放UE失败");
+            }
+        } catch (Exception e) {
+            log.error("释放UE失败 - UE ID: {}, 错误: {}", id, e.getMessage(), e);
+            return Result.error("释放UE失败: " + e.getMessage());
+        }
+    }
 }
