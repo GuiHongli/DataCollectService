@@ -2655,43 +2655,57 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         
         try {
             // 尝试获取所有UE的锁
+            // 注意：由于锁可能在不同线程中获取和释放，我们主要依赖 ueOccupiedByTask 来跟踪占用状态
+            // ReentrantLock 主要用于同一线程内的同步，跨线程同步通过 ueOccupiedByTask 实现
             for (Integer ueId : ueIds) {
                 ReentrantLock lock = ueLocks.computeIfAbsent(ueId, k -> new ReentrantLock());
-                
-                // 检查锁的状态
-                boolean isLocked = lock.isLocked();
-                boolean isHeldByCurrentThread = lock.isHeldByCurrentThread();
                 String occupiedBy = ueOccupiedByTask.get(ueId);
                 
-                log.debug("尝试获取UE锁 - UE ID: {}, 任务ID: {}, 锁是否被持有: {}, 当前线程是否持有: {}, 占用任务: {}", 
-                        ueId, taskId, isLocked, isHeldByCurrentThread, occupiedBy);
+                // 首先检查占用状态（这是主要的同步机制）
+                if (occupiedBy != null && !occupiedBy.equals(taskId)) {
+                    log.warn("UE被其他任务占用 - UE ID: {}, 占用任务ID: {}, 当前任务ID: {}", ueId, occupiedBy, taskId);
+                    // 释放已获取的锁
+                    releaseAcquiredLocksAndClearOccupied(acquiredLocks, acquiredUeIds);
+                    return false;
+                }
                 
-                // 如果锁被持有但占用状态已清除，说明锁没有正确释放，需要处理
-                if (isLocked && occupiedBy == null) {
-                    log.warn("UE锁被持有但占用状态已清除，可能存在锁泄漏 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                    // 尝试强制释放锁（如果当前线程持有）
-                    if (isHeldByCurrentThread) {
-                        try {
-                            lock.unlock();
-                            log.info("强制释放UE锁（当前线程持有但占用状态已清除） - UE ID: {}", ueId);
-                        } catch (IllegalMonitorStateException e) {
-                            log.warn("强制释放UE锁失败 - UE ID: {}, 错误: {}", ueId, e.getMessage());
-                        }
-                    } else {
-                        // 锁被其他线程持有，但占用状态已清除，这是异常情况
-                        // 我们无法直接释放其他线程持有的锁，只能记录警告
-                        log.error("UE锁被其他线程持有但占用状态已清除，无法释放 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                        // 释放已获取的锁
+                // 如果占用状态显示该UE可用（或已被当前任务占用），尝试获取锁
+                // 注意：即使 ReentrantLock 被其他线程持有，只要 ueOccupiedByTask 中没有记录，我们也应该尝试获取
+                boolean lockAcquired = false;
+                
+                // 检查 ReentrantLock 的状态
+                boolean isLocked = lock.isLocked();
+                boolean isHeldByCurrentThread = lock.isHeldByCurrentThread();
+                
+                if (isLocked && !isHeldByCurrentThread) {
+                    // 锁被其他线程持有，但占用状态已清除（可能是之前的任务没有正确释放）
+                    // 这种情况下，我们无法直接释放其他线程持有的锁
+                    // 但我们可以尝试通过清除占用状态来让系统恢复
+                    if (occupiedBy == null) {
+                        log.warn("UE锁被其他线程持有但占用状态已清除，可能存在锁泄漏 - UE ID: {}, 任务ID: {}", ueId, taskId);
+                        // 由于无法释放其他线程持有的锁，我们只能记录警告并返回失败
+                        // 这种情况需要手动干预或重启服务
+                        log.error("无法获取UE锁 - 锁被其他线程持有且无法释放 - UE ID: {}, 任务ID: {}", ueId, taskId);
                         releaseAcquiredLocksAndClearOccupied(acquiredLocks, acquiredUeIds);
                         return false;
                     }
                 }
                 
-                // 使用tryLock非阻塞方式获取锁
+                // 尝试获取锁
                 if (lock.tryLock()) {
+                    lockAcquired = true;
+                } else if (occupiedBy == null && !isLocked) {
+                    // 占用状态显示可用，但 tryLock 失败且锁未被持有
+                    // 这可能是并发竞争，重试一次
+                    if (lock.tryLock()) {
+                        lockAcquired = true;
+                    }
+                }
+                
+                if (lockAcquired) {
                     acquiredLocks.add(lock);
                     acquiredUeIds.add(ueId);
-                    // 记录UE被该任务占用
+                    // 记录UE被该任务占用（这是主要的同步机制）
                     ueOccupiedByTask.put(ueId, taskId);
                     log.debug("成功获取UE锁 - UE ID: {}, 任务ID: {}", ueId, taskId);
                 } else {
@@ -2777,35 +2791,18 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                             ueId, isLocked, isHeldByCurrentThread);
                     
                     // 尝试释放锁
+                    // 注意：由于锁可能在不同线程中获取和释放，我们主要依赖 ueOccupiedByTask 来跟踪占用状态
+                    // 如果当前线程持有锁，则正常释放；否则只清除占用状态
                     try {
                         if (isHeldByCurrentThread) {
                             // 当前线程持有锁，正常释放
                             lock.unlock();
                             log.debug("释放UE锁（当前线程持有） - UE ID: {}", ueId);
                         } else if (isLocked) {
-                            // 锁被其他线程持有，但我们需要强制释放
-                            // 这种情况可能是因为任务完成在不同的线程中处理
-                            // 或者之前的任务没有正确释放锁
-                            log.warn("UE锁被其他线程持有，尝试强制释放 - UE ID: {}", ueId);
-                            
-                            // 尝试多次解锁（处理可重入锁的情况）
-                            int unlockCount = 0;
-                            while (lock.isLocked() && unlockCount < 10) {
-                                try {
-                                    // 注意：这里不能直接调用 unlock()，因为不是当前线程持有
-                                    // 我们需要清除占用状态，让其他线程可以获取
-                                    break;
-                                } catch (IllegalMonitorStateException e) {
-                                    // 锁未被当前线程持有，这是正常的
-                                    break;
-                                }
-                            }
-                            
-                            // 如果锁仍然被持有，记录警告
-                            if (lock.isLocked()) {
-                                log.warn("UE锁仍被持有，但已清除占用状态 - UE ID: {}, 锁状态: {}", 
-                                        ueId, lock.isLocked());
-                            }
+                            // 锁被其他线程持有，这是正常情况（任务完成可能在不同线程中处理）
+                            // 我们无法释放其他线程持有的锁，但可以清除占用状态
+                            // 这样其他任务就可以通过检查 ueOccupiedByTask 来判断UE是否可用
+                            log.debug("UE锁被其他线程持有，仅清除占用状态 - UE ID: {}", ueId);
                         } else {
                             // 锁未被持有，只需要清除占用状态
                             log.debug("UE锁未被持有，仅清除占用状态 - UE ID: {}", ueId);
@@ -2817,7 +2814,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 }
                 
                 // 无论锁是否被释放，都清除占用状态
-                // 这样其他任务就可以尝试获取这个UE了
+                // 这是主要的同步机制，清除后其他任务就可以尝试获取这个UE了
+                // 注意：即使 ReentrantLock 仍被其他线程持有，只要 ueOccupiedByTask 中没有记录，
+                // 其他任务在获取锁时会检测到这种情况并处理
                 ueOccupiedByTask.remove(ueId);
                 log.debug("清除UE占用状态 - UE ID: {}", ueId);
                 
