@@ -71,4 +71,12 @@ public interface CollectTaskProcessService {
      * @param ueIds 更新的UE ID列表
      */
     void processQueuedTasksAfterUeAvailable(List<Integer> ueIds);
+    
+    /**
+     * 释放UE锁
+     * 当UE被手动释放时调用此方法，释放UE锁并处理队列中的任务
+     * 
+     * @param ueIds UE ID列表
+     */
+    void releaseUeLocks(List<Integer> ueIds);
 }

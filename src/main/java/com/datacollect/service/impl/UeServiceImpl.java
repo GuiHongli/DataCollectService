@@ -250,12 +250,17 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             // 更新相关逻辑环境状态为可用
             updateLogicEnvironmentStatusAfterUeAvailable(ueIds);
             
-            // 通知任务处理服务处理排队任务
+            // 释放UE锁并处理排队任务
             if (collectTaskProcessService != null) {
                 try {
+                    // 先释放UE锁
+                    collectTaskProcessService.releaseUeLocks(ueIds);
+                    log.info("UE锁已释放 - UE IDs: {}", ueIds);
+                    
+                    // 然后处理排队任务
                     collectTaskProcessService.processQueuedTasksAfterUeAvailable(ueIds);
                 } catch (Exception e) {
-                    log.warn("通知任务处理服务处理排队任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage());
+                    log.warn("释放UE锁或处理排队任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage());
                 }
             }
             
