@@ -2680,14 +2680,18 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 if (isLocked && !isHeldByCurrentThread) {
                     // 锁被其他线程持有，但占用状态已清除（可能是之前的任务没有正确释放）
                     // 这种情况下，我们无法直接释放其他线程持有的锁
-                    // 但我们可以尝试通过清除占用状态来让系统恢复
+                    // 解决方案：创建一个新的锁对象来替换旧的，让系统恢复
                     if (occupiedBy == null) {
-                        log.warn("UE锁被其他线程持有但占用状态已清除，可能存在锁泄漏 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                        // 由于无法释放其他线程持有的锁，我们只能记录警告并返回失败
-                        // 这种情况需要手动干预或重启服务
-                        log.error("无法获取UE锁 - 锁被其他线程持有且无法释放 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                        releaseAcquiredLocksAndClearOccupied(acquiredLocks, acquiredUeIds);
-                        return false;
+                        log.warn("UE锁被其他线程持有但占用状态已清除，检测到锁泄漏 - UE ID: {}, 任务ID: {}", ueId, taskId);
+                        log.info("尝试恢复UE锁 - 创建新的锁对象替换旧的 - UE ID: {}", ueId);
+                        
+                        // 创建新的锁对象来替换旧的
+                        ReentrantLock newLock = new ReentrantLock();
+                        ueLocks.put(ueId, newLock);
+                        lock = newLock;
+                        
+                        log.info("UE锁已恢复 - UE ID: {}, 任务ID: {}", ueId, taskId);
+                        // 继续尝试获取新锁
                     }
                 }
                 
