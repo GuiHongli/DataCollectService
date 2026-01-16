@@ -3245,7 +3245,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         try {
-            // 查找包含这些UE的逻辑环境
+            // 首先处理UE级别的队列（优先级更高）
+            for (Integer ueId : ueIds) {
+                try {
+                    processUeQueue(ueId);
+                } catch (Exception e) {
+                    log.error("处理UE队列失败 - UE ID: {}, 错误: {}", ueId, e.getMessage(), e);
+                }
+            }
+            
+            // 然后查找包含这些UE的逻辑环境
             QueryWrapper<LogicEnvironmentUe> ueQuery = new QueryWrapper<>();
             ueQuery.in("ue_id", ueIds);
             List<LogicEnvironmentUe> logicEnvironmentUes = logicEnvironmentUeService.list(ueQuery);
@@ -3281,6 +3290,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     
                     startQueueProcessor(logicEnvironmentId);
                 } else {
+                    
                     log.debug("逻辑环境队列为空或不存在 - 逻辑环境ID: {}", logicEnvironmentId);
                 }
             }
