@@ -43,7 +43,6 @@ import java.util.HashSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -142,26 +141,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private final Map<Long, BlockingQueue<QueuedTask>> taskQueues = new ConcurrentHashMap<>();
     
     /**
-     * UE级别的锁：按UE ID分组，确保使用相同UE的任务不会同时执行
-     */
-    private final Map<Integer, ReentrantLock> ueLocks = new ConcurrentHashMap<>();
-    
-    /**
      * UE级别的任务队列：按UE ID分组，存储等待该UE的任务
      */
     private final Map<Integer, BlockingQueue<QueuedTask>> ueTaskQueues = new ConcurrentHashMap<>();
-    
-    /**
-     * 任务ID到UE ID列表的映射：用于在任务完成时释放UE锁
-     * key: taskId (String), value: UE ID列表 (List<Integer>)
-     */
-    private final Map<String, List<Integer>> taskIdToUeIdsMap = new ConcurrentHashMap<>();
-    
-    /**
-     * UE占用状态：记录哪个任务ID占用了UE
-     * key: UE ID (Integer), value: 占用该UE的任务ID (String)
-     */
-    private final Map<Integer, String> ueOccupiedByTask = new ConcurrentHashMap<>();
     
     /**
      * UE队列处理器运行状态：记录哪些UE的队列处理器正在运行
@@ -1333,18 +1315,6 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
             String taskId = generateTaskId(executorIp);
             
-            // 检查任务ID是否已存在，如果存在则生成新的任务ID（避免并发冲突）
-            int retryCount = 0;
-            while (taskIdToUeIdsMap.containsKey(taskId) && retryCount < 10) {
-                log.warn("任务ID冲突，重新生成 - 原任务ID: {}, 执行机IP: {}, 重试次数: {}", taskId, executorIp, retryCount);
-                taskId = generateTaskId(executorIp);
-                retryCount++;
-            }
-            if (retryCount >= 10) {
-                log.error("任务ID生成失败，重试次数过多 - 执行机IP: {}", executorIp);
-                return false;
-            }
-            
             TestCaseSetInfo testCaseSetInfo = getTestCaseSetInfo(instances);
             if (!validateTestCaseSetInfo(testCaseSetInfo, executorIp)) {
                 return false;
@@ -1362,17 +1332,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return false; // 返回false表示任务未立即执行，已加入队列
             }
             
-            // 尝试获取所有UE的锁，确保使用相同UE的任务不会同时执行
+            // 检查UE是否可用（只通过数据库状态检查）
             List<Integer> ueIds = extractUeIds(ueList);
-            if (!tryAcquireUeLocks(ueIds, logicEnvironmentId, instances, taskId)) {
-                log.warn("无法获取UE锁，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
-                // 将任务加入UE队列，等待UE锁释放
+            List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
+            
+            if (!unavailableUeIds.isEmpty()) {
+                log.warn("UE使用中，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}, 不可用UE IDs: {}, 总UE IDs: {}", 
+                        logicEnvironmentId, taskId, unavailableUeIds, ueIds);
+                // 将任务加入UE队列，等待UE空闲
                 addTaskToUeQueue(ueIds, logicEnvironmentId, instances, taskId);
                 return false; // 返回false表示任务未立即执行，已加入队列
             }
-            
-            // 记录任务ID和UE ID列表的映射，用于任务完成时释放锁
-            taskIdToUeIdsMap.put(taskId, new ArrayList<>(ueIds));
             
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
@@ -1407,29 +1377,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
             // 执行任务
             // 注意：任务执行是异步的，sendExecutionRequest只是发送请求
-            // UE锁会在任务真正完成时释放（通过checkAndUpdateTaskCompletion方法）
             boolean success = sendExecutionRequest(request, instances, taskId, executorIp);
             
-            // 如果任务发送失败，立即释放UE锁
+            // 如果任务发送失败，记录日志
             if (!success) {
-                log.warn("任务发送失败，释放UE锁 - 任务ID: {}, UE IDs: {}", taskId, ueIds);
-                releaseUeLocksAndProcessQueue(ueIds);
-                // 清除任务ID映射
-                taskIdToUeIdsMap.remove(taskId);
+                log.warn("任务发送失败 - 任务ID: {}, UE IDs: {}", taskId, ueIds);
             }
-            // 如果任务发送成功，锁会在任务完成时释放（在checkAndUpdateTaskCompletion中处理）
             
             return success;
             
         } catch (Exception e) {
             log.error("Exception creating execution task for logic environment - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage(), e);
-            // 发生异常时，尝试释放UE锁
-            try {
-                List<Integer> ueIds = extractUeIds(getLogicEnvironmentUeList(logicEnvironmentId));
-                releaseUeLocksInternal(ueIds);
-            } catch (Exception ex) {
-                log.error("Failed to release UE locks after exception - logic environment ID: {}", logicEnvironmentId, ex);
-            }
             return false;
         }
     }
@@ -2590,237 +2548,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 尝试获取所有UE的锁
-     * 
-     * @param ueIds UE ID列表
-     * @param logicEnvironmentId 逻辑环境ID
-     * @param instances 执行实例列表
-     * @param taskId 任务ID
-     * @return true表示成功获取所有锁，false表示无法获取
-     */
-    private boolean tryAcquireUeLocks(List<Integer> ueIds, Long logicEnvironmentId, 
-                                      List<TestCaseExecutionInstance> instances, String taskId) {
-        if (ueIds == null || ueIds.isEmpty()) {
-            log.warn("UE ID列表为空，无需获取锁 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, taskId);
-            return true; // 没有UE，直接返回true
-        }
-        
-        // 首先检查UE是否被其他任务占用（使用占用状态检查）
-        for (Integer ueId : ueIds) {
-            String occupiedBy = ueOccupiedByTask.get(ueId);
-            if (occupiedBy != null && !occupiedBy.equals(taskId)) {
-                log.warn("UE被其他任务占用 - UE ID: {}, 占用任务ID: {}, 当前任务ID: {}", ueId, occupiedBy, taskId);
-                return false;
-            }
-        }
-        
-        List<ReentrantLock> acquiredLocks = new ArrayList<>();
-        List<Integer> acquiredUeIds = new ArrayList<>();
-        
-        try {
-            // 尝试获取所有UE的锁
-            // 注意：由于锁可能在不同线程中获取和释放，我们主要依赖 ueOccupiedByTask 来跟踪占用状态
-            // ReentrantLock 主要用于同一线程内的同步，跨线程同步通过 ueOccupiedByTask 实现
-            for (Integer ueId : ueIds) {
-                ReentrantLock lock = ueLocks.computeIfAbsent(ueId, k -> new ReentrantLock());
-                String occupiedBy = ueOccupiedByTask.get(ueId);
-                
-                // 首先检查占用状态（这是主要的同步机制）
-                if (occupiedBy != null && !occupiedBy.equals(taskId)) {
-                    log.warn("UE被其他任务占用 - UE ID: {}, 占用任务ID: {}, 当前任务ID: {}", ueId, occupiedBy, taskId);
-                    // 释放已获取的锁
-                    releaseAcquiredLocksAndClearOccupied(acquiredLocks, acquiredUeIds);
-                    return false;
-                }
-                
-                // 如果占用状态显示该UE可用（或已被当前任务占用），尝试获取锁
-                // 注意：即使 ReentrantLock 被其他线程持有，只要 ueOccupiedByTask 中没有记录，我们也应该尝试获取
-                boolean lockAcquired = false;
-                
-                // 检查 ReentrantLock 的状态
-                boolean isLocked = lock.isLocked();
-                boolean isHeldByCurrentThread = lock.isHeldByCurrentThread();
-                
-                if (isLocked && !isHeldByCurrentThread) {
-                    // 锁被其他线程持有，但占用状态已清除（可能是之前的任务没有正确释放）
-                    // 这种情况下，我们无法直接释放其他线程持有的锁
-                    // 解决方案：创建一个新的锁对象来替换旧的，让系统恢复
-                    if (occupiedBy == null) {
-                        log.warn("UE锁被其他线程持有但占用状态已清除，检测到锁泄漏 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                        log.info("尝试恢复UE锁 - 创建新的锁对象替换旧的 - UE ID: {}", ueId);
-                        
-                        // 创建新的锁对象来替换旧的
-                        ReentrantLock newLock = new ReentrantLock();
-                        ueLocks.put(ueId, newLock);
-                        lock = newLock;
-                        
-                        log.info("UE锁已恢复 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                        // 继续尝试获取新锁
-                    }
-                }
-                
-                // 尝试获取锁
-                if (lock.tryLock()) {
-                    lockAcquired = true;
-                } else if (occupiedBy == null && !isLocked) {
-                    // 占用状态显示可用，但 tryLock 失败且锁未被持有
-                    // 这可能是并发竞争，重试一次
-                    if (lock.tryLock()) {
-                        lockAcquired = true;
-                    }
-                }
-                
-                if (lockAcquired) {
-                    acquiredLocks.add(lock);
-                    acquiredUeIds.add(ueId);
-                    // 记录UE被该任务占用（这是主要的同步机制）
-                    ueOccupiedByTask.put(ueId, taskId);
-                    log.debug("成功获取UE锁 - UE ID: {}, 任务ID: {}", ueId, taskId);
-                } else {
-                    log.warn("无法获取UE锁 - UE ID: {}, 任务ID: {}, 锁状态: 被持有={}, 当前线程持有={}, 占用任务={}", 
-                            ueId, taskId, lock.isLocked(), lock.isHeldByCurrentThread(), ueOccupiedByTask.get(ueId));
-                    // 无法获取锁，释放已获取的锁
-                    releaseAcquiredLocksAndClearOccupied(acquiredLocks, acquiredUeIds);
-                    return false;
-                }
-            }
-            
-            log.info("成功获取所有UE锁 - UE IDs: {}, 任务ID: {}", ueIds, taskId);
-            return true;
-            
-        } catch (Exception e) {
-            log.error("获取UE锁时发生异常 - UE IDs: {}, 任务ID: {}, 错误: {}", ueIds, taskId, e.getMessage(), e);
-            // 发生异常时，释放已获取的锁
-            releaseAcquiredLocksAndClearOccupied(acquiredLocks, acquiredUeIds);
-            return false;
-        }
-    }
-    
-    /**
-     * 释放已获取的锁并清除占用状态
-     * 
-     * @param locks 已获取的锁列表
-     * @param ueIds 已获取锁的UE ID列表
-     */
-    private void releaseAcquiredLocksAndClearOccupied(List<ReentrantLock> locks, List<Integer> ueIds) {
-        for (int i = 0; i < locks.size() && i < ueIds.size(); i++) {
-            ReentrantLock lock = locks.get(i);
-            Integer ueId = ueIds.get(i);
-            try {
-                if (lock.isHeldByCurrentThread()) {
-                    lock.unlock();
-                    // 清除占用状态
-                    ueOccupiedByTask.remove(ueId);
-                    log.debug("释放UE锁并清除占用状态 - UE ID: {}", ueId);
-                }
-            } catch (Exception e) {
-                log.error("释放UE锁失败 - UE ID: {}, 错误: {}", ueId, e.getMessage(), e);
-            }
-        }
-    }
-    
-    /**
-     * 释放已获取的锁（兼容旧代码）
-     * 
-     * @param locks 已获取的锁列表
-     */
-    private void releaseAcquiredLocks(List<ReentrantLock> locks) {
-        for (ReentrantLock lock : locks) {
-            try {
-                if (lock.isHeldByCurrentThread()) {
-                    lock.unlock();
-                }
-            } catch (Exception e) {
-                log.error("释放UE锁失败 - 错误: {}", e.getMessage(), e);
-            }
-        }
-    }
-    
-    /**
-     * 释放UE锁（内部方法）
-     * 注意：由于任务完成可能在不同线程中处理，我们使用占用状态来跟踪，而不是依赖线程检查
-     * 
-     * @param ueIds UE ID列表
-     */
-    private void releaseUeLocksInternal(List<Integer> ueIds) {
-        if (ueIds == null || ueIds.isEmpty()) {
-            return;
-        }
-        
-        for (Integer ueId : ueIds) {
-            try {
-                ReentrantLock lock = ueLocks.get(ueId);
-                if (lock != null) {
-                    // 检查锁是否被持有
-                    boolean isLocked = lock.isLocked();
-                    boolean isHeldByCurrentThread = lock.isHeldByCurrentThread();
-                    
-                    log.debug("释放UE锁 - UE ID: {}, 锁是否被持有: {}, 当前线程是否持有: {}", 
-                            ueId, isLocked, isHeldByCurrentThread);
-                    
-                    // 尝试释放锁
-                    // 注意：由于锁可能在不同线程中获取和释放，我们主要依赖 ueOccupiedByTask 来跟踪占用状态
-                    // 如果当前线程持有锁，则正常释放；否则只清除占用状态
-                    try {
-                        if (isHeldByCurrentThread) {
-                            // 当前线程持有锁，正常释放
-                            lock.unlock();
-                            log.debug("释放UE锁（当前线程持有） - UE ID: {}", ueId);
-                        } else if (isLocked) {
-                            // 锁被其他线程持有，这是正常情况（任务完成可能在不同线程中处理）
-                            // 我们无法释放其他线程持有的锁，但可以清除占用状态
-                            // 这样其他任务就可以通过检查 ueOccupiedByTask 来判断UE是否可用
-                            log.debug("UE锁被其他线程持有，仅清除占用状态 - UE ID: {}", ueId);
-                        } else {
-                            // 锁未被持有，只需要清除占用状态
-                            log.debug("UE锁未被持有，仅清除占用状态 - UE ID: {}", ueId);
-                        }
-                    } catch (IllegalMonitorStateException e) {
-                        // 锁未被当前线程持有，这是正常的（任务完成可能在不同线程中）
-                        log.debug("UE锁未被当前线程持有（正常情况） - UE ID: {}", ueId);
-                    }
-                }
-                
-                // 无论锁是否被释放，都清除占用状态
-                // 这是主要的同步机制，清除后其他任务就可以尝试获取这个UE了
-                // 注意：即使 ReentrantLock 仍被其他线程持有，只要 ueOccupiedByTask 中没有记录，
-                // 其他任务在获取锁时会检测到这种情况并处理
-                ueOccupiedByTask.remove(ueId);
-                log.debug("清除UE占用状态 - UE ID: {}", ueId);
-                
-            } catch (Exception e) {
-                log.error("释放UE锁失败 - UE ID: {}, 错误: {}", ueId, e.getMessage(), e);
-                // 即使出错也尝试清除占用状态
-                ueOccupiedByTask.remove(ueId);
-            }
-        }
-    }
-    
-    /**
-     * 释放UE锁并处理UE队列中的任务
-     * 
-     * @param ueIds UE ID列表
-     */
-    private void releaseUeLocksAndProcessQueue(List<Integer> ueIds) {
-        if (ueIds == null || ueIds.isEmpty()) {
-            return;
-        }
-        
-        // 释放锁
-        releaseUeLocksInternal(ueIds);
-        
-        // 处理每个UE队列中的任务
-        for (Integer ueId : ueIds) {
-            try {
-                processUeQueue(ueId);
-            } catch (Exception e) {
-                log.error("处理UE队列任务失败 - UE ID: {}, 错误: {}", ueId, e.getMessage(), e);
-            }
-        }
-    }
-    
-    /**
-     * 将任务加入UE队列，等待UE锁释放
+     * 将任务加入UE队列，等待UE空闲
      * 
      * @param ueIds UE ID列表
      * @param logicEnvironmentId 逻辑环境ID
@@ -2921,17 +2649,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(queuedTask.getLogicEnvironmentId());
                         List<Integer> taskUeIds = extractUeIds(ueList);
                         
-                        // 尝试获取所有UE的锁
-                        if (tryAcquireUeLocks(taskUeIds, queuedTask.getLogicEnvironmentId(), 
-                                              queuedTask.getInstances(), queuedTask.getTaskId())) {
-                            // 成功获取锁，取出任务并执行
+                        // 检查UE是否可用（只通过数据库状态检查）
+                        List<Integer> unavailableUeIds = ueService.checkUesAvailability(taskUeIds);
+                        
+                        if (unavailableUeIds.isEmpty()) {
+                            // UE都空闲，取出任务并执行
                             QueuedTask task = queue.poll();
                             if (task != null) {
-                                // 再次检查任务状态（可能在获取锁的过程中任务被停止）
+                                // 再次检查任务状态
                                 if (!checkTaskStatus(task.getInstances())) {
-                                    log.info("任务在获取锁后已被停止，取消执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
-                                    // 释放已获取的锁
-                                    releaseUeLocksInternal(taskUeIds);
+                                    log.info("任务已被停止，取消执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
                                     continue;
                                 }
                                 
@@ -2953,7 +2680,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 createExecutionTaskForLogicEnvironment(task.getLogicEnvironmentId(), task.getInstances());
                             }
                         } else {
-                            // 无法获取锁，等待一段时间后重试
+                            // UE使用中，等待一段时间后重试
                             Thread.sleep(5000); // 等待5秒后重试
                         }
                         
@@ -2988,29 +2715,6 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 释放任务对应的UE锁
-     * 当任务完成时调用此方法，释放任务占用的UE锁，并处理UE队列中的任务
-     * 
-     * @param taskId 任务ID
-     */
-    @Override
-    public void releaseUeLocksForTask(String taskId) {
-        if (taskId == null || taskId.trim().isEmpty()) {
-            log.warn("任务ID为空，无法释放UE锁");
-            return;
-        }
-        
-        List<Integer> ueIds = taskIdToUeIdsMap.remove(taskId);
-        if (ueIds == null || ueIds.isEmpty()) {
-            log.debug("任务未占用UE锁或锁已释放 - 任务ID: {}", taskId);
-            return;
-        }
-        
-        log.info("任务完成，释放UE锁 - 任务ID: {}, UE IDs: {}", taskId, ueIds);
-        releaseUeLocksAndProcessQueue(ueIds);
-    }
-    
-    /**
      * 处理UE队列中的任务
      * 
      * @param ueId UE ID
@@ -3021,13 +2725,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return;
         }
         
-        log.info("UE锁释放，检查排队任务 - UE ID: {}, 队列大小: {}", ueId, queue.size());
+        log.info("UE可用，检查排队任务 - UE ID: {}, 队列大小: {}", ueId, queue.size());
         startUeQueueProcessor(ueId);
     }
     
     /**
-     * 释放UE锁
-     * 当UE被手动释放时调用此方法，释放UE锁并处理队列中的任务
+     * 处理UE队列中的任务（公共方法，供外部调用）
      * 
      * @param ueIds UE ID列表
      */
@@ -3037,8 +2740,21 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return;
         }
         
-        log.info("手动释放UE锁 - UE IDs: {}", ueIds);
-        releaseUeLocksAndProcessQueue(ueIds);
+        log.info("UE可用，检查排队任务 - UE IDs: {}", ueIds);
+        for (Integer ueId : ueIds) {
+            processUeQueue(ueId);
+        }
+    }
+    
+    /**
+     * 释放任务对应的UE（兼容方法，实际不做任何操作，因为不再使用锁）
+     * 
+     * @param taskId 任务ID
+     */
+    @Override
+    public void releaseUeLocksForTask(String taskId) {
+        // 不再需要释放锁，因为只通过数据库状态检查
+        log.debug("任务完成 - 任务ID: {}（不再需要释放锁）", taskId);
     }
     
     /**
@@ -3372,41 +3088,30 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                             }
                             
                             if (queuedTask != null) {
-                                // 尝试获取UE锁并下发任务
+                                // UE空闲，从队列中移除任务并下发
                                 String taskId = queuedTask.getTaskId();
-                                if (tryAcquireUeLocks(ueIds, logicEnvironmentId, queuedTask.getInstances(), taskId)) {
-                                    // 成功获取锁，从队列中移除任务
-                                    queue.remove(queuedTask);
-                                    
-                                    // 记录任务ID和UE ID列表的映射
-                                    taskIdToUeIdsMap.put(taskId, new ArrayList<>(ueIds));
-                                    
-                                    // 更新任务状态为运行中
-                                    if (!queuedTask.getInstances().isEmpty()) {
-                                        Long collectTaskId = queuedTask.getInstances().get(0).getCollectTaskId();
-                                        if (collectTaskId != null) {
-                                            collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
-                                        }
+                                queue.remove(queuedTask);
+                                
+                                // 更新任务状态为运行中
+                                if (!queuedTask.getInstances().isEmpty()) {
+                                    Long collectTaskId = queuedTask.getInstances().get(0).getCollectTaskId();
+                                    if (collectTaskId != null) {
+                                        collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
                                     }
-                                    
-                                    // 创建执行任务
-                                    boolean success = createExecutionTaskForLogicEnvironment(logicEnvironmentId, queuedTask.getInstances());
-                                    
-                                    if (success) {
-                                        totalProcessed++;
-                                        log.info("定时任务成功下发任务 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
-                                                logicEnvironmentId, ueIds, taskId);
-                                    } else {
-                                        // 创建失败，释放锁并将任务重新加入队列
-                                        log.warn("创建执行任务失败，释放UE锁并重新加入队列 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
-                                                logicEnvironmentId, ueIds, taskId);
-                                        releaseUeLocksInternal(ueIds);
-                                        taskIdToUeIdsMap.remove(taskId);
-                                        queue.offer(queuedTask);
-                                    }
+                                }
+                                
+                                // 创建执行任务
+                                boolean success = createExecutionTaskForLogicEnvironment(logicEnvironmentId, queuedTask.getInstances());
+                                
+                                if (success) {
+                                    totalProcessed++;
+                                    log.info("定时任务成功下发任务 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
+                                            logicEnvironmentId, ueIds, taskId);
                                 } else {
-                                    log.debug("无法获取UE锁，任务继续等待 - 逻辑环境ID: {}, UE IDs: {}", 
-                                            logicEnvironmentId, ueIds);
+                                    // 创建失败，将任务重新加入队列
+                                    log.warn("创建执行任务失败，重新加入队列 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
+                                            logicEnvironmentId, ueIds, taskId);
+                                    queue.offer(queuedTask);
                                 }
                             }
                         } else {
