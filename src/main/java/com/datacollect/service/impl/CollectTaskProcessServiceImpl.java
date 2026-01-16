@@ -1344,6 +1344,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return false; // 返回false表示任务未立即执行，已加入队列
             }
             
+            // UE空闲，立即标记为使用中
+            boolean marked = ueService.markUesInUse(ueIds);
+            if (!marked) {
+                log.warn("标记UE为使用中失败，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", 
+                        logicEnvironmentId, taskId, ueIds);
+                // 标记失败，将任务加入队列
+                addTaskToUeQueue(ueIds, logicEnvironmentId, instances, taskId);
+                return false;
+            }
+            log.info("UE已标记为使用中 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
+            
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
             
@@ -1379,9 +1390,10 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 注意：任务执行是异步的，sendExecutionRequest只是发送请求
             boolean success = sendExecutionRequest(request, instances, taskId, executorIp);
             
-            // 如果任务发送失败，记录日志
+            // 如果任务发送失败，释放UE（标记为可用）
             if (!success) {
-                log.warn("任务发送失败 - 任务ID: {}, UE IDs: {}", taskId, ueIds);
+                log.warn("任务发送失败，释放UE - 任务ID: {}, UE IDs: {}", taskId, ueIds);
+                ueService.markUesAvailable(ueIds);
             }
             
             return success;
@@ -2664,6 +2676,18 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 
                                 log.info("从UE队列中取出任务执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
                                 
+                                // 立即标记UE为使用中
+                                boolean marked = ueService.markUesInUse(taskUeIds);
+                                if (!marked) {
+                                    log.warn("标记UE为使用中失败，任务重新加入队列 - UE ID: {}, 任务ID: {}, UE IDs: {}", 
+                                            ueId, task.getTaskId(), taskUeIds);
+                                    // 标记失败，重新加入队列
+                                    queue.offer(task);
+                                    Thread.sleep(2000); // 等待2秒后重试
+                                    continue;
+                                }
+                                log.info("UE已标记为使用中 - UE ID: {}, 任务ID: {}, UE IDs: {}", ueId, task.getTaskId(), taskUeIds);
+                                
                                 // 更新任务状态为运行中（如果任务在等待中）
                                 if (!task.getInstances().isEmpty()) {
                                     Long collectTaskId = task.getInstances().get(0).getCollectTaskId();
@@ -2677,7 +2701,14 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 }
                                 
                                 // 重新执行任务创建流程
-                                createExecutionTaskForLogicEnvironment(task.getLogicEnvironmentId(), task.getInstances());
+                                boolean success = createExecutionTaskForLogicEnvironment(task.getLogicEnvironmentId(), task.getInstances());
+                                
+                                // 如果任务创建失败，释放UE（标记为可用）
+                                if (!success) {
+                                    log.warn("任务创建失败，释放UE - UE ID: {}, 任务ID: {}, UE IDs: {}", 
+                                            ueId, task.getTaskId(), taskUeIds);
+                                    ueService.markUesAvailable(taskUeIds);
+                                }
                             }
                         } else {
                             // UE使用中，等待一段时间后重试
@@ -3092,6 +3123,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 String taskId = queuedTask.getTaskId();
                                 queue.remove(queuedTask);
                                 
+                                // 立即标记UE为使用中
+                                boolean marked = ueService.markUesInUse(ueIds);
+                                if (!marked) {
+                                    log.warn("标记UE为使用中失败，任务重新加入队列 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", 
+                                            logicEnvironmentId, taskId, ueIds);
+                                    // 标记失败，重新加入队列
+                                    queue.offer(queuedTask);
+                                    continue;
+                                }
+                                log.info("UE已标记为使用中 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
+                                
                                 // 更新任务状态为运行中
                                 if (!queuedTask.getInstances().isEmpty()) {
                                     Long collectTaskId = queuedTask.getInstances().get(0).getCollectTaskId();
@@ -3108,9 +3150,10 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                     log.info("定时任务成功下发任务 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
                                             logicEnvironmentId, ueIds, taskId);
                                 } else {
-                                    // 创建失败，将任务重新加入队列
-                                    log.warn("创建执行任务失败，重新加入队列 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
+                                    // 创建失败，释放UE（标记为可用）并将任务重新加入队列
+                                    log.warn("创建执行任务失败，释放UE并重新加入队列 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
                                             logicEnvironmentId, ueIds, taskId);
+                                    ueService.markUesAvailable(ueIds);
                                     queue.offer(queuedTask);
                                 }
                             }
