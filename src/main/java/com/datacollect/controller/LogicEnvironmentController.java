@@ -8,7 +8,6 @@ import com.datacollect.entity.LogicEnvironmentUe;
 import com.datacollect.entity.dto.CreateLogicEnvironmentRequest;
 import com.datacollect.service.LogicEnvironmentService;
 import com.datacollect.service.LogicEnvironmentUeService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -27,11 +26,14 @@ import com.datacollect.entity.NetworkType;
 import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.NetworkTypeService;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/logic-environment")
 @Validated
 public class LogicEnvironmentController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LogicEnvironmentController.class);
 
     @Autowired
     private LogicEnvironmentService logicEnvironmentService;

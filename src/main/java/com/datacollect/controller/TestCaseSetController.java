@@ -35,13 +35,14 @@ import com.datacollect.util.GoHttpServerClient;
 import com.datacollect.util.PinyinUtil;
 import com.datacollect.util.ZipProcessor;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/test-case-set")
 @Validated
 public class TestCaseSetController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestCaseSetController.class);
 
     @Autowired
     private TestCaseSetService testCaseSetService;
@@ -113,15 +114,15 @@ public class TestCaseSetController {
             // 批量保存测试用例
             testCaseService.saveBatch(testCases);
             
-            log.info("Successfully uploaded test case set: {}, version: {}, containing {} test cases", name, version, testCases.size());
+            LOGGER.info("Successfully uploaded test case set: {}, version: {}, containing {} test cases", name, version, testCases.size());
 
             return Result.success(testCaseSet);
 
         } catch (IOException e) {
-            log.error("File upload or parsing failed", e);
+            LOGGER.error("File upload or parsing failed", e);
             return Result.error("文件上传或解析失败：" + e.getMessage());
         } catch (Exception e) {
-            log.error("Error occurred while processing test case set upload", e);
+            LOGGER.error("Error occurred while processing test case set upload", e);
             return Result.error("处理用例集上传时发生错误：" + e.getMessage());
         } finally {
             // 清理临时文件
@@ -203,19 +204,19 @@ public class TestCaseSetController {
                 // 将中文文件名转换为拼音
                 String pinyinFileName = PinyinUtil.convertFileNameToPinyin(originalFilename);
                 goHttpServerUrl = goHttpServerClient.uploadLocalFile(filePath.toString(), pinyinFileName);
-                log.info("File uploaded to gohttpserver: {}", goHttpServerUrl);
+                LOGGER.info("File uploaded to gohttpserver: {}", goHttpServerUrl);
             } else {
-                log.warn("gohttpserver is not available, skipping upload");
+                LOGGER.warn("gohttpserver is not available, skipping upload");
             }
         } catch (Exception e) {
-            log.error("Failed to upload to gohttpserver: {}", e.getMessage());
-            // 不影响主要流程，继续执行
+            LOGGER.error("Failed to upload to gohttpserver: {}", e.getMessage());
+            // 不影响主要流程，continue执行
         }
         return goHttpServerUrl;
     }
 
     /**
-     * 创建用例集记录
+     * create用例集记录
      */
     private TestCaseSet createTestCaseSet(String name, String version, Path filePath, 
                                         String goHttpServerUrl, long fileSize, String description) {
@@ -258,11 +259,11 @@ public class TestCaseSetController {
             try {
                 Files.deleteIfExists(Paths.get(testCaseSet.getFilePath()));
             } catch (IOException e) {
-                log.error("Failed to delete file", e);
+                LOGGER.error("Failed to delete file", e);
             }
         }
         
-        // 删除关联的测试用例
+        // delete关联的测试用例
         QueryWrapper<TestCase> testCaseQuery = new QueryWrapper<>();
         testCaseQuery.eq("test_case_set_id", id);
         testCaseService.remove(testCaseQuery);
@@ -346,7 +347,7 @@ public class TestCaseSetController {
             String fileUrl = goHttpServerClient.uploadFile(file, targetFileName);
             return Result.success(fileUrl);
         } catch (IOException e) {
-            log.error("Failed to upload to gohttpserver", e);
+            LOGGER.error("Failed to upload to gohttpserver", e);
             return Result.error("上传失败：" + e.getMessage());
         }
     }
@@ -378,7 +379,7 @@ public class TestCaseSetController {
             
             return Result.success("成功清理 " + softDeletedRecords.size() + " 条软删除记录");
         } catch (Exception e) {
-            log.error("Failed to cleanup soft deleted records", e);
+            LOGGER.error("Failed to cleanup soft deleted records", e);
             return Result.error("清理失败：" + e.getMessage());
         }
     }

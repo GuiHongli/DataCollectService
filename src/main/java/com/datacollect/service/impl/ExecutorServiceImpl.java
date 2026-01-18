@@ -21,11 +21,12 @@ import com.datacollect.service.ExecutorService;
 import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.RegionService;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Service
 public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> implements ExecutorService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExecutorServiceImpl.class);
 
     @Autowired
     private RegionService regionService;
@@ -345,7 +346,7 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     
     @Override
     public List<Executor> getExecutorsByRegion(Long regionId, Long countryId, Long provinceId, Long cityId) {
-        log.info("Start getting executors by region conditions - regionId={}, countryId={}, provinceId={}, cityId={}", 
+        LOGGER.info("Start getting executors by region conditions - regionId={}, countryId={}, provinceId={}, cityId={}", 
                 regionId, countryId, provinceId, cityId);
 
         QueryWrapper<Executor> queryWrapper = baseOnlineExecutorQuery();
@@ -381,38 +382,38 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
             filterByRegion(queryWrapper, regionId);
             return;
         }
-        log.info("No region filter conditions specified, will query all executors");
+        LOGGER.info("No region filter conditions specified, will query all executors");
     }
 
     private void filterByCity(QueryWrapper<Executor> queryWrapper, Long cityId) {
-        log.info("Filter executors by city - cityId: {}", cityId);
+        LOGGER.info("Filter executors by city - cityId: {}", cityId);
         queryWrapper.eq("region_id", cityId);
     }
 
     private void filterByProvince(QueryWrapper<Executor> queryWrapper, Long provinceId) {
-        log.info("Filter executors by province - provinceId: {}", provinceId);
+        LOGGER.info("Filter executors by province - provinceId: {}", provinceId);
         List<Region> cities = regionService.getRegionsByParentId(provinceId);
         List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-        log.debug("Cities under province {}: count={}, city ID list: {}", provinceId, cityIds.size(), cityIds);
+        LOGGER.debug("Cities under province {}: count={}, city ID list: {}", provinceId, cityIds.size(), cityIds);
         if (!cityIds.isEmpty()) {
             queryWrapper.in("region_id", cityIds);
         }
     }
 
     private void filterByCountry(QueryWrapper<Executor> queryWrapper, Long countryId) {
-        log.info("Filter executors by country - countryId: {}", countryId);
+        LOGGER.info("Filter executors by country - countryId: {}", countryId);
         List<Region> provinces = regionService.getRegionsByParentId(countryId);
         List<Long> provinceIds = provinces.stream().map(Region::getId).collect(Collectors.toList());
-        log.debug("Provinces under country {}: count={}, province ID list: {}", countryId, provinceIds.size(), provinceIds);
+        LOGGER.debug("Provinces under country {}: count={}, province ID list: {}", countryId, provinceIds.size(), provinceIds);
         if (!provinceIds.isEmpty()) {
             List<Long> allCityIds = new ArrayList<>();
             for (Long pid : provinceIds) {
                 List<Region> cities = regionService.getRegionsByParentId(pid);
                 List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                log.debug("Cities under province {}: count={}, city ID list: {}", pid, cityIds.size(), cityIds);
+                LOGGER.debug("Cities under province {}: count={}, city ID list: {}", pid, cityIds.size(), cityIds);
                 allCityIds.addAll(cityIds);
             }
-            log.debug("Total cities under country {}: count={}, city ID list: {}", countryId, allCityIds.size(), allCityIds);
+            LOGGER.debug("Total cities under country {}: count={}, city ID list: {}", countryId, allCityIds.size(), allCityIds);
             if (!allCityIds.isEmpty()) {
                 queryWrapper.in("region_id", allCityIds);
             }
@@ -420,23 +421,23 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     }
 
     private void filterByRegion(QueryWrapper<Executor> queryWrapper, Long regionId) {
-        log.info("Filter executors by region - regionId: {}", regionId);
+        LOGGER.info("Filter executors by region - regionId: {}", regionId);
         List<Region> countries = regionService.getRegionsByParentId(regionId);
         List<Long> countryIds = countries.stream().map(Region::getId).collect(Collectors.toList());
-        log.debug("Countries under region {}: count={}, country ID list: {}", regionId, countryIds.size(), countryIds);
+        LOGGER.debug("Countries under region {}: count={}, country ID list: {}", regionId, countryIds.size(), countryIds);
         if (!countryIds.isEmpty()) {
             List<Long> allCityIds = new ArrayList<>();
             for (Long cid : countryIds) {
                 List<Region> provinces = regionService.getRegionsByParentId(cid);
-                log.debug("Provinces under country {}: count={}", cid, provinces.size());
+                LOGGER.debug("Provinces under country {}: count={}", cid, provinces.size());
                 for (Region province : provinces) {
                     List<Region> cities = regionService.getRegionsByParentId(province.getId());
                     List<Long> cityIds = cities.stream().map(Region::getId).collect(Collectors.toList());
-                    log.debug("Cities under province {}: count={}, city ID list: {}", province.getId(), cityIds.size(), cityIds);
+                    LOGGER.debug("Cities under province {}: count={}, city ID list: {}", province.getId(), cityIds.size(), cityIds);
                     allCityIds.addAll(cityIds);
                 }
             }
-            log.debug("Total cities under region {}: count={}, city ID list: {}", regionId, allCityIds.size(), allCityIds);
+            LOGGER.debug("Total cities under region {}: count={}, city ID list: {}", regionId, allCityIds.size(), allCityIds);
             if (!allCityIds.isEmpty()) {
                 queryWrapper.in("region_id", allCityIds);
             }
@@ -444,9 +445,9 @@ public class ExecutorServiceImpl extends ServiceImpl<ExecutorMapper, Executor> i
     }
 
     private void logExecutors(List<Executor> executors) {
-        log.info("Executors found by region conditions: count={}", executors.size());
+        LOGGER.info("Executors found by region conditions: count={}", executors.size());
         for (Executor executor : executors) {
-            log.debug("Matched executor: {} (ID: {}, IP: {}, region ID: {})", 
+            LOGGER.debug("Matched executor: {} (ID: {}, IP: {}, region ID: {})", 
                     executor.getName(), executor.getId(), executor.getIpAddress(), executor.getRegionId());
         }
     }

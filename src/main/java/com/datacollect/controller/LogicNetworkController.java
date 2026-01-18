@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
 import com.datacollect.entity.NetworkType;
 import com.datacollect.service.NetworkTypeService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -14,11 +13,14 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.util.List;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/logic-network")
 @Validated
 public class LogicNetworkController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LogicNetworkController.class);
 
     @Autowired
     private NetworkTypeService networkTypeService;

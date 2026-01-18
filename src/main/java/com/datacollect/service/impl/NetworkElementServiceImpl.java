@@ -9,22 +9,24 @@ import com.datacollect.entity.NetworkElementAttribute;
 import com.datacollect.mapper.NetworkElementAttributeMapper;
 import com.datacollect.mapper.NetworkElementMapper;
 import com.datacollect.service.NetworkElementService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 网元服务实现类
  *
  * @author system
  * @since 2025-01-20
  */
-@Slf4j
 @Service
 public class NetworkElementServiceImpl extends ServiceImpl<NetworkElementMapper, NetworkElement> implements NetworkElementService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(NetworkElementServiceImpl.class);
 
     @Autowired
     private NetworkElementAttributeMapper networkElementAttributeMapper;
@@ -120,6 +122,7 @@ public class NetworkElementServiceImpl extends ServiceImpl<NetworkElementMapper,
         return this.removeById(id);
     }
 }
+
 
 
 

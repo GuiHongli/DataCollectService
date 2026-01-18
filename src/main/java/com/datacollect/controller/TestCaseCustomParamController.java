@@ -7,7 +7,6 @@ import com.datacollect.entity.TestCaseCustomParam;
 import com.datacollect.service.TestCaseCustomParamService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -17,11 +16,14 @@ import javax.validation.constraints.NotNull;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/test-case-custom-param")
 @Validated
 public class TestCaseCustomParamController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestCaseCustomParamController.class);
 
     @Autowired
     private TestCaseCustomParamService testCaseCustomParamService;
@@ -41,7 +43,7 @@ public class TestCaseCustomParamController {
             TestCaseCustomParamDTO result = convertEntityToDTO(entity);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("创建用例自定义参数失败", e);
+            LOGGER.error("create用例自定义参数failed", e);
             return Result.error("创建用例自定义参数失败: " + e.getMessage());
         }
     }
@@ -61,7 +63,7 @@ public class TestCaseCustomParamController {
             TestCaseCustomParamDTO result = convertEntityToDTO(entity);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("更新用例自定义参数失败", e);
+            LOGGER.error("update用例自定义参数failed", e);
             return Result.error("更新用例自定义参数失败: " + e.getMessage());
         }
     }
@@ -75,7 +77,7 @@ public class TestCaseCustomParamController {
             boolean result = testCaseCustomParamService.removeById(id);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("删除用例自定义参数失败", e);
+            LOGGER.error("delete用例自定义参数failed", e);
             return Result.error("删除用例自定义参数失败: " + e.getMessage());
         }
     }
@@ -93,7 +95,7 @@ public class TestCaseCustomParamController {
             TestCaseCustomParamDTO result = convertEntityToDTO(entity);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("获取用例自定义参数失败", e);
+            LOGGER.error("get用例自定义参数failed", e);
             return Result.error("获取用例自定义参数失败: " + e.getMessage());
         }
     }
@@ -113,7 +115,7 @@ public class TestCaseCustomParamController {
                     .collect(Collectors.toList());
             return Result.success(result);
         } catch (Exception e) {
-            log.error("获取用例自定义参数列表失败", e);
+            LOGGER.error("get用例自定义参数列表failed", e);
             return Result.error("获取用例自定义参数列表失败: " + e.getMessage());
         }
     }
@@ -155,7 +157,7 @@ public class TestCaseCustomParamController {
             
             return dto;
         } catch (Exception e) {
-            log.error("转换Entity到DTO失败", e);
+            LOGGER.error("转换Entity到DTOfailed", e);
             // 如果转换失败，返回空列表
             TestCaseCustomParamDTO dto = new TestCaseCustomParamDTO();
             dto.setId(entity.getId());

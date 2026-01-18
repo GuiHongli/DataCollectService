@@ -9,7 +9,6 @@ import com.datacollect.dto.SpeedComparisonDTO;
 import com.datacollect.dto.RttComparisonDTO;
 import com.datacollect.dto.StutterComparisonDTO;
 import com.datacollect.dto.AvgQoeComparisonDTO;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,16 +25,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 端侧数据管理控制器
  *
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/client-data")
 public class ClientDataController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClientDataController.class);
 
     @Autowired
     private TaskInfoService taskInfoService;
@@ -102,7 +104,7 @@ public class ClientDataController {
             Page<ClientTaskInfo> result = taskInfoService.page(page, queryWrapper);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get task info page: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get task info page: {}", e.getMessage(), e);
             return Result.error("查询失败: " + e.getMessage());
         }
     }
@@ -161,7 +163,7 @@ public class ClientDataController {
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get task detail: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get task detail: {}", e.getMessage(), e);
             return Result.error("查询详情失败: " + e.getMessage());
         }
     }
@@ -179,14 +181,14 @@ public class ClientDataController {
             vmosData.setId(id);
             boolean success = vmosDataService.updateById(vmosData);
             if (success) {
-                log.info("VmosData updated successfully - ID: {}", id);
+                LOGGER.info("VmosData updated successfully - ID: {}", id);
                 return Result.success(vmosData);
             } else {
-                log.error("Failed to update VmosData - ID: {}", id);
+                LOGGER.error("Failed to update VmosData - ID: {}", id);
                 return Result.error("更新失败");
             }
         } catch (Exception e) {
-            log.error("Failed to update VmosData - ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Failed to update VmosData - ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("更新失败: " + e.getMessage());
         }
     }
@@ -265,7 +267,7 @@ public class ClientDataController {
                             BigDecimal speed = new BigDecimal(speedStr);
                             clientSpeed.setSpeed(speed);
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析speed字段: {}", speedStr);
+                            LOGGER.warn("无法解析speed字段: {}", speedStr);
                             clientSpeed.setSpeed(BigDecimal.ZERO);
                         }
                     } else {
@@ -326,7 +328,7 @@ public class ClientDataController {
                             // 除以1024转换为Kbps
                             networkSpeed.setUplinkBandwidth(uplink.divide(new BigDecimal("1024"), 2, RoundingMode.HALF_UP));
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析uplink_bandwidth字段: {}", uplinkStr);
+                            LOGGER.warn("无法解析uplink_bandwidth字段: {}", uplinkStr);
                             networkSpeed.setUplinkBandwidth(BigDecimal.ZERO);
                         }
                     } else {
@@ -339,7 +341,7 @@ public class ClientDataController {
                             // 除以1024转换为Kbps
                             networkSpeed.setDownlinkBandwidth(downlink.divide(new BigDecimal("1024"), 2, RoundingMode.HALF_UP));
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析downlink_bandwidth字段: {}", downlinkStr);
+                            LOGGER.warn("无法解析downlink_bandwidth字段: {}", downlinkStr);
                             networkSpeed.setDownlinkBandwidth(BigDecimal.ZERO);
                         }
                     } else {
@@ -351,13 +353,13 @@ public class ClientDataController {
             }
             result.setNetworkSpeedList(networkSpeedList);
             
-            // 设置当前保存的网络侧开始时间和端侧开始序号
+            // set当前save的网络侧start时间和端侧start序号
             result.setNetworkStartTime(taskInfo.getNetworkStartTime());
             result.setClientStartSequence(taskInfo.getClientStartSequence());
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get speed comparison: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get speed comparison: {}", e.getMessage(), e);
             return Result.error("获取速率对比数据失败: " + e.getMessage());
         }
     }
@@ -387,7 +389,7 @@ public class ClientDataController {
                         try {
                             clientStartSequence = Integer.parseInt(seqStr);
                         } catch (NumberFormatException e) {
-                            log.warn("Invalid clientStartSequence format: {}", seqStr);
+                            LOGGER.warn("Invalid clientStartSequence format: {}", seqStr);
                         }
                     }
                 }
@@ -410,15 +412,15 @@ public class ClientDataController {
             boolean success = taskInfoService.updateById(taskInfo);
             
             if (success) {
-                log.info("Network start time and client start sequence updated successfully - taskId: {}, networkStartTime: {}, clientStartSequence: {}", 
+                LOGGER.info("Network start time and client start sequence updated successfully - taskId: {}, networkStartTime: {}, clientStartSequence: {}", 
                         taskId, networkStartTime, clientStartSequence);
                 return Result.success(taskInfo);
             } else {
-                log.error("Failed to update network start time and client start sequence - taskId: {}", taskId);
+                LOGGER.error("Failed to update network start time and client start sequence - taskId: {}", taskId);
                 return Result.error("更新失败");
             }
         } catch (Exception e) {
-            log.error("Failed to update network start time and client start sequence - taskId: {}, error: {}", taskId, e.getMessage(), e);
+            LOGGER.error("Failed to update network start time and client start sequence - taskId: {}, error: {}", taskId, e.getMessage(), e);
             return Result.error("更新失败: " + e.getMessage());
         }
     }
@@ -436,7 +438,7 @@ public class ClientDataController {
                 return timeConfig.getTimeDiff();
             }
         } catch (Exception e) {
-            log.warn("Failed to get time config, using default value: {}", e.getMessage());
+            LOGGER.warn("Failed to get time config, using default value: {}", e.getMessage());
         }
         // 默认返回3分钟
         return 3;
@@ -447,7 +449,7 @@ public class ClientDataController {
      * 
      * @param timeStr 时间字符串（格式：yyyy-MM-dd HH:mm:ss）
      * @param minutes 要调整的分钟数（正数表示向后增加，负数表示向前减少）
-     * @return 调整后的时间字符串，如果调整失败返回原值
+     * @return 调整后的时间字符串，如果调整failed返回原值
      */
     private String adjustTime(String timeStr, int minutes) {
         if (timeStr == null || timeStr.trim().isEmpty()) {
@@ -460,7 +462,7 @@ public class ClientDataController {
             LocalDateTime adjustedDateTime = dateTime.plusMinutes(minutes);
             return adjustedDateTime.format(formatter);
         } catch (DateTimeParseException e) {
-            log.warn("Time adjustment failed: {}, error: {}", timeStr, e.getMessage());
+            LOGGER.warn("Time adjustment failed: {}, error: {}", timeStr, e.getMessage());
             return timeStr;
         }
     }
@@ -470,7 +472,7 @@ public class ClientDataController {
      * 从 UTC+8 的 20251027150500 (yyyyMMddHHmmss) 转换为 UTC+0 的 2025-10-27 07:05:00 (yyyy-MM-dd HH:mm:ss)
      * 
      * @param timeStr 原始时间字符串（UTC+8时区）
-     * @return 转换后的时间字符串（UTC+0时区），如果转换失败返回null
+     * @return 转换后的时间字符串（UTC+0时区），如果转换failed返回null
      */
     private String convertTimeFormatAndTimezone(String timeStr) {
         if (timeStr == null || timeStr.trim().isEmpty()) {
@@ -502,7 +504,7 @@ public class ClientDataController {
                 utc0Time = utc8Time.withZoneSameInstant(ZoneId.of("UTC"));
             } else {
                 // 如果无法识别格式，返回原值
-                log.warn("无法识别的时间格式: {}", timeStr);
+                LOGGER.warn("无法识别的时间格式: {}", timeStr);
                 return timeStr;
             }
             
@@ -513,7 +515,7 @@ public class ClientDataController {
             
             return timeStr;
         } catch (DateTimeParseException e) {
-            log.warn("时间格式转换失败: {}, 错误: {}", timeStr, e.getMessage());
+            LOGGER.warn("时间格式转换失败: {}, 错误: {}", timeStr, e.getMessage());
             return timeStr;
         }
     }
@@ -592,7 +594,7 @@ public class ClientDataController {
                             BigDecimal rtt = new BigDecimal(rttStr);
                             clientRtt.setRtt(rtt);
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析rtt字段: {}", rttStr);
+                            LOGGER.warn("无法解析rtt字段: {}", rttStr);
                             clientRtt.setRtt(BigDecimal.ZERO);
                         }
                     } else {
@@ -605,7 +607,7 @@ public class ClientDataController {
             }
             result.setClientRttList(clientRttList);
             
-            // 4. 查询network_data表获取service_delay字段
+            // 4. querynetwork_data表getservice_delay字段
             String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
             
             QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
@@ -644,7 +646,7 @@ public class ClientDataController {
                             BigDecimal serviceDelay = new BigDecimal(serviceDelayStr);
                             networkRtt.setServiceDelay(serviceDelay);
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析service_delay字段: {}", serviceDelayStr);
+                            LOGGER.warn("无法解析service_delay字段: {}", serviceDelayStr);
                             networkRtt.setServiceDelay(BigDecimal.ZERO);
                         }
                     } else {
@@ -659,7 +661,7 @@ public class ClientDataController {
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get RTT comparison: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get RTT comparison: {}", e.getMessage(), e);
             return Result.error("获取RTT对比数据失败: " + e.getMessage());
         }
     }
@@ -738,7 +740,7 @@ public class ClientDataController {
                             BigDecimal stutterRatio = new BigDecimal(stutterRatioStr);
                             clientStutter.setStutterRatio(stutterRatio);
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析stutter_ratio字段: {}", stutterRatioStr);
+                            LOGGER.warn("无法解析stutter_ratio字段: {}", stutterRatioStr);
                             clientStutter.setStutterRatio(BigDecimal.ZERO);
                         }
                     } else {
@@ -751,7 +753,7 @@ public class ClientDataController {
             }
             result.setClientStutterList(clientStutterList);
             
-            // 4. 查询network_data表获取stalling_number字段，除以10
+            // 4. querynetwork_data表getstalling_number字段，除以10
             String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
             
             QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
@@ -791,7 +793,7 @@ public class ClientDataController {
                             // 除以10
                             networkStutter.setStallingNumberDiv10(stallingNumber.divide(new BigDecimal("10"), 2, RoundingMode.HALF_UP));
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析stalling_number字段: {}", stallingNumberStr);
+                            LOGGER.warn("无法解析stalling_number字段: {}", stallingNumberStr);
                             networkStutter.setStallingNumberDiv10(BigDecimal.ZERO);
                         }
                     } else {
@@ -806,7 +808,7 @@ public class ClientDataController {
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get stutter comparison: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get stutter comparison: {}", e.getMessage(), e);
             return Result.error("获取卡顿对比数据失败: " + e.getMessage());
         }
     }
@@ -885,7 +887,7 @@ public class ClientDataController {
                             BigDecimal avgQoe = new BigDecimal(avgQoeStr);
                             clientAvgQoe.setAvgQoe(avgQoe);
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析avg_qoe字段: {}", avgQoeStr);
+                            LOGGER.warn("无法解析avg_qoe字段: {}", avgQoeStr);
                             clientAvgQoe.setAvgQoe(BigDecimal.ZERO);
                         }
                     } else {
@@ -898,7 +900,7 @@ public class ClientDataController {
             }
             result.setClientAvgQoeList(clientAvgQoeList);
             
-            // 4. 查询network_data表获取avg_qoe字段
+            // 4. querynetwork_data表getavg_qoe字段
             String appService = (app != null ? app : "") + "-" + (service != null ? service : "");
             
             QueryWrapper<NetworkData> networkWrapper = new QueryWrapper<>();
@@ -937,7 +939,7 @@ public class ClientDataController {
                             BigDecimal avgQoe = new BigDecimal(avgQoeStr);
                             networkAvgQoe.setAvgQoe(avgQoe);
                         } catch (NumberFormatException e) {
-                            log.warn("无法解析avg_qoe字段: {}", avgQoeStr);
+                            LOGGER.warn("无法解析avg_qoe字段: {}", avgQoeStr);
                             networkAvgQoe.setAvgQoe(BigDecimal.ZERO);
                         }
                     } else {
@@ -952,7 +954,7 @@ public class ClientDataController {
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get avg QOE comparison: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get avg QOE comparison: {}", e.getMessage(), e);
             return Result.error("获取平均QOE对比数据失败: " + e.getMessage());
         }
     }

@@ -7,25 +7,27 @@ import com.datacollect.dto.CollectTaskTemplateRequest;
 import com.datacollect.entity.CollectTaskTemplate;
 import com.datacollect.mapper.CollectTaskTemplateMapper;
 import com.datacollect.service.CollectTaskTemplateService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 采集任务模版服务实现类
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class CollectTaskTemplateServiceImpl extends ServiceImpl<CollectTaskTemplateMapper, CollectTaskTemplate> implements CollectTaskTemplateService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CollectTaskTemplateServiceImpl.class);
     
     @Override
     public Long createTemplate(CollectTaskTemplateRequest request, String createBy) {
-        log.info("创建采集任务模版 - 模版名称: {}, 采集策略ID: {}, 创建人: {}", 
+        LOGGER.info("创建采集任务模版 - 模版名称: {}, 采集策略ID: {}, 创建人: {}", 
                 request.getName(), request.getCollectStrategyId(), createBy);
         
         CollectTaskTemplate template = new CollectTaskTemplate();
@@ -66,31 +68,31 @@ public class CollectTaskTemplateServiceImpl extends ServiceImpl<CollectTaskTempl
         
         boolean success = save(template);
         if (success) {
-            log.info("采集任务模版创建成功 - 模版ID: {}", template.getId());
+            LOGGER.info("采集任务模版创建成功 - 模版ID: {}", template.getId());
             return template.getId();
         } else {
-            log.error("采集任务模版创建失败 - 模版名称: {}", request.getName());
+            LOGGER.error("采集任务模版createfailed - 模版名称: {}", request.getName());
             throw new RuntimeException("采集任务模版创建失败");
         }
     }
     
     @Override
     public Boolean updateTemplate(CollectTaskTemplateRequest request) {
-        log.info("更新采集任务模版 - 模版ID: {}, 模版名称: {}", request.getId(), request.getName());
+        LOGGER.info("update采集任务模版 - 模版ID: {}, 模版名称: {}", request.getId(), request.getName());
         
         if (request.getId() == null) {
-            log.error("更新采集任务模版失败 - 模版ID不能为空");
+            LOGGER.error("update采集任务模版failed - 模版ID不能为空");
             throw new RuntimeException("模版ID不能为空");
         }
         
         CollectTaskTemplate template = getById(request.getId());
         if (template == null) {
-            log.error("更新采集任务模版失败 - 模版不存在，模版ID: {}", request.getId());
+            LOGGER.error("update采集任务模版failed - 模版不存在，模版ID: {}", request.getId());
             throw new RuntimeException("模版不存在");
         }
         
         if (template.getDeleted() != null && template.getDeleted() == 1) {
-            log.error("更新采集任务模版失败 - 模版已删除，模版ID: {}", request.getId());
+            LOGGER.error("update采集任务模版failed - 模版已delete，模版ID: {}", request.getId());
             throw new RuntimeException("模版已删除");
         }
         
@@ -132,10 +134,10 @@ public class CollectTaskTemplateServiceImpl extends ServiceImpl<CollectTaskTempl
         
         boolean success = updateById(template);
         if (success) {
-            log.info("采集任务模版更新成功 - 模版ID: {}", template.getId());
+            LOGGER.info("采集任务模版updatesuccess - 模版ID: {}", template.getId());
             return true;
         } else {
-            log.error("采集任务模版更新失败 - 模版ID: {}", request.getId());
+            LOGGER.error("采集任务模版updatefailed - 模版ID: {}", request.getId());
             throw new RuntimeException("采集任务模版更新失败");
         }
     }

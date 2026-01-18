@@ -7,7 +7,6 @@ import com.datacollect.dto.CollectStrategyDTO;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.service.CollectStrategyService;
 import com.datacollect.enums.CollectIntentEnum;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -20,11 +19,14 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/collect-strategy")
 @Validated
 public class CollectStrategyController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CollectStrategyController.class);
 
     @Autowired
     private CollectStrategyService collectStrategyService;

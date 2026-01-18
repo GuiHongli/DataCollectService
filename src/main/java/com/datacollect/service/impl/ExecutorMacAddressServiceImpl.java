@@ -5,15 +5,17 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.mapper.ExecutorMacAddressMapper;
 import com.datacollect.service.ExecutorMacAddressService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Service
 public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddressMapper, ExecutorMacAddress> implements ExecutorMacAddressService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExecutorMacAddressServiceImpl.class);
 
     @Override
     public ExecutorMacAddress getByMacAddress(String macAddress) {
@@ -37,7 +39,7 @@ public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddres
     @Override
     public ExecutorMacAddress registerOrUpdateMacAddress(String macAddress, String ipAddress) {
         if (ipAddress == null || ipAddress.trim().isEmpty()) {
-            log.warn("IP地址为空，无法注册MAC地址 - MAC地址: {}", macAddress);
+            LOGGER.warn("IP地址为空，无法注册MAC地址 - MAC地址: {}", macAddress);
             return null;
         }
         
@@ -57,10 +59,10 @@ public class ExecutorMacAddressServiceImpl extends ServiceImpl<ExecutorMacAddres
             macAddressEntity.setCreateTime(LocalDateTime.now());
             macAddressEntity.setUpdateTime(LocalDateTime.now());
             save(macAddressEntity);
-            log.info("MAC地址已注册（新IP） - MAC地址: {}, IP地址: {}", macAddress, ipAddress);
+            LOGGER.info("MAC地址已注册（新IP） - MAC地址: {}, IP地址: {}", macAddress, ipAddress);
             return macAddressEntity;
         } else {
-            log.debug("MAC地址和IP组合已存在 - MAC地址: {}, IP地址: {}", macAddress, ipAddress);
+            LOGGER.debug("MAC地址和IP组合已存在 - MAC地址: {}, IP地址: {}", macAddress, ipAddress);
             return existingRecord;
         }
     }

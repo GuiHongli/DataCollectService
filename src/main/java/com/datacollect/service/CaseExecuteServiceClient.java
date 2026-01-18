@@ -11,8 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import lombok.extern.slf4j.Slf4j;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * CaseExecuteService客户端
  * 用于调用CaseExecuteService的相关接口
@@ -20,9 +20,10 @@ import lombok.extern.slf4j.Slf4j;
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class CaseExecuteServiceClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CaseExecuteServiceClient.class);
     
     @Autowired
     private RestTemplate restTemplate;
@@ -37,7 +38,7 @@ public class CaseExecuteServiceClient {
     public boolean cancelTaskExecution(String executorIp, String taskId) {
         try {
             String url = String.format("http://%s:8081/api/test-case-execution/cancel/%s", executorIp, taskId);
-            log.info("Call CaseExecuteService to cancel task - URL: {}, task ID: {}", url, taskId);
+            LOGGER.info("Call CaseExecuteService to cancel task - URL: {}, task ID: {}", url, taskId);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -50,20 +51,20 @@ public class CaseExecuteServiceClient {
                 Integer code = (Integer) result.get("code");
                 
                 if (code != null && code == 200) {
-                    log.info("CaseExecuteService task cancellation successful - task ID: {}, executor IP: {}", taskId, executorIp);
+                    LOGGER.info("CaseExecuteService task cancellation successful - task ID: {}, executor IP: {}", taskId, executorIp);
                     return true;
                 } else {
                     String message = (String) result.get("message");
-                    log.error("CaseExecuteService task cancellation returned error - task ID: {}, error message: {}", taskId, message);
+                    LOGGER.error("CaseExecuteService task cancellation returned error - task ID: {}, error message: {}", taskId, message);
                     return false;
                 }
             } else {
-                log.error("CaseExecuteService task cancellation call failed - task ID: {}, HTTP status: {}", taskId, response.getStatusCode());
+                LOGGER.error("CaseExecuteService task cancellation call failed - task ID: {}, HTTP status: {}", taskId, response.getStatusCode());
                 return false;
             }
             
         } catch (Exception e) {
-            log.error("CaseExecuteService task cancellation network call exception - task ID: {}, executor IP: {}, error: {}", 
+            LOGGER.error("CaseExecuteService task cancellation network call exception - task ID: {}, executor IP: {}, error: {}", 
                     taskId, executorIp, e.getMessage(), e);
             return false;
         }

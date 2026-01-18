@@ -2,13 +2,14 @@ package com.datacollect.controller;
 
 import com.datacollect.common.Result;
 import com.datacollect.service.UeService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * UE状态控制器
  * 用于执行机更新UE使用状态
@@ -16,10 +17,11 @@ import java.util.Map;
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/ue-status")
 public class UeStatusController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UeStatusController.class);
 
     @Autowired
     private UeService ueService;
@@ -42,7 +44,7 @@ public class UeStatusController {
             
             boolean success = ueService.markUesInUse(ueIds);
             if (success) {
-                log.info("UE已标记为使用中 - UE IDs: {}", ueIds);
+                LOGGER.info("UE已mark为in use - UE IDs: {}", ueIds);
                 Map<String, Object> data = new java.util.HashMap<>();
                 data.put("ueIds", ueIds);
                 data.put("status", "IN_USE");
@@ -52,7 +54,7 @@ public class UeStatusController {
             }
             
         } catch (Exception e) {
-            log.error("标记UE为使用中失败 - 错误: {}", e.getMessage(), e);
+            LOGGER.error("markUE为in usefailed - error: {}", e.getMessage(), e);
             return Result.error("标记UE为使用中失败: " + e.getMessage());
         }
     }
@@ -75,7 +77,7 @@ public class UeStatusController {
             
             boolean success = ueService.markUesAvailable(ueIds);
             if (success) {
-                log.info("UE已标记为可用 - UE IDs: {}", ueIds);
+                LOGGER.info("UE已mark为available - UE IDs: {}", ueIds);
                 Map<String, Object> data = new java.util.HashMap<>();
                 data.put("ueIds", ueIds);
                 data.put("status", "AVAILABLE");
@@ -85,7 +87,7 @@ public class UeStatusController {
             }
             
         } catch (Exception e) {
-            log.error("标记UE为可用失败 - 错误: {}", e.getMessage(), e);
+            LOGGER.error("markUE为availablefailed - error: {}", e.getMessage(), e);
             return Result.error("标记UE为可用失败: " + e.getMessage());
         }
     }

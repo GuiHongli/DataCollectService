@@ -11,7 +11,6 @@ import com.datacollect.dto.GetSingleAppVersionHistoryResponse;
 import com.datacollect.dto.UpdateProbedStatusResponse;
 import com.datacollect.service.ExternalApiService;
 
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,16 +19,19 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 外部接口调用控制器
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/external")
 public class ExternalApiController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExternalApiController.class);
     
     @Autowired
     private ExternalApiService externalApiService;
@@ -45,7 +47,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("Received request to check if app is new - parameters: {}", appCheckRequests);
+            LOGGER.info("Received request to check if app is new - parameters: {}", appCheckRequests);
             
             AppCheckResponse result = externalApiService.checkAppIsNew(appCheckRequests);
             
@@ -56,7 +58,7 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Failed to check if app is new", e);
+            LOGGER.error("Failed to check if app is new", e);
             
             response.put("code", 500);
             response.put("message", "Failed to check if app is new: " + e.getMessage());
@@ -77,7 +79,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("Received request to update probed status - parameters: {}", appNames);
+            LOGGER.info("Received request to update probed status - parameters: {}", appNames);
             
             UpdateProbedStatusResponse result = externalApiService.updateProbedStatus(appNames);
             
@@ -88,7 +90,7 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Failed to update probed status", e);
+            LOGGER.error("Failed to update probed status", e);
             
             response.put("code", 500);
             response.put("message", "Failed to update probed status: " + e.getMessage());
@@ -109,7 +111,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("Received request to get daily rank - parameters: {}", request);
+            LOGGER.info("Received request to get daily rank - parameters: {}", request);
             
             GetDailyRankResponse result = externalApiService.getDailyRank(request);
             
@@ -120,7 +122,7 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Failed to get daily rank", e);
+            LOGGER.error("Failed to get daily rank", e);
             
             response.put("code", 500);
             response.put("message", "Failed to get daily rank: " + e.getMessage());
@@ -141,7 +143,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("Received request to get version history - parameters: {}", request);
+            LOGGER.info("Received request to get version history - parameters: {}", request);
             
             GetVersionHistoryResponse result = externalApiService.getVersionHistory(request);
             
@@ -152,7 +154,7 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Failed to get version history", e);
+            LOGGER.error("Failed to get version history", e);
             
             response.put("code", 500);
             response.put("message", "Failed to get version history: " + e.getMessage());
@@ -173,7 +175,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("Received request to get single app version history - parameters: {}", request);
+            LOGGER.info("Received request to get single app version history - parameters: {}", request);
             
             GetSingleAppVersionHistoryResponse result = externalApiService.getSingleAppVersionHistory(request);
             
@@ -183,7 +185,7 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Failed to get single app version history", e);
+            LOGGER.error("Failed to get single app version history", e);
             
             response.put("message", "Failed to get single app version history: " + e.getMessage());
             response.put("data", null);
@@ -204,7 +206,7 @@ public class ExternalApiController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            log.info("Received request to get single app version history - parameters: {}", request);
+            LOGGER.info("Received request to get single app version history - parameters: {}", request);
             
             GetSingleAppVersionHistoryResponse result = externalApiService.getSingleAppVersionHistory(request);
             
@@ -214,7 +216,7 @@ public class ExternalApiController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Failed to get single app version history", e);
+            LOGGER.error("Failed to get single app version history", e);
             
             response.put("message", "Failed to get single app version history: " + e.getMessage());
             response.put("data", null);

@@ -1,6 +1,5 @@
 package com.datacollect.util;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
@@ -13,12 +12,15 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * FTP客户端工具类
  * 用于连接FTP服务器、下载文件等操作
  */
-@Slf4j
 public class FtpClientUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FtpClientUtil.class);
 
     /**
      * 连接FTP服务器并下载文件
@@ -50,14 +52,14 @@ public class FtpClientUtil {
                 host = serverAddress;
             }
 
-            log.info("Connecting to FTP server: {}:{}", host, port);
+            LOGGER.info("Connecting to FTP server: {}:{}", host, port);
 
             // 连接FTP服务器
             ftpClient.connect(host, port);
             int replyCode = ftpClient.getReplyCode();
 
             if (!FTPReply.isPositiveCompletion(replyCode)) {
-                log.error("FTP服务器连接失败 - serverAddress: {}:{}, replyCode: {}, remoteFileName: {}, remoteDirectory: {}",
+                LOGGER.error("FTP服务器连接失败 - serverAddress: {}:{}, replyCode: {}, remoteFileName: {}, remoteDirectory: {}",
                         host, port, replyCode, remoteFileName, remoteDirectory);
                 ftpClient.disconnect();
                 throw new IOException("FTP server refused connection. Reply code: " + replyCode);
@@ -66,39 +68,39 @@ public class FtpClientUtil {
             // 登录
             boolean loginSuccess = ftpClient.login(account, password);
             if (!loginSuccess) {
-                log.error("FTP登录失败 - serverAddress: {}:{}, account: {}, remoteFileName: {}, remoteDirectory: {}",
+                LOGGER.error("FTP login failed - serverAddress: {}:{}, account: {}, remoteFileName: {}, remoteDirectory: {}",
                         host, port, account, remoteFileName, remoteDirectory);
                 ftpClient.disconnect();
                 throw new IOException("FTP login failed. Check username and password.");
             }
 
-            log.info("FTP login successful");
+            LOGGER.info("FTP login successful");
 
-            // 设置文件传输模式为二进制
+            // set文件传输模式为二进制
             ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
-            // 设置被动模式
+            // set被动模式
             ftpClient.enterLocalPassiveMode();
 
             // 切换到指定目录
             if (remoteDirectory != null && !remoteDirectory.trim().isEmpty()) {
                 boolean changeDirSuccess = ftpClient.changeWorkingDirectory(remoteDirectory);
                 if (!changeDirSuccess) {
-                    log.warn("Failed to change directory to: {}. Current directory: {}", remoteDirectory, ftpClient.printWorkingDirectory());
+                    LOGGER.warn("Failed to change directory to: {}. Current directory: {}", remoteDirectory, ftpClient.printWorkingDirectory());
                 } else {
-                    log.info("Changed to directory: {}", remoteDirectory);
+                    LOGGER.info("Changed to directory: {}", remoteDirectory);
                 }
             }
 
-            // 检查文件是否存在
+            // check文件是否存在
             FTPFile[] files = ftpClient.listFiles(remoteFileName);
             if (files.length == 0) {
-                log.error("FTP服务器上文件不存在 - serverAddress: {}:{}, remoteFileName: {}, remoteDirectory: {}, currentDirectory: {}",
+                LOGGER.error("FTP服务器上文件不存在 - serverAddress: {}:{}, remoteFileName: {}, remoteDirectory: {}, currentDirectory: {}",
                         host, port, remoteFileName, remoteDirectory, ftpClient.printWorkingDirectory());
                 throw new IOException("File not found on FTP server: " + remoteFileName);
             }
 
-            log.info("File found on FTP server: {} (size: {} bytes)", remoteFileName, files[0].getSize());
+            LOGGER.info("File found on FTP server: {} (size: {} bytes)", remoteFileName, files[0].getSize());
 
             // 创建本地目录
             Path localPath = Paths.get(localFilePath);
@@ -107,7 +109,7 @@ public class FtpClientUtil {
             // 下载文件
             inputStream = ftpClient.retrieveFileStream(remoteFileName);
             if (inputStream == null) {
-                log.error("FTP文件流获取失败 - serverAddress: {}:{}, remoteFileName: {}, remoteDirectory: {}, fileSize: {} bytes",
+                LOGGER.error("Failed to get FTP file stream - serverAddress: {}:{}, remoteFileName: {}, remoteDirectory: {}, fileSize: {} bytes",
                         host, port, remoteFileName, remoteDirectory, files[0].getSize());
                 throw new IOException("Failed to retrieve file stream: " + remoteFileName);
             }
@@ -122,18 +124,18 @@ public class FtpClientUtil {
                 totalBytesRead += bytesRead;
             }
 
-            log.info("File downloaded successfully: {} ({} bytes)", localFilePath, totalBytesRead);
+            LOGGER.info("File downloaded successfully: {} ({} bytes)", localFilePath, totalBytesRead);
 
             // 完成文件传输
             boolean completed = ftpClient.completePendingCommand();
             if (!completed) {
-                log.warn("File transfer may not be completed properly");
+                LOGGER.warn("File transfer may not be completed properly");
             }
 
             return true;
 
         } catch (Exception e) {
-            log.error("FTP文件下载失败 - serverAddress: {}, remoteFileName: {}, remoteDirectory: {}, account: {}, error: {}",
+            LOGGER.error("FTP file download failed - serverAddress: {}, remoteFileName: {}, remoteDirectory: {}, account: {}, error: {}",
                     serverAddress, remoteFileName, remoteDirectory, account, e.getMessage(), e);
             throw new IOException("FTP download failed: " + e.getMessage(), e);
         } finally {
@@ -142,14 +144,14 @@ public class FtpClientUtil {
                 try {
                     inputStream.close();
                 } catch (IOException e) {
-                    log.warn("Failed to close input stream: {}", e.getMessage());
+                    LOGGER.warn("Failed to close input stream: {}", e.getMessage());
                 }
             }
             if (outputStream != null) {
                 try {
                     outputStream.close();
                 } catch (IOException e) {
-                    log.warn("Failed to close output stream: {}", e.getMessage());
+                    LOGGER.warn("Failed to close output stream: {}", e.getMessage());
                 }
             }
 
@@ -159,7 +161,7 @@ public class FtpClientUtil {
                     ftpClient.logout();
                     ftpClient.disconnect();
                 } catch (IOException e) {
-                    log.warn("Failed to disconnect FTP client: {}", e.getMessage());
+                    LOGGER.warn("Failed to disconnect FTP client: {}", e.getMessage());
                 }
             }
         }
@@ -194,14 +196,14 @@ public class FtpClientUtil {
                 host = serverAddress;
             }
 
-            log.info("Connecting to FTP server to read file: {}:{}", host, port);
+            LOGGER.info("Connecting to FTP server to read file: {}:{}", host, port);
 
             // 连接FTP服务器
             ftpClient.connect(host, port);
             int replyCode = ftpClient.getReplyCode();
 
             if (!FTPReply.isPositiveCompletion(replyCode)) {
-                log.error("FTP服务器连接失败（读取文件） - serverAddress: {}:{}, replyCode: {}, remoteFileName: {}, remoteDirectory: {}",
+                LOGGER.error("FTP服务器连接失败（读取文件） - serverAddress: {}:{}, replyCode: {}, remoteFileName: {}, remoteDirectory: {}",
                         host, port, replyCode, remoteFileName, remoteDirectory);
                 ftpClient.disconnect();
                 throw new IOException("FTP server refused connection. Reply code: " + replyCode);
@@ -210,7 +212,7 @@ public class FtpClientUtil {
             // 登录
             boolean loginSuccess = ftpClient.login(account, password);
             if (!loginSuccess) {
-                log.error("FTP登录失败（读取文件） - serverAddress: {}:{}, account: {}, remoteFileName: {}, remoteDirectory: {}",
+                LOGGER.error("FTP login failed（读取文件） - serverAddress: {}:{}, account: {}, remoteFileName: {}, remoteDirectory: {}",
                         host, port, account, remoteFileName, remoteDirectory);
                 ftpClient.disconnect();
                 throw new IOException("FTP login failed. Check username and password.");
@@ -226,14 +228,14 @@ public class FtpClientUtil {
             if (remoteDirectory != null && !remoteDirectory.trim().isEmpty()) {
                 boolean changeDirSuccess = ftpClient.changeWorkingDirectory(remoteDirectory);
                 if (!changeDirSuccess) {
-                    log.warn("Failed to change directory to: {}", remoteDirectory);
+                    LOGGER.warn("Failed to change directory to: {}", remoteDirectory);
                 }
             }
 
             // 读取文件内容
             inputStream = ftpClient.retrieveFileStream(remoteFileName);
             if (inputStream == null) {
-                log.error("FTP文件流获取失败（读取文件） - serverAddress: {}:{}, remoteFileName: {}, remoteDirectory: {}",
+                LOGGER.error("FTP文件流获取失败（读取文件） - serverAddress: {}:{}, remoteFileName: {}, remoteDirectory: {}",
                         host, port, remoteFileName, remoteDirectory);
                 throw new IOException("Failed to retrieve file stream: " + remoteFileName);
             }
@@ -252,7 +254,7 @@ public class FtpClientUtil {
             return content.toString().trim();
 
         } catch (Exception e) {
-            log.error("FTP文件读取失败 - serverAddress: {}, remoteFileName: {}, remoteDirectory: {}, account: {}, error: {}",
+            LOGGER.error("FTP file read failed - serverAddress: {}, remoteFileName: {}, remoteDirectory: {}, account: {}, error: {}",
                     serverAddress, remoteFileName, remoteDirectory, account, e.getMessage(), e);
             throw new IOException("FTP read file failed: " + e.getMessage(), e);
         } finally {
@@ -261,14 +263,14 @@ public class FtpClientUtil {
                 try {
                     reader.close();
                 } catch (IOException e) {
-                    log.warn("Failed to close reader: {}", e.getMessage());
+                    LOGGER.warn("Failed to close reader: {}", e.getMessage());
                 }
             }
             if (inputStream != null) {
                 try {
                     inputStream.close();
                 } catch (IOException e) {
-                    log.warn("Failed to close input stream: {}", e.getMessage());
+                    LOGGER.warn("Failed to close input stream: {}", e.getMessage());
                 }
             }
 
@@ -278,7 +280,7 @@ public class FtpClientUtil {
                     ftpClient.logout();
                     ftpClient.disconnect();
                 } catch (IOException e) {
-                    log.warn("Failed to disconnect FTP client: {}", e.getMessage());
+                    LOGGER.warn("Failed to disconnect FTP client: {}", e.getMessage());
                 }
             }
         }
@@ -311,7 +313,7 @@ public class FtpClientUtil {
                 host = serverAddress;
             }
 
-            log.info("Connecting to FTP server to list files: {}:{}", host, port);
+            LOGGER.info("Connecting to FTP server to list files: {}:{}", host, port);
 
             // 连接FTP服务器
             ftpClient.connect(host, port);
@@ -329,42 +331,42 @@ public class FtpClientUtil {
                 throw new IOException("FTP login failed. Check username and password.");
             }
 
-            log.info("FTP login successful");
+            LOGGER.info("FTP login successful");
 
-            // 设置被动模式
+            // set被动模式
             ftpClient.enterLocalPassiveMode();
 
             // 切换到指定目录
             if (remoteDirectory != null && !remoteDirectory.trim().isEmpty()) {
                 boolean changeDirSuccess = ftpClient.changeWorkingDirectory(remoteDirectory);
                 if (!changeDirSuccess) {
-                    log.warn("Failed to change directory to: {}. Current directory: {}", 
+                    LOGGER.warn("Failed to change directory to: {}. Current directory: {}", 
                             remoteDirectory, ftpClient.printWorkingDirectory());
                     throw new IOException("Failed to change directory to: " + remoteDirectory);
                 } else {
-                    log.info("Changed to directory: {}", remoteDirectory);
+                    LOGGER.info("Changed to directory: {}", remoteDirectory);
                 }
             }
 
             // 列出目录下的所有文件
             FTPFile[] files = ftpClient.listFiles();
-            log.info("Found {} items in directory", files.length);
+            LOGGER.info("Found {} items in directory", files.length);
 
             for (FTPFile file : files) {
                 if (file.isFile()) {
                     // 排除.md5文件
                     if (!file.getName().endsWith(".md5")) {
                         fileNames.add(file.getName());
-                        log.debug("Found file: {} (size: {} bytes)", file.getName(), file.getSize());
+                        LOGGER.debug("Found file: {} (size: {} bytes)", file.getName(), file.getSize());
                     }
                 }
             }
 
-            log.info("Listed {} files from FTP directory: {}", fileNames.size(), remoteDirectory);
+            LOGGER.info("Listed {} files from FTP directory: {}", fileNames.size(), remoteDirectory);
             return fileNames;
 
         } catch (Exception e) {
-            log.error("Failed to list files from FTP server: {}", e.getMessage(), e);
+            LOGGER.error("Failed to list files from FTP server: {}", e.getMessage(), e);
             throw new IOException("FTP list files failed: " + e.getMessage(), e);
         } finally {
             // 断开连接
@@ -373,7 +375,7 @@ public class FtpClientUtil {
                     ftpClient.logout();
                     ftpClient.disconnect();
                 } catch (IOException e) {
-                    log.warn("Failed to disconnect FTP client: {}", e.getMessage());
+                    LOGGER.warn("Failed to disconnect FTP client: {}", e.getMessage());
                 }
             }
         }

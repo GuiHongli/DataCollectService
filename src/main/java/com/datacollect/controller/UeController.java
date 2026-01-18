@@ -7,7 +7,6 @@ import com.datacollect.entity.Ue;
 import com.datacollect.entity.dto.UeDTO;
 import com.datacollect.enums.UeBrandEnum;
 import com.datacollect.service.UeService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -19,11 +18,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/ue")
 @Validated
 public class UeController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UeController.class);
 
     @Autowired
     private UeService ueService;
@@ -116,13 +118,13 @@ public class UeController {
             ueIds.add(id.intValue());
             boolean success = ueService.markUesAvailable(ueIds);
             if (success) {
-                log.info("UE已释放 - UE ID: {}", id);
+                LOGGER.info("UE已release - UE ID: {}", id);
                 return Result.success(true);
             } else {
                 return Result.error("释放UE失败");
             }
         } catch (Exception e) {
-            log.error("释放UE失败 - UE ID: {}, 错误: {}", id, e.getMessage(), e);
+            LOGGER.error("releaseUEfailed - UE ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("释放UE失败: " + e.getMessage());
         }
     }

@@ -6,13 +6,15 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.User;
 import com.datacollect.mapper.UserMapper;
 import com.datacollect.service.UserService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UserServiceImpl.class);
     
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     
@@ -40,7 +42,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setCreateBy(createBy);
         
         this.save(user);
-        log.info("创建用户成功 - 用户名: {}, 角色: {}", username, role);
+        LOGGER.info("create用户success - 用户名: {}, 角色: {}", username, role);
         
         return user;
     }
@@ -90,16 +92,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean matchesPassword(String rawPassword, String encodedPassword) {
         if (rawPassword == null || encodedPassword == null) {
-            log.warn("密码验证失败：密码为空 - rawPassword: {}, encodedPassword: {}", 
+            LOGGER.warn("密码验证失败：密码为空 - rawPassword: {}, encodedPassword: {}", 
                     rawPassword != null, encodedPassword != null);
             return false;
         }
         
-        // 检查加密密码格式是否正确（BCrypt密码以 $2a$、$2b$ 或 $2y$ 开头）
+        // check加密密码格式是否正确（BCrypt密码以 $2a$、$2b$ 或 $2y$ 开头）
         if (!encodedPassword.startsWith("$2a$") && 
             !encodedPassword.startsWith("$2b$") && 
             !encodedPassword.startsWith("$2y$")) {
-            log.error("密码格式错误：不是有效的BCrypt格式 - encodedPassword: {}", 
+            LOGGER.error("密码格式错误：不是有效的BCrypt格式 - encodedPassword: {}", 
                     encodedPassword.length() > 20 ? encodedPassword.substring(0, 20) + "..." : encodedPassword);
             return false;
         }
@@ -113,15 +115,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             boolean matches = passwordEncoder.matches(rawPassword, encodedPassword);
             
             if (!matches) {
-                log.debug("密码验证失败：密码不匹配 - 用户名: {}, 密码长度: {}", 
+                LOGGER.debug("密码validatefailed：密码不匹配 - 用户名: {}, 密码长度: {}", 
                         rawPassword.length(), encodedPassword.length());
             } else {
-                log.debug("密码验证成功");
+                LOGGER.debug("密码validatesuccess");
             }
             
             return matches;
         } catch (Exception e) {
-            log.error("密码验证异常: {}", e.getMessage(), e);
+            LOGGER.error("密码validate异常: {}", e.getMessage(), e);
             return false;
         }
     }

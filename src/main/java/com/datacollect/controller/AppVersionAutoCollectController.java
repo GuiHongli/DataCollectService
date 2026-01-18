@@ -4,7 +4,6 @@ import com.datacollect.common.Result;
 import com.datacollect.dto.AppVersionAutoCollectRequest;
 import com.datacollect.entity.AppVersionAutoCollect;
 import com.datacollect.service.AppVersionAutoCollectService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,17 +19,20 @@ import javax.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * app版本变更自动采集配置控制器
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/app-version-auto-collect")
 @Validated
 public class AppVersionAutoCollectController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AppVersionAutoCollectController.class);
     
     @Autowired
     private AppVersionAutoCollectService appVersionAutoCollectService;
@@ -43,11 +45,11 @@ public class AppVersionAutoCollectController {
      */
     @PostMapping
     public Result<Map<String, Object>> saveOrUpdateConfig(@Valid @RequestBody AppVersionAutoCollectRequest request) {
-        log.info("保存或更新自动采集配置 - 应用名称: {}, 平台类型: {}, 自动采集: {}", 
+        LOGGER.info("保存或更新自动采集配置 - 应用名称: {}, 平台类型: {}, 自动采集: {}", 
                 request.getAppName(), request.getPlatformType(), request.getAutoCollect());
         
         try {
-            // 如果启用自动采集但未选择模版，返回错误
+            // 如果enabled自动采集但未选择模版，返回错误
             if (request.getAutoCollect() && request.getTemplateId() == null) {
                 return Result.error("启用自动采集时必须选择采集任务模版");
             }
@@ -58,11 +60,11 @@ public class AppVersionAutoCollectController {
             result.put("configId", configId);
             result.put("message", "配置保存成功");
             
-            log.info("自动采集配置保存成功 - 配置ID: {}", configId);
+            LOGGER.info("自动采集配置savesuccess - 配置ID: {}", configId);
             return Result.success(result);
             
         } catch (Exception e) {
-            log.error("保存自动采集配置失败 - 应用名称: {}, 错误: {}", request.getAppName(), e.getMessage(), e);
+            LOGGER.error("save自动采集配置failed - 应用名称: {}, error: {}", request.getAppName(), e.getMessage(), e);
             return Result.error("保存配置失败: " + e.getMessage());
         }
     }
@@ -78,7 +80,7 @@ public class AppVersionAutoCollectController {
     public Result<Map<String, AppVersionAutoCollect>> getBatchConfigs(
             @RequestParam @NotBlank String appNames,
             @RequestParam @NotNull Boolean platformType) {
-        log.info("批量获取自动采集配置 - 应用名称列表: {}, 平台类型: {}", appNames, platformType);
+        LOGGER.info("批量get自动采集配置 - 应用名称列表: {}, 平台类型: {}", appNames, platformType);
         
         try {
             String[] appNameArray = appNames.split(",");
@@ -97,7 +99,7 @@ public class AppVersionAutoCollectController {
             return Result.success(configMap);
             
         } catch (Exception e) {
-            log.error("批量获取自动采集配置失败 - 错误: {}", e.getMessage(), e);
+            LOGGER.error("批量get自动采集配置failed - error: {}", e.getMessage(), e);
             return Result.error("获取配置失败: " + e.getMessage());
         }
     }
@@ -113,14 +115,14 @@ public class AppVersionAutoCollectController {
     public Result<AppVersionAutoCollect> getConfig(
             @RequestParam @NotBlank String appName,
             @RequestParam @NotNull Boolean platformType) {
-        log.info("获取自动采集配置 - 应用名称: {}, 平台类型: {}", appName, platformType);
+        LOGGER.info("get自动采集配置 - 应用名称: {}, 平台类型: {}", appName, platformType);
         
         try {
             AppVersionAutoCollect config = appVersionAutoCollectService.getByAppNameAndPlatform(appName, platformType);
             return Result.success(config);
             
         } catch (Exception e) {
-            log.error("获取自动采集配置失败 - 应用名称: {}, 错误: {}", appName, e.getMessage(), e);
+            LOGGER.error("get自动采集配置failed - 应用名称: {}, error: {}", appName, e.getMessage(), e);
             return Result.error("获取配置失败: " + e.getMessage());
         }
     }

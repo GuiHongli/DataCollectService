@@ -5,9 +5,10 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.entity.SystemConfig;
 import com.datacollect.mapper.SystemConfigMapper;
 import com.datacollect.service.ConfigService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 系统配置服务实现类
  * 使用数据库存储配置
@@ -15,9 +16,10 @@ import org.springframework.stereotype.Service;
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class ConfigServiceImpl extends ServiceImpl<SystemConfigMapper, SystemConfig> implements ConfigService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConfigServiceImpl.class);
     
     /**
      * 获取系统配置（只允许一条记录）
@@ -37,7 +39,7 @@ public class ConfigServiceImpl extends ServiceImpl<SystemConfigMapper, SystemCon
             config.setUeDisableEnvironmentWhenInUse(false);
             config.setCreateBy("system");
             save(config);
-            log.info("创建默认系统配置");
+            LOGGER.info("创建默认系统配置");
         }
         
         return config;
@@ -62,7 +64,7 @@ public class ConfigServiceImpl extends ServiceImpl<SystemConfigMapper, SystemCon
         config.setUpdateBy("system");
         updateById(config);
         
-        log.info("设置UE使用中禁用环境配置 - enabled: {}", enabled);
+        LOGGER.info("Set UE disable environment when in use configuration - enabled: {}", enabled);
     }
 }
 

@@ -5,7 +5,6 @@ import com.datacollect.entity.DashboardCache;
 import com.datacollect.mapper.DashboardCacheMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,15 +12,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 仪表盘数据缓存服务（数据库存储）
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class DashboardCacheService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DashboardCacheService.class);
     
     @Autowired
     private DashboardCacheMapper dashboardCacheMapper;
@@ -43,7 +45,7 @@ public class DashboardCacheService {
             DashboardCache cache = dashboardCacheMapper.selectOne(queryWrapper);
             
             if (cache == null || cache.getCacheValue() == null) {
-                log.warn("Dashboard overall stats cache not found in database");
+                LOGGER.warn("Dashboard overall stats cache not found in database");
                 return new HashMap<>();
             }
             
@@ -53,17 +55,17 @@ public class DashboardCacheService {
                     new TypeReference<Map<String, Object>>() {}
             );
             
-            log.debug("Dashboard overall stats retrieved from database cache");
+            LOGGER.debug("Dashboard overall stats retrieved from database cache");
             return stats;
             
         } catch (Exception e) {
-            log.error("Failed to get dashboard stats from database cache - error: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get dashboard stats from database cache - error: {}", e.getMessage(), e);
             return new HashMap<>();
         }
     }
     
     /**
-     * 更新仪表盘总体统计数据
+     * update仪表盘总体统计数据
      * 
      * @param stats 统计数据
      */
@@ -86,16 +88,16 @@ public class DashboardCacheService {
                 cache.setCacheType(DashboardCache.CacheType.OVERALL);
                 cache.setCacheValue(cacheValue);
                 dashboardCacheMapper.insert(cache);
-                log.info("Dashboard overall stats cache inserted into database");
+                LOGGER.info("Dashboard overall stats cache inserted into database");
             } else {
-                // 更新现有记录
+                // update现有记录
                 cache.setCacheValue(cacheValue);
                 dashboardCacheMapper.updateById(cache);
-                log.info("Dashboard overall stats cache updated in database");
+                LOGGER.info("Dashboard overall stats cache updated in database");
             }
             
         } catch (Exception e) {
-            log.error("Failed to update dashboard stats in database cache - error: {}", e.getMessage(), e);
+            LOGGER.error("Failed to update dashboard stats in database cache - error: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to update dashboard stats cache", e);
         }
     }
@@ -115,7 +117,7 @@ public class DashboardCacheService {
             DashboardCache cache = dashboardCacheMapper.selectOne(queryWrapper);
             
             if (cache == null || cache.getCacheValue() == null) {
-                log.debug("Region stats cache not found in database for region ID: {}", regionId);
+                LOGGER.debug("Region stats cache not found in database for region ID: {}", regionId);
                 return new HashMap<>();
             }
             
@@ -125,18 +127,18 @@ public class DashboardCacheService {
                     new TypeReference<Map<String, Object>>() {}
             );
             
-            log.debug("Region stats retrieved from database cache for region ID: {}", regionId);
+            LOGGER.debug("Region stats retrieved from database cache for region ID: {}", regionId);
             return stats;
             
         } catch (Exception e) {
-            log.error("Failed to get region stats from database cache - region ID: {}, error: {}", 
+            LOGGER.error("Failed to get region stats from database cache - region ID: {}, error: {}", 
                     regionId, e.getMessage(), e);
             return new HashMap<>();
         }
     }
     
     /**
-     * 更新地域统计数据
+     * update地域统计数据
      * 
      * @param regionId 地域ID
      * @param stats 统计数据
@@ -160,16 +162,16 @@ public class DashboardCacheService {
                 cache.setCacheType(DashboardCache.CacheType.REGION);
                 cache.setCacheValue(cacheValue);
                 dashboardCacheMapper.insert(cache);
-                log.debug("Region stats cache inserted into database for region ID: {}", regionId);
+                LOGGER.debug("Region stats cache inserted into database for region ID: {}", regionId);
             } else {
-                // 更新现有记录
+                // update现有记录
                 cache.setCacheValue(cacheValue);
                 dashboardCacheMapper.updateById(cache);
-                log.debug("Region stats cache updated in database for region ID: {}", regionId);
+                LOGGER.debug("Region stats cache updated in database for region ID: {}", regionId);
             }
             
         } catch (Exception e) {
-            log.error("Failed to update region stats in database cache - region ID: {}, error: {}", 
+            LOGGER.error("Failed to update region stats in database cache - region ID: {}, error: {}", 
                     regionId, e.getMessage(), e);
             throw new RuntimeException("Failed to update region stats cache for region: " + regionId, e);
         }
@@ -184,16 +186,16 @@ public class DashboardCacheService {
             QueryWrapper<DashboardCache> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("cache_type", DashboardCache.CacheType.REGION);
             dashboardCacheMapper.delete(queryWrapper);
-            log.info("All region stats cache cleared from database");
+            LOGGER.info("All region stats cache cleared from database");
         } catch (Exception e) {
-            log.error("Failed to clear region stats cache from database - error: {}", e.getMessage(), e);
+            LOGGER.error("Failed to clear region stats cache from database - error: {}", e.getMessage(), e);
         }
     }
     
     /**
-     * 获取统计缓存更新时间
+     * get统计缓存update时间
      * 
-     * @return 更新时间戳，如果不存在返回0
+     * @return update时间戳，如果不存在返回0
      */
     public long getStatsCacheUpdateTime() {
         try {
@@ -207,15 +209,15 @@ public class DashboardCacheService {
                 return cache.getUpdateTime().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
             }
         } catch (Exception e) {
-            log.warn("Failed to get stats cache update time - error: {}", e.getMessage());
+            LOGGER.warn("Failed to get stats cache update time - error: {}", e.getMessage());
         }
         return 0;
     }
     
     /**
-     * 获取地域统计缓存更新时间
+     * get地域统计缓存update时间
      * 
-     * @return 更新时间戳，如果不存在返回0
+     * @return update时间戳，如果不存在返回0
      */
     public long getRegionStatsCacheUpdateTime() {
         try {
@@ -230,7 +232,7 @@ public class DashboardCacheService {
                 return cache.getUpdateTime().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
             }
         } catch (Exception e) {
-            log.warn("Failed to get region stats cache update time - error: {}", e.getMessage());
+            LOGGER.warn("Failed to get region stats cache update time - error: {}", e.getMessage());
         }
         return 0;
     }

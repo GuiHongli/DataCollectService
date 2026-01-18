@@ -7,7 +7,6 @@ import com.datacollect.dto.NetworkDataGroupDTO;
 import com.datacollect.entity.NetworkData;
 import com.datacollect.mapper.NetworkDataMapper;
 import com.datacollect.service.NetworkDataService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -15,30 +14,33 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 网络侧数据服务实现类
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class NetworkDataServiceImpl extends ServiceImpl<NetworkDataMapper, NetworkData> implements NetworkDataService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(NetworkDataServiceImpl.class);
 
     @Override
     public boolean batchSaveNetworkData(List<NetworkData> networkDataList, String fileName) {
         if (networkDataList == null || networkDataList.isEmpty()) {
-            log.warn("NetworkData list is empty, cannot save");
+            LOGGER.warn("NetworkData list is empty, cannot save");
             return false;
         }
 
         if (fileName == null || fileName.trim().isEmpty()) {
-            log.warn("FileName is null or empty, cannot save");
+            LOGGER.warn("FileName is null or empty, cannot save");
             return false;
         }
 
         try {
-            // 设置文件名和创建时间
+            // set文件名和create时间
             LocalDateTime now = LocalDateTime.now();
             List<NetworkData> dataToSave = new ArrayList<>();
             int duplicateCount = 0;
@@ -48,10 +50,10 @@ public class NetworkDataServiceImpl extends ServiceImpl<NetworkDataMapper, Netwo
                 networkData.setCreateTime(now);
                 networkData.setUpdateTime(now);
 
-                // 检查是否存在相同的 gpsi、time_stamp、start_time 和 sub_app_id
+                // check是否存在相同的 gpsi、time_stamp、start_time 和 sub_app_id
                 if (isDuplicate(networkData)) {
                     duplicateCount++;
-                    log.debug("Duplicate NetworkData found, skipping - gpsi: {}, timeStamp: {}, startTime: {}, subAppId: {}",
+                    LOGGER.debug("Duplicate NetworkData found, skipping - gpsi: {}, timeStamp: {}, startTime: {}, subAppId: {}",
                             networkData.getGpsi(), networkData.getTimeStamp(), networkData.getStartTime(), networkData.getSubAppId());
                     continue;
                 }
@@ -60,22 +62,22 @@ public class NetworkDataServiceImpl extends ServiceImpl<NetworkDataMapper, Netwo
             }
 
             if (dataToSave.isEmpty()) {
-                log.warn("All NetworkData records are duplicates, nothing to save - fileName: {}, total: {}, duplicates: {}",
+                LOGGER.warn("All NetworkData records are duplicates, nothing to save - fileName: {}, total: {}, duplicates: {}",
                         fileName, networkDataList.size(), duplicateCount);
                 return true;
             }
 
-            // 批量保存去重后的数据
+            // 批量save去重后的数据
             boolean success = saveBatch(dataToSave);
             if (success) {
-                log.info("NetworkData batch saved successfully - fileName: {}, total: {}, saved: {}, duplicates: {}",
+                LOGGER.info("NetworkData batch saved successfully - fileName: {}, total: {}, saved: {}, duplicates: {}",
                         fileName, networkDataList.size(), dataToSave.size(), duplicateCount);
             } else {
-                log.error("Failed to batch save NetworkData - fileName: {}, count: {}", fileName, dataToSave.size());
+                LOGGER.error("Failed to batch save NetworkData - fileName: {}, count: {}", fileName, dataToSave.size());
             }
             return success;
         } catch (Exception e) {
-            log.error("Error batch saving NetworkData - fileName: {}, error: {}", fileName, e.getMessage(), e);
+            LOGGER.error("Error batch saving NetworkData - fileName: {}, error: {}", fileName, e.getMessage(), e);
             return false;
         }
     }

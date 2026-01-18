@@ -10,13 +10,14 @@ import com.datacollect.service.AppVersionAutoCollectService;
 import com.datacollect.service.CollectTaskProcessService;
 import com.datacollect.service.CollectTaskTemplateService;
 import com.datacollect.service.ExternalApiService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * app版本变更自动采集定时任务服务
  * 每天3点执行，检查版本变更并自动触发采集任务
@@ -24,9 +25,10 @@ import java.util.List;
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class AppVersionAutoCollectScheduleService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AppVersionAutoCollectScheduleService.class);
     
     @Autowired
     private ExternalApiService externalApiService;
@@ -46,30 +48,30 @@ public class AppVersionAutoCollectScheduleService {
      */
     @Scheduled(cron = "0 0 3 * * ?")
     public void scheduledAutoCollect() {
-        log.info("Scheduled task: Starting app version auto collect check...");
+        LOGGER.info("Scheduled task: Starting app version auto collect check...");
         
         try {
-            // 检查安卓平台
+            // check安卓平台
             checkAndTriggerAutoCollect(false);
             
-            // 检查iOS平台
+            // checkiOS平台
             checkAndTriggerAutoCollect(true);
             
-            log.info("Scheduled task: App version auto collect check completed");
+            LOGGER.info("Scheduled task: App version auto collect check completed");
             
         } catch (Exception e) {
-            log.error("Scheduled task: Failed to check app version auto collect - error: {}", e.getMessage(), e);
-            // 不抛出异常，避免影响定时任务继续执行
+            LOGGER.error("Scheduled task: Failed to check app version auto collect - error: {}", e.getMessage(), e);
+            // 不抛出异常，避免影响定时任务continue执行
         }
     }
     
     /**
-     * 检查并触发自动采集
+     * check并触发自动采集
      * 
      * @param isIos 是否为iOS平台
      */
     private void checkAndTriggerAutoCollect(boolean isIos) {
-        log.info("Checking app version auto collect for platform: {}", isIos ? "iOS" : "Android");
+        LOGGER.info("Checking app version auto collect for platform: {}", isIos ? "iOS" : "Android");
         
         try {
             // 1. 获取版本历史信息
@@ -79,29 +81,29 @@ public class AppVersionAutoCollectScheduleService {
             GetVersionHistoryResponse response = externalApiService.getVersionHistory(request);
             
             if (response == null || response.getData() == null || response.getData().isEmpty()) {
-                log.info("No version history data found for platform: {}", isIos ? "iOS" : "Android");
+                LOGGER.info("No version history data found for platform: {}", isIos ? "iOS" : "Android");
                 return;
             }
             
-            // 2. 遍历每个应用，检查版本变更
+            // 2. 遍历每个应用，check版本变更
             for (GetVersionHistoryResponse.VersionHistoryData appData : response.getData()) {
                 try {
                     checkAndTriggerForApp(appData, isIos);
                 } catch (Exception e) {
-                    log.error("Failed to check and trigger auto collect for app: {} - error: {}", 
+                    LOGGER.error("Failed to check and trigger auto collect for app: {} - error: {}", 
                             appData.getAppName(), e.getMessage(), e);
                     // 继续处理下一个应用，不中断整个流程
                 }
             }
             
         } catch (Exception e) {
-            log.error("Failed to check app version auto collect for platform: {} - error: {}", 
+            LOGGER.error("Failed to check app version auto collect for platform: {} - error: {}", 
                     isIos ? "iOS" : "Android", e.getMessage(), e);
         }
     }
     
     /**
-     * 检查单个应用并触发自动采集
+     * check单个应用并触发自动采集
      * 
      * @param appData 应用版本数据
      * @param isIos 是否为iOS平台
@@ -112,50 +114,50 @@ public class AppVersionAutoCollectScheduleService {
         String dialVersion = appData.getDialVerion();
         
         if (appName == null || appName.trim().isEmpty()) {
-            log.warn("App name is empty, skipping...");
+            LOGGER.warn("App name is empty, skipping...");
             return;
         }
         
         // 检查版本和采集版本是否一致
         if (appVersion != null && appVersion.equals(dialVersion)) {
-            log.debug("App version matches dial version for app: {} - version: {}, skipping...", appName, appVersion);
+            LOGGER.debug("App version matches dial version for app: {} - version: {}, skipping...", appName, appVersion);
             return;
         }
         
-        log.info("App version mismatch detected for app: {} - version: {}, dial version: {}", 
+        LOGGER.info("App version mismatch detected for app: {} - version: {}, dial version: {}", 
                 appName, appVersion, dialVersion);
         
-        // 检查是否开启了自动采集
+        // check是否开启了自动采集
         AppVersionAutoCollect config = appVersionAutoCollectService.getByAppNameAndPlatform(appName, isIos);
         
         if (config == null || !config.getAutoCollect()) {
-            log.debug("Auto collect is not enabled for app: {}, skipping...", appName);
+            LOGGER.debug("Auto collect is not enabled for app: {}, skipping...", appName);
             return;
         }
         
         if (config.getTemplateId() == null) {
-            log.warn("Auto collect is enabled but no template configured for app: {}, skipping...", appName);
+            LOGGER.warn("Auto collect is enabled but no template configured for app: {}, skipping...", appName);
             return;
         }
         
-        // 获取模版
+        // get模版
         CollectTaskTemplate template = collectTaskTemplateService.getById(config.getTemplateId());
         if (template == null) {
-            log.error("Template not found for app: {}, template ID: {}", appName, config.getTemplateId());
+            LOGGER.error("Template not found for app: {}, template ID: {}", appName, config.getTemplateId());
             return;
         }
         
         // 从模版创建采集任务
         try {
             createTaskFromTemplate(template, appData, isIos);
-            log.info("Auto collect task created successfully for app: {}", appName);
+            LOGGER.info("Auto collect task created successfully for app: {}", appName);
         } catch (Exception e) {
-            log.error("Failed to create auto collect task for app: {} - error: {}", appName, e.getMessage(), e);
+            LOGGER.error("Failed to create auto collect task for app: {} - error: {}", appName, e.getMessage(), e);
         }
     }
     
     /**
-     * 从模版创建采集任务
+     * 从模版create采集任务
      * 
      * @param template 采集任务模版
      * @param appData 应用版本数据
@@ -164,7 +166,7 @@ public class AppVersionAutoCollectScheduleService {
     private void createTaskFromTemplate(CollectTaskTemplate template, 
                                        GetVersionHistoryResponse.VersionHistoryData appData, 
                                        boolean isIos) {
-        log.info("Creating collect task from template for app: {} - template ID: {}", 
+        LOGGER.info("Creating collect task from template for app: {} - template ID: {}", 
                 appData.getAppName(), template.getId());
         
         // 构建任务请求
@@ -203,7 +205,7 @@ public class AppVersionAutoCollectScheduleService {
                 List<Long> networkElementIds = JSON.parseArray(template.getNetworkElementIds(), Long.class);
                 request.setNetworkElementIds(networkElementIds);
             } catch (Exception e) {
-                log.warn("Failed to parse network element IDs from template: {}", e.getMessage());
+                LOGGER.warn("Failed to parse network element IDs from template: {}", e.getMessage());
             }
         }
         
@@ -213,7 +215,7 @@ public class AppVersionAutoCollectScheduleService {
                 List<String> manufacturer = JSON.parseArray(template.getManufacturer(), String.class);
                 request.setManufacturer(manufacturer);
             } catch (Exception e) {
-                log.warn("Failed to parse manufacturer from template: {}", e.getMessage());
+                LOGGER.warn("Failed to parse manufacturer from template: {}", e.getMessage());
             }
         }
         
@@ -223,11 +225,11 @@ public class AppVersionAutoCollectScheduleService {
                 List<Long> logicEnvironmentIds = JSON.parseArray(template.getLogicEnvironmentIds(), Long.class);
                 request.setLogicEnvironmentIds(logicEnvironmentIds);
             } catch (Exception e) {
-                log.error("Failed to parse logic environment IDs from template: {}", e.getMessage());
+                LOGGER.error("Failed to parse logic environment IDs from template: {}", e.getMessage());
                 throw new RuntimeException("Failed to parse logic environment IDs: " + e.getMessage(), e);
             }
         } else {
-            log.error("Template has no logic environment IDs configured - template ID: {}", template.getId());
+            LOGGER.error("Template has no logic environment IDs configured - template ID: {}", template.getId());
             throw new RuntimeException("Template has no logic environment IDs configured");
         }
         
@@ -241,15 +243,15 @@ public class AppVersionAutoCollectScheduleService {
         String createBy = "system";
         collectTaskProcessService.processCollectTaskCreation(request, createBy);
         
-        log.info("Collect task created successfully from template - app: {}, task name: {}", 
+        LOGGER.info("Collect task created successfully from template - app: {}, task name: {}", 
                 appData.getAppName(), taskName);
     }
     
     /**
-     * 手动触发自动采集检查（用于测试或手动刷新）
+     * 手动触发自动采集check（用于测试或手动刷新）
      */
     public void manualTrigger() {
-        log.info("Manual trigger: Starting app version auto collect check...");
+        LOGGER.info("Manual trigger: Starting app version auto collect check...");
         
         try {
             // 检查安卓平台
@@ -258,10 +260,10 @@ public class AppVersionAutoCollectScheduleService {
             // 检查iOS平台
             checkAndTriggerAutoCollect(true);
             
-            log.info("Manual trigger: App version auto collect check completed");
+            LOGGER.info("Manual trigger: App version auto collect check completed");
             
         } catch (Exception e) {
-            log.error("Manual trigger: Failed to check app version auto collect - error: {}", e.getMessage(), e);
+            LOGGER.error("Manual trigger: Failed to check app version auto collect - error: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to check app version auto collect: " + e.getMessage(), e);
         }
     }

@@ -6,20 +6,22 @@ import com.datacollect.common.Result;
 import com.datacollect.dto.NetworkDataGroupDTO;
 import com.datacollect.entity.NetworkData;
 import com.datacollect.service.NetworkDataService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 网络侧数据管理控制器
  *
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/network-data")
 public class NetworkDataController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(NetworkDataController.class);
 
     @Autowired
     private NetworkDataService networkDataService;
@@ -69,7 +71,7 @@ public class NetworkDataController {
             Page<NetworkData> result = networkDataService.page(page, queryWrapper);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get network data page: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get network data page: {}", e.getMessage(), e);
             return Result.error("查询失败: " + e.getMessage());
         }
     }
@@ -95,7 +97,7 @@ public class NetworkDataController {
             Page<NetworkDataGroupDTO> result = networkDataService.getGroupedNetworkDataPage(current, size, gpsi, date, subAppId);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get grouped network data page: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get grouped network data page: {}", e.getMessage(), e);
             return Result.error("查询失败: " + e.getMessage());
         }
     }

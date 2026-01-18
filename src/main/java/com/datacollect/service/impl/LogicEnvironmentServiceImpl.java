@@ -25,11 +25,12 @@ import com.datacollect.service.LogicEnvironmentUeService;
 import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.UeService;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Service
 public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMapper, LogicEnvironment> implements LogicEnvironmentService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LogicEnvironmentServiceImpl.class);
     
     @Autowired
     private LogicEnvironmentUeService logicEnvironmentUeService;
@@ -123,7 +124,7 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
                 ueInfoList = createUeInfoList(ues);
             }
         } catch (Exception e) {
-            log.error("Failed to get UE information: {}", e.getMessage());
+            LOGGER.error("Failed to get UE information: {}", e.getMessage());
         }
         return ueInfoList;
     }
@@ -137,7 +138,7 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
                 networkInfoList = createNetworkInfoList(networks);
             }
         } catch (Exception e) {
-            log.error("Failed to get network type information: {}", e.getMessage());
+            LOGGER.error("Failed to get network type information: {}", e.getMessage());
         }
         return networkInfoList;
     }
@@ -196,29 +197,29 @@ public class LogicEnvironmentServiceImpl extends ServiceImpl<LogicEnvironmentMap
     
     @Override
     public List<LogicEnvironment> getByExecutorId(Long executorId) {
-        log.debug("Getting logic environments associated with executor - Executor ID: {}", executorId);
+        LOGGER.debug("Getting logic environments associated with executor - Executor ID: {}", executorId);
         QueryWrapper<LogicEnvironment> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("executor_id", executorId);
         queryWrapper.eq("status", 1);
         queryWrapper.orderByAsc("name");
         List<LogicEnvironment> environments = list(queryWrapper);
-        log.debug("Number of logic environments associated with executor {}: {}", executorId, environments.size());
+        LOGGER.debug("Number of logic environments associated with executor {}: {}", executorId, environments.size());
         for (LogicEnvironment env : environments) {
-            log.debug("Executor {} associated logic environment: {} (ID: {})", executorId, env.getName(), env.getId());
+            LOGGER.debug("Executor {} associated logic environment: {} (ID: {})", executorId, env.getName(), env.getId());
         }
         return environments;
     }
     
     @Override
     public LogicEnvironmentDTO getLogicEnvironmentDTO(Long logicEnvironmentId) {
-        log.debug("Getting logic environment details - Logic Environment ID: {}", logicEnvironmentId);
+        LOGGER.debug("Getting logic environment details - Logic Environment ID: {}", logicEnvironmentId);
         LogicEnvironment logicEnvironment = getById(logicEnvironmentId);
         if (logicEnvironment == null) {
-            log.warn("Logic environment not found - Logic Environment ID: {}", logicEnvironmentId);
+            LOGGER.warn("Logic environment not found - Logic Environment ID: {}", logicEnvironmentId);
             return null;
         }
         LogicEnvironmentDTO dto = convertToDTO(logicEnvironment);
-        log.debug("Retrieved logic environment details: {} (ID: {})", dto.getName(), dto.getId());
+        LOGGER.debug("Retrieved logic environment details: {} (ID: {})", dto.getName(), dto.getId());
         return dto;
     }
 }

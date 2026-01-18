@@ -2,7 +2,6 @@ package com.datacollect.config;
 
 import com.datacollect.service.UserActivityService;
 import com.datacollect.util.JwtUtil;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -10,9 +9,12 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthInterceptor.class);
     
     @Autowired
     private JwtUtil jwtUtil;
@@ -57,7 +59,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         
         // 检查用户活跃时间（1小时无操作则过期）
         if (!userActivityService.isUserActive(username)) {
-            log.info("用户活跃时间已过期，拒绝访问 - 用户名: {}", username);
+            LOGGER.info("用户活跃时间已过期，拒绝访问 - 用户名: {}", username);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"code\":401,\"message\":\"登录已过期，请重新登录\",\"data\":null}");

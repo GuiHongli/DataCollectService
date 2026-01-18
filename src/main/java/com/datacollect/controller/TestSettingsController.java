@@ -13,7 +13,6 @@ import com.datacollect.service.TestSettingsDeviceImsiMappingService;
 import com.datacollect.service.TestSettingsNetworkFtpService;
 import com.datacollect.service.TestSettingsTimeConfigService;
 import com.datacollect.entity.TestSettingsTimeConfig;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -31,11 +30,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/test-settings")
 @Validated
 public class TestSettingsController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestSettingsController.class);
 
     @Autowired
     private TestSettingsClientFtpService clientFtpService;
@@ -180,7 +182,7 @@ public class TestSettingsController {
             result.put("fileName", fileName);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to process client FTP file: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process client FTP file: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -197,7 +199,7 @@ public class TestSettingsController {
             String fileUrl = ftpFileProcessService.processNetworkFtpFile(fileName);
             return Result.success(fileUrl);
         } catch (Exception e) {
-            log.error("Failed to process network FTP file: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process network FTP file: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -214,7 +216,7 @@ public class TestSettingsController {
             List<String> fileUrls = ftpFileProcessService.processFtpFiles(true, fileNames);
             return Result.success(fileUrls);
         } catch (Exception e) {
-            log.error("Failed to process client FTP files: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process client FTP files: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -231,7 +233,7 @@ public class TestSettingsController {
             List<String> fileUrls = ftpFileProcessService.processFtpFiles(false, fileNames);
             return Result.success(fileUrls);
         } catch (Exception e) {
-            log.error("Failed to process network FTP files: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process network FTP files: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -258,7 +260,7 @@ public class TestSettingsController {
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to process client FTP files by date: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process client FTP files by date: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -275,7 +277,7 @@ public class TestSettingsController {
             List<String> fileUrls = ftpFileProcessService.processNetworkFtpFilesByDate(dateStr);
             return Result.success(fileUrls);
         } catch (Exception e) {
-            log.error("Failed to process network FTP files by date: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process network FTP files by date: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -295,7 +297,7 @@ public class TestSettingsController {
             Map<String, Object> result = ftpFileProcessService.processLocalClientFile(filePath);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to process local client file: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process local client file: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -337,9 +339,9 @@ public class TestSettingsController {
             } else {
                 throw new IOException("Failed to create temporary file");
             }
-            log.info("File saved to temporary directory: {}", tempFilePath);
+            LOGGER.info("File saved to temporary directory: {}", tempFilePath);
 
-            // 处理文件并解析
+            // process文件并解析
             Map<String, Object> result = ftpFileProcessService.processLocalClientFile(tempFilePath.toString());
             result.put("fileName", originalFilename);
             result.put("fileSize", file.getSize());
@@ -347,18 +349,18 @@ public class TestSettingsController {
             // 检查解析结果，如果有错误信息，返回错误
             if (result.containsKey("error") && result.get("error") != null) {
                 String errorMsg = (String) result.get("error");
-                log.error("Client data file parsing failed: {}, error: {}", originalFilename, errorMsg);
+                LOGGER.error("Client data file parsing failed: {}, error: {}", originalFilename, errorMsg);
                 return Result.error(errorMsg);
             }
 
-            log.info("Client data file processed successfully: {}, result: {}", originalFilename, result);
+            LOGGER.info("Client data file processed successfully: {}, result: {}", originalFilename, result);
             return Result.success(result);
 
         } catch (IOException e) {
-            log.error("Failed to upload and process client data file: {}", e.getMessage(), e);
+            LOGGER.error("Failed to upload and process client data file: {}", e.getMessage(), e);
             return Result.error("文件上传或处理失败: " + e.getMessage());
         } catch (Exception e) {
-            log.error("Error occurred while processing client data file: {}", e.getMessage(), e);
+            LOGGER.error("Error occurred while processing client data file: {}", e.getMessage(), e);
             return Result.error("处理文件时发生错误: " + e.getMessage());
         } finally {
             // 清理临时文件
@@ -371,18 +373,18 @@ public class TestSettingsController {
                         Files.deleteIfExists(tempDir);
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to cleanup temporary file: {}", e.getMessage());
+                    LOGGER.warn("Failed to cleanup temporary file: {}", e.getMessage());
                 }
             }
         }
     }
 
     /**
-     * 处理本地网络侧文件（用于测试验证，不依赖FTP服务器）
-     * 如果是压缩包，会自动解压并解析CSV文件
+     * process本地网络侧文件（用于测试validate，不依赖FTP服务器）
+     * 如果是压缩包，会自动Extracting 并解析CSV file
      *
      * @param filePath 本地文件路径（绝对路径或相对路径）
-     * @return 处理结果信息
+     * @return process结果信息
      */
     @PostMapping("/local/network-file/process")
     public Result<Map<String, Object>> processLocalNetworkFile(@RequestParam @NotNull String filePath) {
@@ -390,7 +392,7 @@ public class TestSettingsController {
             Map<String, Object> result = ftpFileProcessService.processLocalNetworkFile(filePath);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to process local network file: {}", e.getMessage(), e);
+            LOGGER.error("Failed to process local network file: {}", e.getMessage(), e);
             return Result.error("处理文件失败: " + e.getMessage());
         }
     }
@@ -432,21 +434,21 @@ public class TestSettingsController {
             } else {
                 throw new IOException("Failed to create temporary file");
             }
-            log.info("File saved to temporary directory: {}", tempFilePath);
+            LOGGER.info("File saved to temporary directory: {}", tempFilePath);
 
-            // 处理文件并解析
+            // process文件并解析
             Map<String, Object> result = ftpFileProcessService.processLocalNetworkFile(tempFilePath.toString());
             result.put("fileName", originalFilename);
             result.put("fileSize", file.getSize());
 
-            log.info("Network data file processed successfully: {}, result: {}", originalFilename, result);
+            LOGGER.info("Network data file processed successfully: {}, result: {}", originalFilename, result);
             return Result.success(result);
 
         } catch (IOException e) {
-            log.error("Failed to upload and process network data file: {}", e.getMessage(), e);
+            LOGGER.error("Failed to upload and process network data file: {}", e.getMessage(), e);
             return Result.error("文件上传或处理失败: " + e.getMessage());
         } catch (Exception e) {
-            log.error("Error occurred while processing network data file: {}", e.getMessage(), e);
+            LOGGER.error("Error occurred while processing network data file: {}", e.getMessage(), e);
             return Result.error("处理文件时发生错误: " + e.getMessage());
         } finally {
             // 清理临时文件
@@ -459,7 +461,7 @@ public class TestSettingsController {
                         Files.deleteIfExists(tempDir);
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to cleanup temporary file: {}", e.getMessage());
+                    LOGGER.warn("Failed to cleanup temporary file: {}", e.getMessage());
                 }
             }
         }

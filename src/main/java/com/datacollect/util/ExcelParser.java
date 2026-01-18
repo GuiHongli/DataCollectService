@@ -17,11 +17,12 @@ import org.springframework.stereotype.Component;
 
 import com.datacollect.entity.TestCase;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Component
 public class ExcelParser {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExcelParser.class);
 
     private static final int COL_NAME = 0;
     private static final int COL_NUMBER = 1;
@@ -64,7 +65,7 @@ public class ExcelParser {
             }
         }
         
-        log.info("Successfully parsed Excel file, found {} test cases", testCases.size());
+        LOGGER.info("Successfully parsed Excel file, found {} test cases", testCases.size());
         return testCases;
     }
     
@@ -89,7 +90,7 @@ public class ExcelParser {
             return testCase;
             
         } catch (Exception e) {
-            log.error("Error parsing row {}: {}", row.getRowNum() + 1, e.getMessage());
+            LOGGER.error("Error parsing row {}: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
     }
@@ -119,18 +120,18 @@ public class ExcelParser {
      */
     private boolean validateRequiredFields(TestCase testCase, Row row) {
         if (testCase.getName() == null || testCase.getName().trim().isEmpty()) {
-            log.warn("Row {} test case name is empty, skipping this row", row.getRowNum() + 1);
+            LOGGER.warn("Row {} test case name is empty, skipping this row", row.getRowNum() + 1);
             return false;
         }
         if (testCase.getNumber() == null || testCase.getNumber().trim().isEmpty()) {
-            log.warn("Row {} test case number is empty, skipping this row", row.getRowNum() + 1);
+            LOGGER.warn("Row {} test case number is empty, skipping this row", row.getRowNum() + 1);
             return false;
         }
         return true;
     }
     
     /**
-     * 获取单元格值
+     * get单元格值
      * @param cell 单元格
      * @param evaluator 公式计算器
      * @return 单元格值字符串
@@ -151,7 +152,7 @@ public class ExcelParser {
                 return String.valueOf(cell.getBooleanCellValue());
             }
             case FORMULA: {
-                // 计算公式并获取结果值
+                // 计算公式并get结果值
                 return getFormulaValue(cell, evaluator);
             }
             default: {
@@ -161,7 +162,7 @@ public class ExcelParser {
     }
     
     /**
-     * 获取公式单元格的计算结果
+     * get公式单元格的计算结果
      * @param cell 公式单元格
      * @param evaluator 公式计算器
      * @return 公式计算结果字符串
@@ -184,7 +185,7 @@ public class ExcelParser {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to evaluate formula in cell {}: {}, using formula text instead", 
+            LOGGER.warn("Failed to evaluate formula in cell {}: {}, using formula text instead", 
                 cell.getAddress(), e.getMessage());
             return cell.getCellFormula();
         }

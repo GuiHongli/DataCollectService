@@ -3,7 +3,6 @@ package com.datacollect.controller;
 import com.datacollect.common.Result;
 import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.service.ExecutorMacAddressService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,10 +11,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/executor-mac-address")
 public class ExecutorMacAddressController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExecutorMacAddressController.class);
 
     @Autowired
     private ExecutorMacAddressService executorMacAddressService;

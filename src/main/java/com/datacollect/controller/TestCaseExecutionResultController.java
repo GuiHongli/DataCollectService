@@ -9,7 +9,6 @@ import com.datacollect.service.ExternalApiService;
 import com.datacollect.service.TestCaseService;
 import com.datacollect.entity.TestCase;
 import org.springframework.web.multipart.MultipartFile;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -18,17 +17,20 @@ import javax.validation.Valid;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 用例执行结果控制器
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/test-result")
 @Validated
 public class TestCaseExecutionResultController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestCaseExecutionResultController.class);
 
     @Autowired
     private TestCaseExecutionResultService testCaseExecutionResultService;
@@ -47,12 +49,12 @@ public class TestCaseExecutionResultController {
      */
     @PostMapping("/report")
     public Result<Map<String, Object>> reportTestCaseResult(@Valid @RequestBody TestCaseExecutionResult result) {
-        log.info("Received test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
+        LOGGER.info("Received test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
                 result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus());
         
         // 记录日志文件信息
         if (result.getLogFilePath() != null && !result.getLogFilePath().trim().isEmpty()) {
-            log.info("Test case execution result contains log file - task ID: {}, test case ID: {}, round: {}, log file: {}", 
+            LOGGER.info("Test case execution result contains log file - task ID: {}, test case ID: {}, round: {}, log file: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getLogFilePath());
         }
         
@@ -65,7 +67,7 @@ public class TestCaseExecutionResultController {
                 if ("SUCCESS".equalsIgnoreCase(result.getStatus()) || "COMPLETED".equalsIgnoreCase(result.getStatus())) {
                     updateProbedStatusForTestCase(result.getTestCaseId());
                 } else {
-                    log.info("用例采集状态不是成功状态，跳过updateProbedStatus调用 - 用例ID: {}, 状态: {}", 
+                    LOGGER.info("用例采集状态不是success状态，skipupdateProbedStatus调用 - 用例ID: {}, 状态: {}", 
                             result.getTestCaseId(), result.getStatus());
                 }
                 
@@ -78,18 +80,18 @@ public class TestCaseExecutionResultController {
                 data.put("message", "Test case execution result received successfully");
                 data.put("timestamp", System.currentTimeMillis());
                 
-                log.info("Test case execution result received successfully - task ID: {}, test case ID: {}, round: {}, status: {}, log file: {}", 
+                LOGGER.info("Test case execution result received successfully - task ID: {}, test case ID: {}, round: {}, status: {}, log file: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus(), result.getLogFilePath());
                 
                 return Result.success(data);
             } else {
-                log.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
+                LOGGER.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
                 return Result.error("Failed to save test case execution result");
             }
             
         } catch (Exception e) {
-            log.error("Exception receiving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
+            LOGGER.error("Exception receiving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
             return Result.error("Failed to receive test case execution result: " + e.getMessage());
         }
@@ -110,23 +112,23 @@ public class TestCaseExecutionResultController {
                                                         @RequestParam("testCaseId") Long testCaseId,
                                                         @RequestParam("round") Integer round,
                                                         @RequestParam("logFile") MultipartFile logFile) {
-        log.info("Received test case execution log file - task ID: {}, test case ID: {}, round: {}, filename: {}, file size: {} bytes", 
+        LOGGER.info("Received test case execution log file - task ID: {}, test case ID: {}, round: {}, filename: {}, file size: {} bytes", 
                 taskId, testCaseId, round, logFile.getOriginalFilename(), logFile.getSize());
         
         try {
-            // 创建日志文件存储目录并保存文件
+            // create日志文件存储目录并save文件
             java.nio.file.Path filePath = createLogFileAndSave(taskId, testCaseId, round, logFile);
             
             // 构建响应数据
             Map<String, Object> data = buildUploadResponseData(taskId, testCaseId, round, logFile, filePath);
             
-            log.info("Test case execution log file uploaded successfully - task ID: {}, test case ID: {}, round: {}, file path: {}", 
+            LOGGER.info("Test case execution log file uploaded successfully - task ID: {}, test case ID: {}, round: {}, file path: {}", 
                     taskId, testCaseId, round, filePath);
             
             return Result.success(data);
             
         } catch (Exception e) {
-            log.error("Exception receiving test case execution log file - task ID: {}, test case ID: {}, round: {}, error: {}", 
+            LOGGER.error("Exception receiving test case execution log file - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     taskId, testCaseId, round, e.getMessage(), e);
             return Result.error("Failed to receive test case execution log file: " + e.getMessage());
         }
@@ -185,16 +187,16 @@ public class TestCaseExecutionResultController {
      */
     @GetMapping("/task/{taskId}")
     public Result<java.util.List<com.datacollect.entity.TestCaseExecutionResult>> getResultsByTaskId(@PathVariable String taskId) {
-        log.info("Query task execution results - task ID: {}", taskId);
+        LOGGER.info("Query task execution results - task ID: {}", taskId);
         
         try {
             java.util.List<com.datacollect.entity.TestCaseExecutionResult> results = testCaseExecutionResultService.getByTaskId(taskId);
             
-            log.info("Found task execution result count: {} - task ID: {}", results.size(), taskId);
+            LOGGER.info("Found task execution result count: {} - task ID: {}", results.size(), taskId);
             return Result.success(results);
             
         } catch (Exception e) {
-            log.error("Failed to query task execution results - task ID: {}, error: {}", taskId, e.getMessage(), e);
+            LOGGER.error("Failed to query task execution results - task ID: {}, error: {}", taskId, e.getMessage(), e);
             return Result.error("Failed to query task execution results: " + e.getMessage());
         }
     }
@@ -207,16 +209,16 @@ public class TestCaseExecutionResultController {
      */
     @GetMapping("/testcase/{testCaseId}")
     public Result<java.util.List<com.datacollect.entity.TestCaseExecutionResult>> getResultsByTestCaseId(@PathVariable Long testCaseId) {
-        log.info("Query test case execution results - test case ID: {}", testCaseId);
+        LOGGER.info("Query test case execution results - test case ID: {}", testCaseId);
         
         try {
             java.util.List<com.datacollect.entity.TestCaseExecutionResult> results = testCaseExecutionResultService.getByTestCaseId(testCaseId);
             
-            log.info("Found test case execution result count: {} - test case ID: {}", results.size(), testCaseId);
+            LOGGER.info("Found test case execution result count: {} - test case ID: {}", results.size(), testCaseId);
             return Result.success(results);
             
         } catch (Exception e) {
-            log.error("Failed to query test case execution results - test case ID: {}, error: {}", testCaseId, e.getMessage(), e);
+            LOGGER.error("Failed to query test case execution results - test case ID: {}, error: {}", testCaseId, e.getMessage(), e);
             return Result.error("Failed to query test case execution results: " + e.getMessage());
         }
     }
@@ -233,23 +235,23 @@ public class TestCaseExecutionResultController {
             if (testCase != null && testCase.getApp() != null && !testCase.getApp().trim().isEmpty()) {
                 String appName = testCase.getApp();
                 
-                log.info("用例采集成功，调用updateProbedStatus接口 - 用例ID: {}, APP: {}", testCaseId, appName);
+                LOGGER.info("用例采集成功，调用updateProbedStatus接口 - 用例ID: {}, APP: {}", testCaseId, appName);
                 
-                // 调用外部接口更新探测状态
+                // 调用外部接口update探测状态
                 UpdateProbedStatusResponse response = externalApiService.updateProbedStatus(java.util.Arrays.asList(appName));
                 
                 if (response != null && response.getData() != null) {
-                    log.info("updateProbedStatus调用成功 - 用例ID: {}, APP: {}, 更新数量: {}", 
+                    LOGGER.info("updateProbedStatus调用成功 - 用例ID: {}, APP: {}, 更新数量: {}", 
                             testCaseId, appName, response.getData().getUpdataCount());
                 } else {
-                    log.warn("updateProbedStatus调用失败 - 用例ID: {}, APP: {}, 响应为空", testCaseId, appName);
+                    LOGGER.warn("updateProbedStatus调用failed - 用例ID: {}, APP: {}, 响应为空", testCaseId, appName);
                 }
             } else {
-                log.warn("用例APP字段为空，跳过updateProbedStatus调用 - 用例ID: {}", testCaseId);
+                LOGGER.warn("用例APP字段为空，skipupdateProbedStatus调用 - 用例ID: {}", testCaseId);
             }
             
         } catch (Exception e) {
-            log.error("调用updateProbedStatus接口异常 - 用例ID: {}, 错误信息: {}", testCaseId, e.getMessage(), e);
+            LOGGER.error("调用updateProbedStatus接口异常 - 用例ID: {}, 错误信息: {}", testCaseId, e.getMessage(), e);
             // 不抛出异常，避免影响用例执行结果上报的主流程
         }
     }

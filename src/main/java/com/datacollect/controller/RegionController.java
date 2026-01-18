@@ -7,7 +7,6 @@ import com.datacollect.entity.Region;
 import com.datacollect.entity.dto.BatchRegionRequest;
 import com.datacollect.entity.dto.RegionHierarchyDTO;
 import com.datacollect.service.RegionService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -16,11 +15,14 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.util.List;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/region")
 @Validated
 public class RegionController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RegionController.class);
 
     @Autowired
     private RegionService regionService;

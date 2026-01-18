@@ -7,7 +7,6 @@ import com.datacollect.entity.Executor;
 import com.datacollect.entity.dto.ExecutorDTO;
 import com.datacollect.dto.ExecutorRequest;
 import com.datacollect.service.ExecutorService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -17,11 +16,14 @@ import javax.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/executor")
 @Validated
 public class ExecutorController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExecutorController.class);
 
     @Autowired
     private ExecutorService executorService;
@@ -29,10 +31,10 @@ public class ExecutorController {
     @PostMapping
     public Result<Executor> create(@Valid @RequestBody ExecutorRequest request) {
         try {
-            log.info("Create executor - name: {}, IP address: {}, MAC address ID: {}", 
+            LOGGER.info("Create executor - name: {}, IP address: {}, MAC address ID: {}", 
                     request.getName(), request.getIpAddress(), request.getMacAddressId());
             
-            // 根据IP地址查找已存在的执行机（未删除的）
+            // 根据IP地址查找已存在的执行机（未delete的）
             QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("ip_address", request.getIpAddress());
             queryWrapper.eq("deleted", 0); // 只查找未删除的记录
@@ -50,32 +52,32 @@ public class ExecutorController {
             
             if (existingExecutor != null) {
                 // 如果存在，则更新（replace）
-                log.info("Executor with IP {} already exists (ID: {}), performing update instead of insert", 
+                LOGGER.info("Executor with IP {} already exists (ID: {}), performing update instead of insert", 
                         request.getIpAddress(), existingExecutor.getId());
                 executor.setId(existingExecutor.getId());
                 boolean success = executorService.updateById(executor);
                 if (success) {
-                    log.info("Executor updated successfully via IP replace - ID: {}, IP: {}, MAC Address ID: {}", 
+                    LOGGER.info("Executor updated successfully via IP replace - ID: {}, IP: {}, MAC Address ID: {}", 
                             executor.getId(), request.getIpAddress(), request.getMacAddressId());
                     return Result.success(executor);
                 } else {
-                    log.error("Executor update failed via IP replace - IP: {}", request.getIpAddress());
+                    LOGGER.error("Executor update failed via IP replace - IP: {}", request.getIpAddress());
                     return Result.error("Update failed via IP replace");
                 }
             } else {
                 // 如果不存在，则插入
                 boolean success = executorService.save(executor);
                 if (success) {
-                    log.info("Executor created successfully - ID: {}, IP: {}, MAC Address ID: {}", 
+                    LOGGER.info("Executor created successfully - ID: {}, IP: {}, MAC Address ID: {}", 
                             executor.getId(), request.getIpAddress(), request.getMacAddressId());
                     return Result.success(executor);
                 } else {
-                    log.error("Executor creation failed - IP: {}", request.getIpAddress());
+                    LOGGER.error("Executor creation failed - IP: {}", request.getIpAddress());
                     return Result.error("Creation failed");
                 }
             }
         } catch (Exception e) {
-            log.error("Exception creating/updating executor - IP: {}, error: {}", 
+            LOGGER.error("Exception creating/updating executor - IP: {}, error: {}", 
                     request.getIpAddress(), e.getMessage(), e);
             return Result.error("Create/Update failed: " + e.getMessage());
         }
@@ -85,10 +87,10 @@ public class ExecutorController {
     @PutMapping("/{id}")
     public Result<Executor> update(@PathVariable @NotNull Long id, @Valid @RequestBody ExecutorRequest request) {
         try {
-            log.info("Update executor - ID: {}, name: {}, IP address: {}, MAC address ID: {}", 
+            LOGGER.info("Update executor - ID: {}, name: {}, IP address: {}, MAC address ID: {}", 
                     id, request.getName(), request.getIpAddress(), request.getMacAddressId());
             
-            // 检查IP地址是否已被其他执行机使用
+            // checkIP地址是否已被其他执行机使用
             if (isIpAddressInUse(request.getIpAddress(), id)) {
                 return Result.error("IP address " + request.getIpAddress() + " is already used by another executor");
             }
@@ -110,7 +112,7 @@ public class ExecutorController {
             return performUpdate(id, executor);
             
         } catch (Exception e) {
-            log.error("Exception updating executor - ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Exception updating executor - ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("Update failed: " + e.getMessage());
         }
     }
@@ -126,7 +128,7 @@ public class ExecutorController {
         Executor existingExecutor = executorService.getOne(queryWrapper);
         
         if (existingExecutor != null) {
-            log.warn("IP address {} is already used by executor {} (ID: {})", 
+            LOGGER.warn("IP address {} is already used by executor {} (ID: {})", 
                     ipAddress, existingExecutor.getName(), existingExecutor.getId());
             return true;
         }
@@ -142,10 +144,10 @@ public class ExecutorController {
         boolean success = executorService.updateById(executor);
         
         if (success) {
-            log.info("Executor updated successfully - ID: {}", id);
+            LOGGER.info("Executor updated successfully - ID: {}", id);
             return Result.success(executor);
         } else {
-            log.error("Executor update failed - ID: {}", id);
+            LOGGER.error("Executor update failed - ID: {}", id);
             return Result.error("Update failed");
         }
     }

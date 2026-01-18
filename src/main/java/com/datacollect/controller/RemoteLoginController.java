@@ -3,7 +3,6 @@ package com.datacollect.controller;
 import com.datacollect.common.Result;
 import com.datacollect.entity.RemoteLoginLog;
 import com.datacollect.service.RemoteLoginLogService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -14,11 +13,14 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/remote-login")
 @Validated
 public class RemoteLoginController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RemoteLoginController.class);
 
     @Autowired
     private RemoteLoginLogService remoteLoginLogService;
@@ -29,10 +31,10 @@ public class RemoteLoginController {
     @PostMapping("/log")
     public Result<Map<String, Object>> logRemoteLogin(@Valid @RequestBody RemoteLoginLogRequest request) {
         try {
-            log.info("Recording remote login operation - Executor IP: {}, OS: {}, Connection Type: {}", 
+            LOGGER.info("Recording remote login operation - Executor IP: {}, OS: {}, Connection Type: {}", 
                     request.getExecutorIp(), request.getOsType(), request.getConnectionType());
             
-            // 创建登录日志记录
+            // create登录日志记录
             RemoteLoginLog loginLog = new RemoteLoginLog();
             loginLog.setExecutorIp(request.getExecutorIp());
             loginLog.setLogicEnvironmentName(request.getLogicEnvironmentName());
@@ -50,12 +52,12 @@ public class RemoteLoginController {
             // 生成连接信息
             Map<String, Object> connectionInfo = generateConnectionInfo(request);
             
-            log.info("Remote login log recorded successfully - Log ID: {}", loginLog.getId());
+            LOGGER.info("Remote login log recorded successfully - Log ID: {}", loginLog.getId());
             
             return Result.success(connectionInfo);
             
         } catch (Exception e) {
-            log.error("Failed to record remote login operation", e);
+            LOGGER.error("Failed to record remote login operation", e);
             return Result.error("记录远程登录操作失败: " + e.getMessage());
         }
     }
@@ -80,11 +82,11 @@ public class RemoteLoginController {
             
             remoteLoginLogService.updateById(loginLog);
             
-            log.info("Updated remote login status - Log ID: {}, Status: {}", id, status);
+            LOGGER.info("Updated remote login status - Log ID: {}, Status: {}", id, status);
             return Result.success(true);
             
         } catch (Exception e) {
-            log.error("Failed to update login status", e);
+            LOGGER.error("Failed to update login status", e);
             return Result.error("更新登录状态失败: " + e.getMessage());
         }
     }

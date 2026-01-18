@@ -6,7 +6,6 @@ import com.datacollect.common.Result;
 import com.datacollect.dto.CollectTaskTemplateRequest;
 import com.datacollect.entity.CollectTaskTemplate;
 import com.datacollect.service.CollectTaskTemplateService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,17 +25,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 采集任务模版控制器
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @RestController
 @RequestMapping("/collect-task-template")
 @Validated
 public class CollectTaskTemplateController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CollectTaskTemplateController.class);
     
     @Autowired
     private CollectTaskTemplateService collectTaskTemplateService;
@@ -50,14 +52,14 @@ public class CollectTaskTemplateController {
      */
     @PostMapping
     public Result<Map<String, Object>> createTemplate(@Valid @RequestBody CollectTaskTemplateRequest request, HttpServletRequest httpRequest) {
-        log.info("创建采集任务模版 - 模版名称: {}, 采集策略ID: {}", request.getName(), request.getCollectStrategyId());
+        LOGGER.info("创建采集任务模版 - 模版名称: {}, 采集策略ID: {}", request.getName(), request.getCollectStrategyId());
         
         try {
-            // 从请求中获取当前用户名（创建人）
+            // 从请求中get当前用户名（create人）
             String createBy = (String) httpRequest.getAttribute("username");
-            log.info("创建采集任务模版 - createBy: {}", createBy);
+            LOGGER.info("创建采集任务模版 - createBy: {}", createBy);
             
-            // 调用服务创建模版
+            // 调用服务create模版
             Long templateId = collectTaskTemplateService.createTemplate(request, createBy);
             
             Map<String, Object> result = new HashMap<>();
@@ -65,11 +67,11 @@ public class CollectTaskTemplateController {
             result.put("message", "采集任务模版创建成功");
             result.put("timestamp", System.currentTimeMillis());
             
-            log.info("采集任务模版创建成功 - 模版ID: {}, createBy: {}", templateId, createBy);
+            LOGGER.info("采集任务模版createsuccess - 模版ID: {}, createBy: {}", templateId, createBy);
             return Result.success(result);
             
         } catch (Exception e) {
-            log.error("创建采集任务模版失败 - 模版名称: {}, 错误: {}", request.getName(), e.getMessage(), e);
+            LOGGER.error("create采集任务模版failed - 模版名称: {}, error: {}", request.getName(), e.getMessage(), e);
             return Result.error("创建采集任务模版失败: " + e.getMessage());
         }
     }
@@ -82,15 +84,15 @@ public class CollectTaskTemplateController {
      */
     @PutMapping
     public Result<Boolean> updateTemplate(@Valid @RequestBody CollectTaskTemplateRequest request) {
-        log.info("更新采集任务模版 - 模版ID: {}, 模版名称: {}", request.getId(), request.getName());
+        LOGGER.info("update采集任务模版 - 模版ID: {}, 模版名称: {}", request.getId(), request.getName());
         
         try {
             Boolean success = collectTaskTemplateService.updateTemplate(request);
-            log.info("采集任务模版更新成功 - 模版ID: {}", request.getId());
+            LOGGER.info("采集任务模版updatesuccess - 模版ID: {}", request.getId());
             return Result.success(success);
             
         } catch (Exception e) {
-            log.error("更新采集任务模版失败 - 模版ID: {}, 错误: {}", request.getId(), e.getMessage(), e);
+            LOGGER.error("update采集任务模版failed - 模版ID: {}, error: {}", request.getId(), e.getMessage(), e);
             return Result.error("更新采集任务模版失败: " + e.getMessage());
         }
     }
@@ -103,7 +105,7 @@ public class CollectTaskTemplateController {
      */
     @DeleteMapping("/{id}")
     public Result<Boolean> deleteTemplate(@PathVariable @NotNull Long id) {
-        log.info("删除采集任务模版 - 模版ID: {}", id);
+        LOGGER.info("delete采集任务模版 - 模版ID: {}", id);
         
         try {
             CollectTaskTemplate template = collectTaskTemplateService.getById(id);
@@ -114,11 +116,11 @@ public class CollectTaskTemplateController {
             template.setDeleted(1);
             boolean success = collectTaskTemplateService.updateById(template);
             
-            log.info("采集任务模版删除成功 - 模版ID: {}", id);
+            LOGGER.info("采集任务模版deletesuccess - 模版ID: {}", id);
             return Result.success(success);
             
         } catch (Exception e) {
-            log.error("删除采集任务模版失败 - 模版ID: {}, 错误: {}", id, e.getMessage(), e);
+            LOGGER.error("delete采集任务模版failed - 模版ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("删除采集任务模版失败: " + e.getMessage());
         }
     }
@@ -131,7 +133,7 @@ public class CollectTaskTemplateController {
      */
     @GetMapping("/{id}")
     public Result<CollectTaskTemplate> getById(@PathVariable @NotNull Long id) {
-        log.info("获取采集任务模版 - 模版ID: {}", id);
+        LOGGER.info("get采集任务模版 - 模版ID: {}", id);
         
         try {
             CollectTaskTemplate template = collectTaskTemplateService.getById(id);
@@ -142,7 +144,7 @@ public class CollectTaskTemplateController {
             return Result.success(template);
             
         } catch (Exception e) {
-            log.error("获取采集任务模版失败 - 模版ID: {}, 错误: {}", id, e.getMessage(), e);
+            LOGGER.error("get采集任务模版failed - 模版ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("获取采集任务模版失败: " + e.getMessage());
         }
     }
@@ -163,13 +165,13 @@ public class CollectTaskTemplateController {
             @RequestParam(required = false) String name,
             HttpServletRequest httpRequest) {
         
-        log.info("分页查询采集任务模版列表 - 当前页: {}, 每页大小: {}, 模版名称: {}", current, size, name);
+        LOGGER.info("分页查询采集任务模版列表 - 当前页: {}, 每页大小: {}, 模版名称: {}", current, size, name);
         
         try {
             Page<CollectTaskTemplate> page = new Page<>(current, size);
             QueryWrapper<CollectTaskTemplate> queryWrapper = new QueryWrapper<>();
             
-            // 只查询未删除的模版
+            // 只query未delete的模版
             queryWrapper.eq("deleted", 0);
             
             // 获取当前用户信息
@@ -180,9 +182,9 @@ public class CollectTaskTemplateController {
             // admin 可以查看全部模版，普通用户只能查看自己创建的模版
             if (role != null && !"admin".equals(role) && username != null) {
                 queryWrapper.eq("create_by", username);
-                log.debug("普通用户查询采集任务模版 - 用户名: {}, 只能查看自己创建的模版", username);
+                LOGGER.debug("普通用户query采集任务模版 - 用户名: {}, 只能查看自己create的模版", username);
             } else {
-                log.debug("管理员查询采集任务模版 - 角色: {}, 可以查看全部模版", role);
+                LOGGER.debug("管理员query采集任务模版 - 角色: {}, 可以查看全部模版", role);
             }
             
             if (name != null && !name.isEmpty()) {
@@ -195,7 +197,7 @@ public class CollectTaskTemplateController {
             return Result.success(result);
             
         } catch (Exception e) {
-            log.error("分页查询采集任务模版列表失败 - 错误: {}", e.getMessage(), e);
+            LOGGER.error("分页query采集任务模版列表failed - error: {}", e.getMessage(), e);
             return Result.error("分页查询采集任务模版列表失败: " + e.getMessage());
         }
     }
@@ -208,12 +210,12 @@ public class CollectTaskTemplateController {
      */
     @GetMapping("/list")
     public Result<List<CollectTaskTemplate>> list(HttpServletRequest httpRequest) {
-        log.info("获取所有采集任务模版列表");
+        LOGGER.info("获取所有采集任务模版列表");
         
         try {
             QueryWrapper<CollectTaskTemplate> queryWrapper = new QueryWrapper<>();
             
-            // 只查询未删除的模版
+            // 只query未delete的模版
             queryWrapper.eq("deleted", 0);
             
             // 获取当前用户信息
@@ -224,9 +226,9 @@ public class CollectTaskTemplateController {
             // admin 可以查看全部模版，普通用户只能查看自己创建的模版
             if (role != null && !"admin".equals(role) && username != null) {
                 queryWrapper.eq("create_by", username);
-                log.debug("普通用户查询采集任务模版列表 - 用户名: {}, 只能查看自己创建的模版", username);
+                LOGGER.debug("普通用户query采集任务模版列表 - 用户名: {}, 只能查看自己create的模版", username);
             } else {
-                log.debug("管理员查询采集任务模版列表 - 角色: {}, 可以查看全部模版", role);
+                LOGGER.debug("管理员query采集任务模版列表 - 角色: {}, 可以查看全部模版", role);
             }
             
             queryWrapper.orderByDesc("create_time");
@@ -235,7 +237,7 @@ public class CollectTaskTemplateController {
             return Result.success(list);
             
         } catch (Exception e) {
-            log.error("获取采集任务模版列表失败 - 错误: {}", e.getMessage(), e);
+            LOGGER.error("get采集任务模版列表failed - error: {}", e.getMessage(), e);
             return Result.error("获取采集任务模版列表失败: " + e.getMessage());
         }
     }

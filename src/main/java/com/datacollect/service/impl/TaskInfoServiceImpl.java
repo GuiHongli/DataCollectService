@@ -8,38 +8,40 @@ import com.datacollect.mapper.TaskInfoMapper;
 import com.datacollect.service.TaskInfoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 端侧任务信息服务实现类
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, ClientTaskInfo> implements TaskInfoService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskInfoServiceImpl.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public boolean saveTaskInfo(TaskInfoDTO taskInfoDTO) {
         if (taskInfoDTO == null) {
-            log.warn("TaskInfoDTO is null, cannot save");
+            LOGGER.warn("TaskInfoDTO is null, cannot save");
             return false;
         }
 
         try {
-            // 检查taskId是否已存在
+            // checktaskId是否已存在
             QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("task_id", taskInfoDTO.getTaskId());
             ClientTaskInfo existingTaskInfo = getOne(queryWrapper);
             
             if (existingTaskInfo != null) {
-                log.info("TaskInfo already exists, skip saving - taskId: {}", taskInfoDTO.getTaskId());
+                LOGGER.info("TaskInfo already exists, skip saving - taskId: {}", taskInfoDTO.getTaskId());
                 return true;
             }
 
@@ -50,13 +52,13 @@ public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, ClientTaskI
 
             boolean success = save(taskInfo);
             if (success) {
-                log.info("TaskInfo saved successfully - taskId: {}, id: {}", taskInfoDTO.getTaskId(), taskInfo.getId());
+                LOGGER.info("TaskInfo saved successfully - taskId: {}, id: {}", taskInfoDTO.getTaskId(), taskInfo.getId());
             } else {
-                log.error("Failed to save TaskInfo - taskId: {}", taskInfoDTO.getTaskId());
+                LOGGER.error("Failed to save TaskInfo - taskId: {}", taskInfoDTO.getTaskId());
             }
             return success;
         } catch (Exception e) {
-            log.error("Error saving TaskInfo - taskId: {}, error: {}", taskInfoDTO.getTaskId(), e.getMessage(), e);
+            LOGGER.error("Error saving TaskInfo - taskId: {}, error: {}", taskInfoDTO.getTaskId(), e.getMessage(), e);
             return false;
         }
     }
@@ -87,7 +89,7 @@ public class TaskInfoServiceImpl extends ServiceImpl<TaskInfoMapper, ClientTaskI
                 String summaryJson = objectMapper.writeValueAsString(dto.getSummary());
                 taskInfo.setSummary(summaryJson);
             } catch (JsonProcessingException e) {
-                log.warn("Failed to convert summary to JSON - taskId: {}, error: {}", dto.getTaskId(), e.getMessage());
+                LOGGER.warn("Failed to convert summary to JSON - taskId: {}, error: {}", dto.getTaskId(), e.getMessage());
                 taskInfo.setSummary(null);
             }
         }

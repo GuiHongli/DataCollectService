@@ -4,22 +4,24 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
 import com.datacollect.dto.NetworkElementDTO;
 import com.datacollect.service.NetworkElementService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 网元管理控制器
  *
  * @author system
  * @since 2025-01-20
  */
-@Slf4j
 @RestController
 @RequestMapping("/network-element")
 public class NetworkElementController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(NetworkElementController.class);
 
     @Autowired
     private NetworkElementService networkElementService;
@@ -41,7 +43,7 @@ public class NetworkElementController {
             Page<NetworkElementDTO> page = networkElementService.getNetworkElementPage(current, size, name);
             return Result.success(page);
         } catch (Exception e) {
-            log.error("查询网元列表失败: {}", e.getMessage(), e);
+            LOGGER.error("query网元列表failed: {}", e.getMessage(), e);
             return Result.error("查询网元列表失败: " + e.getMessage());
         }
     }
@@ -61,7 +63,7 @@ public class NetworkElementController {
             }
             return Result.success(dto);
         } catch (Exception e) {
-            log.error("查询网元失败: {}", e.getMessage(), e);
+            LOGGER.error("query网元failed: {}", e.getMessage(), e);
             return Result.error("查询网元失败: " + e.getMessage());
         }
     }
@@ -91,10 +93,10 @@ public class NetworkElementController {
             networkElementDTO.getNetworkElement().setUpdateBy(createBy);
             
             NetworkElementDTO result = networkElementService.saveNetworkElementWithAttributes(networkElementDTO);
-            log.info("创建网元成功 - 网元ID: {}, 创建人: {}", result.getNetworkElement().getId(), createBy);
+            LOGGER.info("create网元success - 网元ID: {}, create人: {}", result.getNetworkElement().getId(), createBy);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("创建网元失败: {}", e.getMessage(), e);
+            LOGGER.error("create网元failed: {}", e.getMessage(), e);
             return Result.error("创建网元失败: " + e.getMessage());
         }
     }
@@ -126,10 +128,10 @@ public class NetworkElementController {
             networkElementDTO.getNetworkElement().setUpdateBy(updateBy);
             
             NetworkElementDTO result = networkElementService.updateNetworkElementWithAttributes(networkElementDTO);
-            log.info("更新网元成功 - 网元ID: {}, 更新人: {}", id, updateBy);
+            LOGGER.info("update网元success - 网元ID: {}, update人: {}", id, updateBy);
             return Result.success(result);
         } catch (Exception e) {
-            log.error("更新网元失败: {}", e.getMessage(), e);
+            LOGGER.error("update网元failed: {}", e.getMessage(), e);
             return Result.error("更新网元失败: " + e.getMessage());
         }
     }
@@ -145,17 +147,18 @@ public class NetworkElementController {
         try {
             boolean success = networkElementService.deleteNetworkElementWithAttributes(id);
             if (success) {
-                log.info("删除网元成功 - 网元ID: {}", id);
+                LOGGER.info("delete网元success - 网元ID: {}", id);
                 return Result.success(null);
             } else {
                 return Result.error("删除网元失败");
             }
         } catch (Exception e) {
-            log.error("删除网元失败: {}", e.getMessage(), e);
+            LOGGER.error("delete网元failed: {}", e.getMessage(), e);
             return Result.error("删除网元失败: " + e.getMessage());
         }
     }
 }
+
 
 
 

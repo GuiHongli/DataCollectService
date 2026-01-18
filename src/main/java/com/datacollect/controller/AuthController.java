@@ -6,17 +6,19 @@ import com.datacollect.service.UserActivityService;
 import com.datacollect.service.UserService;
 import com.datacollect.util.JwtUtil;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthController.class);
     
     @Autowired
     private UserService userService;
@@ -36,7 +38,7 @@ public class AuthController {
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody LoginRequest request) {
         try {
-            log.info("用户登录请求 - 用户名: {}", request.getUsername());
+            LOGGER.info("用户登录请求 - 用户名: {}", request.getUsername());
             
             if (request.getUsername() == null || request.getPassword() == null) {
                 return Result.error("用户名和密码不能为空");
@@ -45,13 +47,13 @@ public class AuthController {
             // 查找用户
             User user = userService.findByUsername(request.getUsername());
             if (user == null) {
-                log.warn("用户不存在 - 用户名: {}", request.getUsername());
+                LOGGER.warn("用户不存在 - 用户名: {}", request.getUsername());
                 return Result.error("用户名或密码错误");
             }
             
             // 检查用户状态
             if (user.getStatus() == 0) {
-                log.warn("用户已被禁用 - 用户名: {}", request.getUsername());
+                LOGGER.warn("用户已被disabled - 用户名: {}", request.getUsername());
                 return Result.error("用户已被禁用");
             }
             
@@ -66,23 +68,23 @@ public class AuthController {
             String rawPassword = request.getPassword();
             String encodedPassword = user.getPassword();
             
-            log.debug("开始验证密码 - 用户名: {}, 明文密码长度: {}, 加密密码长度: {}, 加密密码前缀: {}", 
+            LOGGER.debug("startvalidate密码 - 用户名: {}, 明文密码长度: {}, 加密密码长度: {}, 加密密码前缀: {}", 
                     request.getUsername(), 
                     rawPassword != null ? rawPassword.length() : 0,
                     encodedPassword != null ? encodedPassword.length() : 0,
                     encodedPassword != null && encodedPassword.length() > 4 ? encodedPassword.substring(0, 4) : "null");
             
             if (!userService.matchesPassword(rawPassword, encodedPassword)) {
-                log.warn("密码验证失败 - 用户名: {}", request.getUsername());
+                LOGGER.warn("密码validatefailed - 用户名: {}", request.getUsername());
                 return Result.error("用户名或密码错误");
             }
             
-            log.debug("密码验证成功 - 用户名: {}", request.getUsername());
+            LOGGER.debug("密码验证成功 - 用户名: {}", request.getUsername());
             
             // 生成JWT Token
             String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
             
-            // 更新用户活跃时间
+            // update用户活跃时间
             userActivityService.updateLastActivityTime(user.getUsername());
             
             Map<String, Object> data = new HashMap<>();
@@ -90,11 +92,11 @@ public class AuthController {
             data.put("username", user.getUsername());
             data.put("role", user.getRole());
             
-            log.info("用户登录成功 - 用户名: {}, 角色: {}", user.getUsername(), user.getRole());
+            LOGGER.info("用户登录success - 用户名: {}, 角色: {}", user.getUsername(), user.getRole());
             return Result.success(data);
             
         } catch (Exception e) {
-            log.error("登录异常: {}", e.getMessage(), e);
+            LOGGER.error("登录异常: {}", e.getMessage(), e);
             return Result.error("登录失败: " + e.getMessage());
         }
     }
@@ -107,12 +109,12 @@ public class AuthController {
                 String username = jwtUtil.getUsernameFromToken(token);
                 // 清除用户活跃时间
                 userActivityService.clearUserActivity(username);
-                log.info("用户退出登录 - 用户名: {}", username);
+                LOGGER.info("用户退出登录 - 用户名: {}", username);
             } else {
-                log.info("用户退出登录");
+                LOGGER.info("用户退出登录");
             }
         } catch (Exception e) {
-            log.warn("退出登录时清除活跃时间失败: {}", e.getMessage());
+            LOGGER.warn("退出登录时清除活跃时间failed: {}", e.getMessage());
         }
         return Result.success(null);
     }
@@ -138,7 +140,7 @@ public class AuthController {
             
             return Result.success(data);
         } catch (Exception e) {
-            log.error("获取用户信息异常: {}", e.getMessage(), e);
+            LOGGER.error("get用户信息异常: {}", e.getMessage(), e);
             return Result.error("获取用户信息失败");
         }
     }

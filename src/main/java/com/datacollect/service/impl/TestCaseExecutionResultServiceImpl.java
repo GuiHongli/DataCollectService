@@ -16,17 +16,18 @@ import com.datacollect.service.CollectTaskService;
 import com.datacollect.service.TestCaseExecutionInstanceService;
 import com.datacollect.service.TestCaseExecutionResultService;
 
-import lombok.extern.slf4j.Slf4j;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 用例执行结果服务实现类
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExecutionResultMapper, com.datacollect.entity.TestCaseExecutionResult> implements TestCaseExecutionResultService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestCaseExecutionResultServiceImpl.class);
 
     @Autowired
     private CollectTaskService collectTaskService;
@@ -39,16 +40,16 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
 
     @Override
     public boolean saveTestCaseExecutionResult(TestCaseExecutionResult result) {
-        log.info("Save test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
+        LOGGER.info("Save test case execution result - task ID: {}, test case ID: {}, round: {}, status: {}", 
                 result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getStatus());
         
         // 记录采集路径和质检结果信息
         if (result.getCollectPath() != null && !result.getCollectPath().trim().isEmpty()) {
-            log.info("Test case execution result contains collect path - task ID: {}, test case ID: {}, round: {}, collect path: {}", 
+            LOGGER.info("Test case execution result contains collect path - task ID: {}, test case ID: {}, round: {}, collect path: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getCollectPath());
         }
         if (result.getQcResult() != null && !result.getQcResult().trim().isEmpty()) {
-            log.info("Test case execution result contains QC result - task ID: {}, test case ID: {}, round: {}, QC result length: {} characters", 
+            LOGGER.info("Test case execution result contains QC result - task ID: {}, test case ID: {}, round: {}, QC result length: {} characters", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), result.getQcResult().length());
         }
         
@@ -57,7 +58,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             
             boolean success = save(entity);
             if (success) {
-                log.info("Test case execution result saved successfully - task ID: {}, test case ID: {}, round: {}, collect path: {}, QC result: {}", 
+                LOGGER.info("Test case execution result saved successfully - task ID: {}, test case ID: {}, round: {}, collect path: {}, QC result: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound(), 
                         entity.getCollectPath() != null ? "present" : "null", 
                         entity.getQcResult() != null ? "present" : "null");
@@ -68,27 +69,27 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 // 检查任务是否完成
                 checkAndUpdateTaskCompletion(result.getTaskId());
             } else {
-                log.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
+                LOGGER.error("Failed to save test case execution result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
             }
             
             return success;
             
         } catch (Exception e) {
-            log.error("Exception saving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
+            LOGGER.error("Exception saving test case execution result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
             return false;
         }
     }
 
     /**
-     * 创建结果实体
+     * create结果实体
      */
     private com.datacollect.entity.TestCaseExecutionResult createResultEntity(TestCaseExecutionResult result) {
         com.datacollect.entity.TestCaseExecutionResult entity = new com.datacollect.entity.TestCaseExecutionResult();
         BeanUtils.copyProperties(result, entity);
         
-        // 设置创建和更新时间
+        // setcreate和update时间
         LocalDateTime now = LocalDateTime.now();
         entity.setCreateTime(now);
         entity.setUpdateTime(now);
@@ -98,34 +99,34 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
 
     @Override
     public List<com.datacollect.entity.TestCaseExecutionResult> getByTaskId(String taskId) {
-        log.debug("Query execution results by task ID - task ID: {}", taskId);
+        LOGGER.debug("Query execution results by task ID - task ID: {}", taskId);
         
         QueryWrapper<com.datacollect.entity.TestCaseExecutionResult> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("task_id", taskId);
         queryWrapper.orderByDesc("create_time");
         
         List<com.datacollect.entity.TestCaseExecutionResult> results = list(queryWrapper);
-        log.debug("Found execution result count: {}", results.size());
+        LOGGER.debug("Found execution result count: {}", results.size());
         
         return results;
     }
 
     @Override
     public List<com.datacollect.entity.TestCaseExecutionResult> getByTestCaseId(Long testCaseId) {
-        log.debug("Query execution results by test case ID - test case ID: {}", testCaseId);
+        LOGGER.debug("Query execution results by test case ID - test case ID: {}", testCaseId);
         
         QueryWrapper<com.datacollect.entity.TestCaseExecutionResult> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("test_case_id", testCaseId);
         queryWrapper.orderByDesc("create_time");
         
         List<com.datacollect.entity.TestCaseExecutionResult> results = list(queryWrapper);
-        log.debug("Found execution result count: {}", results.size());
+        LOGGER.debug("Found execution result count: {}", results.size());
         
         return results;
     }
     
     /**
-     * 更新例次状态和结果
+     * update例次状态和结果
      * 
      * @param result 用例执行结果
      */
@@ -134,7 +135,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             // 根据taskId查找对应的采集任务ID
             Long collectTaskId = getCollectTaskIdFromTaskId(result.getTaskId());
             if (collectTaskId == null) {
-                log.warn("Cannot find corresponding collect task ID: {}", result.getTaskId());
+                LOGGER.warn("Cannot find corresponding collect task ID: {}", result.getTaskId());
                 return;
             }
             
@@ -146,15 +147,15 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                     collectTaskId, result.getTestCaseId(), result.getRound(), statusInfo.getStatus(), statusInfo.getResult(), statusInfo.getFailureReason(), result.getLogFilePath());
             
             if (success) {
-                log.debug("Instance status and result updated successfully - task ID: {}, test case ID: {}, round: {}, status: {}, result: {}", 
+                LOGGER.debug("Instance status and result updated successfully - task ID: {}, test case ID: {}, round: {}, status: {}, result: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound(), statusInfo.getStatus(), statusInfo.getResult());
             } else {
-                log.warn("Failed to update instance status and result - task ID: {}, test case ID: {}, round: {}", 
+                LOGGER.warn("Failed to update instance status and result - task ID: {}, test case ID: {}, round: {}", 
                         result.getTaskId(), result.getTestCaseId(), result.getRound());
             }
             
         } catch (Exception e) {
-            log.error("Exception updating instance status and result - task ID: {}, test case ID: {}, round: {}, error: {}", 
+            LOGGER.error("Exception updating instance status and result - task ID: {}, test case ID: {}, round: {}, error: {}", 
                     result.getTaskId(), result.getTestCaseId(), result.getRound(), e.getMessage(), e);
         }
     }
@@ -206,7 +207,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             return Long.parseLong(taskId);
         } catch (NumberFormatException e) {
             // 2. 如果不是数字，则通过execution_task_id查找对应的collect_task_id
-            log.debug("taskId is not numeric format, trying to find through execution_task_id: {}", taskId);
+            LOGGER.debug("taskId is not numeric format, trying to find through execution_task_id: {}", taskId);
             return findCollectTaskIdByExecutionTaskId(taskId);
         }
     }
@@ -216,7 +217,7 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
      */
     private Long findCollectTaskIdByExecutionTaskId(String taskId) {
         try {
-            // 查询test_case_execution_instance表，根据execution_task_id找到collect_task_id
+            // querytest_case_execution_instance表，根据execution_task_id找到collect_task_id
             QueryWrapper<TestCaseExecutionInstance> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("execution_task_id", taskId);
             queryWrapper.select("collect_task_id");
@@ -224,38 +225,38 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
             
             TestCaseExecutionInstance instance = testCaseExecutionInstanceService.getOne(queryWrapper);
             if (instance != null) {
-                log.debug("Found collect_task_id through execution_task_id: {} -> {}", taskId, instance.getCollectTaskId());
+                LOGGER.debug("Found collect_task_id through execution_task_id: {} -> {}", taskId, instance.getCollectTaskId());
                 return instance.getCollectTaskId();
             } else {
-                log.warn("Cannot find collect_task_id corresponding to execution_task_id: {}", taskId);
+                LOGGER.warn("Cannot find collect_task_id corresponding to execution_task_id: {}", taskId);
                 return null;
             }
         } catch (Exception ex) {
-            log.error("Exception finding collect_task_id through execution_task_id: {}", ex.getMessage(), ex);
+            LOGGER.error("Exception finding collect_task_id through execution_task_id: {}", ex.getMessage(), ex);
             return null;
         }
     }
     
     /**
-     * 检查并更新任务完成状态
+     * check并update任务completed状态
      * 
      * @param taskId 任务ID
      */
     private void checkAndUpdateTaskCompletion(String taskId) {
         try {
-            log.debug("Check task completion status - task ID: {}", taskId);
+            LOGGER.debug("Check task completion status - task ID: {}", taskId);
             
             // 1. 根据taskId查找对应的采集任务ID
             Long collectTaskId = getCollectTaskIdFromTaskId(taskId);
             if (collectTaskId == null) {
-                log.warn("Cannot find corresponding collect task ID: {}", taskId);
+                LOGGER.warn("Cannot find corresponding collect task ID: {}", taskId);
                 return;
             }
             
-            // 2. 查询该任务的所有用例执行例次
+            // 2. query该任务的所有用例执行例次
             List<TestCaseExecutionInstance> instances = testCaseExecutionInstanceService.getByCollectTaskId(collectTaskId);
             if (instances.isEmpty()) {
-                log.warn("No test case execution instances found for task - task ID: {}", taskId);
+                LOGGER.warn("No test case execution instances found for task - task ID: {}", taskId);
                 return;
             }
             
@@ -272,19 +273,19 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
                 // 6. 释放任务占用的UE锁，并处理UE队列中的任务
                 try {
                     collectTaskProcessService.releaseUeLocksForTask(taskId);
-                    log.info("任务完成，已释放UE锁 - 任务ID: {}", taskId);
+                    LOGGER.info("任务completed，已releaseUE锁 - 任务ID: {}", taskId);
                 } catch (Exception e) {
-                    log.error("释放任务UE锁失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+                    LOGGER.error("release任务UE锁failed - 任务ID: {}, error: {}", taskId, e.getMessage(), e);
                 }
             }
             
         } catch (Exception e) {
-            log.error("Exception checking task completion status - task ID: {}, error: {}", taskId, e.getMessage(), e);
+            LOGGER.error("Exception checking task completion status - task ID: {}, error: {}", taskId, e.getMessage(), e);
         }
     }
 
     /**
-     * 检查所有实例是否已完成
+     * check所有实例是否已completed
      */
     private boolean checkAllInstancesCompleted(List<TestCaseExecutionInstance> instances) {
         for (TestCaseExecutionInstance instance : instances) {
@@ -301,31 +302,31 @@ public class TestCaseExecutionResultServiceImpl extends ServiceImpl<TestCaseExec
     private void updateTaskToCompleted(Long collectTaskId) {
         boolean success = collectTaskService.updateTaskStatus(collectTaskId, "COMPLETED");
         if (success) {
-            log.info("Task status updated to completed - task ID: {}", collectTaskId);
+            LOGGER.info("Task status updated to completed - task ID: {}", collectTaskId);
         } else {
-            log.error("Failed to update task status - task ID: {}", collectTaskId);
+            LOGGER.error("Failed to update task status - task ID: {}", collectTaskId);
         }
     }
 
     /**
-     * 更新任务执行进度
+     * update任务执行进度
      */
     private void updateTaskExecutionProgress(Long collectTaskId, List<TestCaseExecutionInstance> instances) {
         try {
             // 统计各种状态的例次数量
             TaskProgressInfo progressInfo = calculateTaskProgress(instances);
             
-            // 更新任务进度
+            // update任务进度
             boolean progressUpdated = collectTaskService.updateTaskProgress(collectTaskId, progressInfo.getTotalCount(), progressInfo.getSuccessCount(), progressInfo.getFailedCount());
             if (progressUpdated) {
-                log.info("Task execution progress updated successfully - task ID: {}, total: {}, success: {}, failed: {}", 
+                LOGGER.info("Task execution progress updated successfully - task ID: {}, total: {}, success: {}, failed: {}", 
                         collectTaskId, progressInfo.getTotalCount(), progressInfo.getSuccessCount(), progressInfo.getFailedCount());
             } else {
-                log.error("Failed to update task execution progress - task ID: {}", collectTaskId);
+                LOGGER.error("Failed to update task execution progress - task ID: {}", collectTaskId);
             }
             
         } catch (Exception e) {
-            log.error("Exception updating task execution progress - task ID: {}, error: {}", collectTaskId, e.getMessage(), e);
+            LOGGER.error("Exception updating task execution progress - task ID: {}, error: {}", collectTaskId, e.getMessage(), e);
         }
     }
 

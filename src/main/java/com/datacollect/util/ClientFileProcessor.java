@@ -8,7 +8,6 @@ import com.datacollect.entity.SpeedData;
 import com.datacollect.entity.VideoData;
 import com.datacollect.entity.VmosData;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
@@ -35,12 +34,15 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 端侧文件处理工具类
  * 负责解压端侧压缩包并解析taskinfo.json
  */
-@Slf4j
 public class ClientFileProcessor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClientFileProcessor.class);
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -57,7 +59,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static TaskInfoDTO extractAndParseTaskInfo(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析taskinfo.json: {}", zipFilePath);
+        LOGGER.info("Start extracting client file and parsingtaskinfo.json: {}", zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -80,20 +82,20 @@ public class ClientFileProcessor {
             }
 
             if (taskInfoPath != null && Files.exists(taskInfoPath)) {
-                log.info("找到taskinfo.json文件: {}", taskInfoPath);
+                LOGGER.info("Foundtaskinfo.json file: {}", taskInfoPath);
                 taskInfo = parseTaskInfoJson(taskInfoPath);
-                log.info("taskinfo.json解析成功: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
+                LOGGER.info("taskinfo.json parsed successfully: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
             } else {
-                log.warn("未找到taskinfo.json文件");
+                LOGGER.warn("未找到taskinfo.json文件");
             }
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -101,7 +103,7 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 解压压缩文件到指定目录（支持ZIP和GZ格式）
+     * Extracting 压缩 file到指定目录（支持ZIP和GZ格式）
      *
      * @param filePath 压缩文件路径
      * @param extractDir 解压目录
@@ -111,16 +113,16 @@ public class ClientFileProcessor {
         String fileName = filePath.getFileName().toString().toLowerCase();
         
         if (fileName.endsWith(".gz")) {
-            log.info("解压GZ文件: {} -> {}", filePath, extractDir);
+            LOGGER.info("Extracting GZ file: {} -> {}", filePath, extractDir);
             extractGzFile(filePath, extractDir);
         } else {
-            log.info("解压ZIP文件: {} -> {}", filePath, extractDir);
+            LOGGER.info("解压ZIP文件: {} -> {}", filePath, extractDir);
             extractZipFileInternal(filePath, extractDir);
         }
     }
 
     /**
-     * 解压ZIP文件到指定目录
+     * Extracting ZIP file到指定目录
      *
      * @param zipPath ZIP文件路径
      * @param extractDir 解压目录
@@ -144,7 +146,7 @@ public class ClientFileProcessor {
                 zis.closeEntry();
             }
 
-            log.info("ZIP文件解压完成");
+            LOGGER.info("ZIP文件解压完成");
         }
     }
 
@@ -176,9 +178,9 @@ public class ClientFileProcessor {
                 }
             }
             
-            log.info("GZ文件解压完成，临时文件: {}", tempFile);
+            LOGGER.info("GZ文件解压完成，临时文件: {}", tempFile);
             
-            // 检查是否是tar.gz文件
+            // check是否是tar.gz文件
             if (fileName.endsWith(".tar.gz")) {
                 // 解压TAR文件
                 extractTarFile(tempFile, extractDir);
@@ -188,7 +190,7 @@ public class ClientFileProcessor {
                 Path targetFile = extractDir.resolve(originalFileName);
                 Files.createDirectories(targetFile.getParent());
                 Files.copy(tempFile, targetFile);
-                log.info("GZ文件内容已复制到: {}", targetFile);
+                LOGGER.info("GZ文件内容已复制到: {}", targetFile);
             }
             
         } finally {
@@ -196,7 +198,7 @@ public class ClientFileProcessor {
             try {
                 Files.deleteIfExists(tempFile);
             } catch (Exception e) {
-                log.warn("清理临时文件失败: {}", e.getMessage());
+                LOGGER.warn("清理临时文件失败: {}", e.getMessage());
             }
         }
     }
@@ -210,7 +212,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     private static void extractTarFile(Path tarPath, Path extractDir) throws IOException {
-        log.info("解压TAR文件: {} -> {}", tarPath, extractDir);
+        LOGGER.info("Extracting TAR file: {} -> {}", tarPath, extractDir);
         
         try (FileInputStream fis = new FileInputStream(tarPath.toFile());
              TarArchiveInputStream tis = new TarArchiveInputStream(fis)) {
@@ -233,10 +235,10 @@ public class ClientFileProcessor {
                 }
             }
             
-            log.info("TAR文件解压完成");
+            LOGGER.info("TAR文件解压完成");
         } catch (Exception e) {
-            // 如果TAR解压失败，尝试直接读取文件内容（可能是单个文件被压缩成gz）
-            log.warn("TAR解压失败，尝试直接读取文件内容: {}", e.getMessage());
+            // 如果TARExtracting failed，尝试直接读取 file内容（可能是单个 file被压缩成gz）
+            LOGGER.warn("TAR解压失败，尝试直接读取文件内容: {}", e.getMessage());
             String fileName = tarPath.getFileName().toString().replace(".tar", "");
             Path targetFile = extractDir.resolve(fileName);
             Files.createDirectories(targetFile.getParent());
@@ -268,12 +270,12 @@ public class ClientFileProcessor {
     private static TaskInfoDTO parseTaskInfoJson(Path taskInfoPath) throws IOException {
         try {
             String jsonContent = new String(Files.readAllBytes(taskInfoPath), "UTF-8");
-            log.debug("taskinfo.json内容: {}", jsonContent);
+            LOGGER.debug("taskinfo.json内容: {}", jsonContent);
 
             TaskInfoDTO taskInfo = objectMapper.readValue(jsonContent, TaskInfoDTO.class);
             return taskInfo;
         } catch (Exception e) {
-            log.error("解析taskinfo.json失败: {}", e.getMessage(), e);
+            LOGGER.error("Failed to parse taskinfo.json: {}", e.getMessage(), e);
             throw new IOException("解析taskinfo.json失败: " + e.getMessage(), e);
         }
     }
@@ -286,7 +288,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<SpeedData> extractAndParseSpeedExcel(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析speed-{}文件: {}", FILE_SUFFIX, zipFilePath);
+        LOGGER.info("Start extracting client file and parsingspeed-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -309,20 +311,20 @@ public class ClientFileProcessor {
             }
 
             if (speedExcelPath != null && Files.exists(speedExcelPath)) {
-                log.info("找到speed-{}文件: {}", FILE_SUFFIX, speedExcelPath);
+                LOGGER.info("Foundspeed-{} file: {}", FILE_SUFFIX, speedExcelPath);
                 speedDataList = parseSpeedExcel(speedExcelPath);
-                log.info("speed-{}解析成功: 共{}条记录", FILE_SUFFIX, speedDataList.size());
+                LOGGER.info("speed-{} parsed successfully: 共{}条记录", FILE_SUFFIX, speedDataList.size());
             } else {
-                log.warn("未找到speed-{}文件", FILE_SUFFIX);
+                LOGGER.warn("未找到speed-{}文件", FILE_SUFFIX);
             }
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -373,9 +375,9 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析speed-{}完成，共{}条记录", FILE_SUFFIX, speedDataList.size());
+            LOGGER.info("Parsing speed-{} completed，共{}条记录", FILE_SUFFIX, speedDataList.size());
         } catch (Exception e) {
-            log.error("解析speed-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            LOGGER.error("Failed to parse speed-{}: {}", FILE_SUFFIX, e.getMessage(), e);
             throw new IOException("解析speed-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
@@ -403,20 +405,20 @@ public class ClientFileProcessor {
 
             return speedData;
         } catch (Exception e) {
-            log.error("Error parsing speed row {}: {}", row.getRowNum() + 1, e.getMessage());
+            LOGGER.error("Error parsing speed row {}: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
     }
 
     /**
-     * 检查是否为空行
+     * check是否为空行
      */
     private static boolean isEmptySpeedRow(Row row, FormulaEvaluator evaluator) {
         if (row == null) {
             return true;
         }
 
-        // 检查前几列是否都为空
+        // check前几列是否都为空
         for (int i = 0; i < 3; i++) {
             Cell cell = row.getCell(i);
             if (cell != null) {
@@ -433,11 +435,11 @@ public class ClientFileProcessor {
      * 解压端侧压缩包并解析vmos-10s.xlsx
      *
      * @param zipFilePath 压缩包文件路径
-     * @return VmosData列表，如果解析失败返回空列表
+     * @return VmosData列表，如果Failed to parse 返回空列表
      * @throws IOException IO异常
      */
     public static List<VmosData> extractAndParseVmosExcel(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析vmos-{}文件: {}", FILE_SUFFIX, zipFilePath);
+        LOGGER.info("开始解压端侧文件并解析vmos-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -460,20 +462,20 @@ public class ClientFileProcessor {
             }
 
             if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
-                log.info("找到vmos-{}文件: {}", FILE_SUFFIX, vmosExcelPath);
+                LOGGER.info("Foundvmos-{} file: {}", FILE_SUFFIX, vmosExcelPath);
                 vmosDataList = parseVmosExcel(vmosExcelPath);
-                log.info("vmos-{}解析成功: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
+                LOGGER.info("vmos-{} parsed successfully: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
             } else {
-                log.warn("未找到vmos-{}文件", FILE_SUFFIX);
+                LOGGER.warn("未找到vmos-{}文件", FILE_SUFFIX);
             }
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -523,9 +525,9 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析vmos-{}完成，共{}条记录", FILE_SUFFIX, vmosDataList.size());
+            LOGGER.info("Parsing vmos-{} completed，共{}条记录", FILE_SUFFIX, vmosDataList.size());
         } catch (Exception e) {
-            log.error("解析vmos-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            LOGGER.error("Failed to parse vmos-{}: {}", FILE_SUFFIX, e.getMessage(), e);
             throw new IOException("解析vmos-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
@@ -568,20 +570,20 @@ public class ClientFileProcessor {
 
             return vmosData;
         } catch (Exception e) {
-            log.error("Error parsing vMOS row {}: {}", row.getRowNum() + 1, e.getMessage());
+            LOGGER.error("Error parsing vMOS row {}: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
     }
 
     /**
-     * 检查是否为空行
+     * check是否为空行
      */
     private static boolean isEmptyVmosRow(Row row, FormulaEvaluator evaluator) {
         if (row == null) {
             return true;
         }
 
-        // 检查前几列是否都为空
+        // check前几列是否都为空
         for (int i = 0; i < 5; i++) {
             Cell cell = row.getCell(i);
             if (cell != null) {
@@ -595,7 +597,7 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 获取单元格值
+     * get单元格值
      */
     private static String getCellValue(Cell cell, FormulaEvaluator evaluator) {
         if (cell == null) {
@@ -622,7 +624,7 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 获取公式单元格的计算结果
+     * get公式单元格的计算结果
      */
     private static String getFormulaValue(Cell cell, FormulaEvaluator evaluator) {
         try {
@@ -642,7 +644,7 @@ public class ClientFileProcessor {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to evaluate formula in cell {}: {}", cell.getAddress(), e.getMessage());
+            LOGGER.warn("Failed to evaluate formula in cell {}: {}", cell.getAddress(), e.getMessage());
             return cell.getCellFormula();
         }
     }
@@ -670,7 +672,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<RttData> extractAndParseRttCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析rtt-{}文件: {}", FILE_SUFFIX, zipFilePath);
+        LOGGER.info("Start extracting client file and parsingrtt-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -693,20 +695,20 @@ public class ClientFileProcessor {
             }
 
             if (rttCsvPath != null && Files.exists(rttCsvPath)) {
-                log.info("找到rtt-{}文件: {}", FILE_SUFFIX, rttCsvPath);
+                LOGGER.info("Foundrtt-{} file: {}", FILE_SUFFIX, rttCsvPath);
                 rttDataList = parseRttCsv(rttCsvPath);
-                log.info("rtt-{}解析成功: 共{}条记录", FILE_SUFFIX, rttDataList.size());
+                LOGGER.info("rtt-{} parsed successfully: 共{}条记录", FILE_SUFFIX, rttDataList.size());
             } else {
-                log.warn("未找到rtt-{}文件", FILE_SUFFIX);
+                LOGGER.warn("未找到rtt-{}文件", FILE_SUFFIX);
             }
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -768,13 +770,13 @@ public class ClientFileProcessor {
                     rttData.setUlDelay(values[2].trim());
                     rttDataList.add(rttData);
                 } else {
-                    log.warn("CSV行格式不正确，跳过: {}", line);
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
                 }
             }
 
-            log.info("解析rtt-{}完成，共{}条记录", FILE_SUFFIX, rttDataList.size());
+            LOGGER.info("Parsing rtt-{} completed，共{}条记录", FILE_SUFFIX, rttDataList.size());
         } catch (Exception e) {
-            log.error("解析rtt-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            LOGGER.error("Failed to parse rtt-{}: {}", FILE_SUFFIX, e.getMessage(), e);
             throw new IOException("解析rtt-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
@@ -789,7 +791,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<LostData> extractAndParseLostCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析lost-{}文件: {}", FILE_SUFFIX, zipFilePath);
+        LOGGER.info("Start extracting client file and parsinglost-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -812,20 +814,20 @@ public class ClientFileProcessor {
             }
 
             if (lostCsvPath != null && Files.exists(lostCsvPath)) {
-                log.info("找到lost-{}文件: {}", FILE_SUFFIX, lostCsvPath);
+                LOGGER.info("Foundlost-{} file: {}", FILE_SUFFIX, lostCsvPath);
                 lostDataList = parseLostCsv(lostCsvPath);
-                log.info("lost-{}解析成功: 共{}条记录", FILE_SUFFIX, lostDataList.size());
+                LOGGER.info("lost-{} parsed successfully: 共{}条记录", FILE_SUFFIX, lostDataList.size());
             } else {
-                log.warn("未找到lost-{}文件", FILE_SUFFIX);
+                LOGGER.warn("未找到lost-{}文件", FILE_SUFFIX);
             }
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -889,13 +891,13 @@ public class ClientFileProcessor {
                     lostData.setTotalLoss(values[3].trim());
                     lostDataList.add(lostData);
                 } else {
-                    log.warn("CSV行格式不正确，跳过: {}", line);
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
                 }
             }
 
-            log.info("解析lost-{}完成，共{}条记录", FILE_SUFFIX, lostDataList.size());
+            LOGGER.info("Parsing lost-{} completed，共{}条记录", FILE_SUFFIX, lostDataList.size());
         } catch (Exception e) {
-            log.error("解析lost-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            LOGGER.error("Failed to parse lost-{}: {}", FILE_SUFFIX, e.getMessage(), e);
             throw new IOException("解析lost-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
@@ -910,7 +912,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<VideoData> extractAndParseVideoCsv(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并解析video-{}文件: {}", FILE_SUFFIX, zipFilePath);
+        LOGGER.info("Start extracting client file and parsingvideo-{}文件: {}", FILE_SUFFIX, zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -933,20 +935,20 @@ public class ClientFileProcessor {
             }
 
             if (videoCsvPath != null && Files.exists(videoCsvPath)) {
-                log.info("找到video-{}文件: {}", FILE_SUFFIX, videoCsvPath);
+                LOGGER.info("Foundvideo-{} file: {}", FILE_SUFFIX, videoCsvPath);
                 videoDataList = parseVideoCsv(videoCsvPath);
-                log.info("video-{}解析成功: 共{}条记录", FILE_SUFFIX, videoDataList.size());
+                LOGGER.info("video-{} parsed successfully: 共{}条记录", FILE_SUFFIX, videoDataList.size());
             } else {
-                log.warn("未找到video-{}文件", FILE_SUFFIX);
+                LOGGER.warn("未找到video-{}文件", FILE_SUFFIX);
             }
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -1006,13 +1008,13 @@ public class ClientFileProcessor {
                     videoData.setCatonTime(values[1].trim());
                     videoDataList.add(videoData);
                 } else {
-                    log.warn("CSV行格式不正确，跳过: {}", line);
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
                 }
             }
 
-            log.info("解析video-{}完成，共{}条记录", FILE_SUFFIX, videoDataList.size());
+            LOGGER.info("Parsing video-{} completed，共{}条记录", FILE_SUFFIX, videoDataList.size());
         } catch (Exception e) {
-            log.error("解析video-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+            LOGGER.error("Failed to parse video-{}: {}", FILE_SUFFIX, e.getMessage(), e);
             throw new IOException("解析video-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
         }
 
@@ -1027,7 +1029,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static List<NetworkData> extractAndParseNetworkCsv(String zipFilePath) throws IOException {
-        log.info("开始解压网络侧文件并解析CSV: {}", zipFilePath);
+        LOGGER.info("startExtracting 网络侧 file并解析CSV: {}", zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -1046,32 +1048,32 @@ public class ClientFileProcessor {
             List<Path> csvFiles = findCsvFiles(extractDir);
             
             if (csvFiles.isEmpty()) {
-                log.warn("未找到CSV文件");
+                LOGGER.warn("未找到CSV文件");
                 return networkDataList;
             }
 
             // 解析所有CSV文件
             for (Path csvFile : csvFiles) {
-                log.info("找到CSV文件: {}", csvFile);
+                LOGGER.info("找到CSV文件: {}", csvFile);
                 try {
                     List<NetworkData> dataList = parseNetworkCsv(csvFile);
                     networkDataList.addAll(dataList);
-                    log.info("CSV文件解析成功: {}, 共{}条记录", csvFile.getFileName(), dataList.size());
+                    LOGGER.info("CSV文件 parsed successfully: {}, 共{}条记录", csvFile.getFileName(), dataList.size());
                 } catch (Exception e) {
-                    log.error("解析CSV文件失败: {}, error: {}", csvFile, e.getMessage(), e);
-                    // 继续解析其他文件
+                    LOGGER.error("解析CSV文件失败: {}, error: {}", csvFile, e.getMessage(), e);
+                    // continue解析其他文件
                 }
             }
 
-            log.info("网络侧CSV解析完成，共{}条记录", networkDataList.size());
+            LOGGER.info("网络侧CSV解析完成，共{}条记录", networkDataList.size());
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("Temporary extraction directory cleaned: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -1123,7 +1125,7 @@ public class ClientFileProcessor {
                     isFirstLine = false;
                     columnIndexMap = parseHeader(line);
                     if (columnIndexMap == null) {
-                        log.warn("CSV表头格式不正确，跳过文件: {}", csvPath);
+                        LOGGER.warn("CSV表头格式不正确，跳过文件: {}", csvPath);
                         return networkDataList;
                     }
                     continue;
@@ -1145,10 +1147,10 @@ public class ClientFileProcessor {
                 }
             }
 
-            log.info("解析网络侧CSV完成，共{}条记录，过滤掉{}条infoIndicate不为2的记录", 
+            LOGGER.info("Parsing 网络侧CSV completed，共{}条记录，过滤掉{}条infoIndicate不为2的记录", 
                     networkDataList.size(), filteredCount);
         } catch (Exception e) {
-            log.error("解析网络侧CSV失败: {}", e.getMessage(), e);
+            LOGGER.error("Failed to parse 网络侧CSV: {}", e.getMessage(), e);
             throw new IOException("解析网络侧CSV失败: " + e.getMessage(), e);
         }
 
@@ -1371,13 +1373,13 @@ public class ClientFileProcessor {
             
             return networkData;
         } catch (Exception e) {
-            log.warn("创建NetworkData对象失败: {}", e.getMessage());
+            LOGGER.warn("创建NetworkData对象失败: {}", e.getMessage());
             return null;
         }
     }
 
     /**
-     * 解析CSV行（简单实现，处理逗号分隔）
+     * 解析CSV行（简单实现，process逗号分隔）
      *
      * @param line CSV行
      * @return 字段值数组
@@ -1475,7 +1477,7 @@ public class ClientFileProcessor {
      * @throws IOException IO异常
      */
     public static ClientDataResult extractAndParseAllClientData(String zipFilePath) throws IOException {
-        log.info("开始解压端侧文件并统一解析所有数据: {}", zipFilePath);
+        LOGGER.info("startExtracting 端侧 file并统一解析所有数据: {}", zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -1489,7 +1491,7 @@ public class ClientFileProcessor {
         try {
             // 解压文件（只解压一次）
             extractZipFile(zipPath, extractDir);
-            log.info("文件解压完成，解压目录: {}", extractDir);
+            LOGGER.info("文件解压完成，解压目录: {}", extractDir);
 
             // 解析taskinfo.json
             try {
@@ -1498,15 +1500,15 @@ public class ClientFileProcessor {
                     taskInfoPath = findTaskInfoFile(extractDir);
                 }
                 if (taskInfoPath != null && Files.exists(taskInfoPath)) {
-                    log.info("找到taskinfo.json文件: {}", taskInfoPath);
+                    LOGGER.info("Foundtaskinfo.json file: {}", taskInfoPath);
                     TaskInfoDTO taskInfo = parseTaskInfoJson(taskInfoPath);
                     result.setTaskInfo(taskInfo);
-                    log.info("taskinfo.json解析成功: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
+                    LOGGER.info("taskinfo.json parsed successfully: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
                 } else {
-                    log.warn("未找到taskinfo.json文件");
+                    LOGGER.warn("未Foundtaskinfo.json file");
                 }
             } catch (Exception e) {
-                log.error("解析taskinfo.json失败: {}", e.getMessage(), e);
+                LOGGER.error("解析taskinfo.json失败: {}", e.getMessage(), e);
             }
 
             // 解析speed文件
@@ -1516,16 +1518,16 @@ public class ClientFileProcessor {
                     speedExcelPath = findSpeedExcelFile(extractDir);
                 }
                 if (speedExcelPath != null && Files.exists(speedExcelPath)) {
-                    log.info("找到speed-{}文件: {}", FILE_SUFFIX, speedExcelPath);
+                    LOGGER.info("Foundspeed-{} file: {}", FILE_SUFFIX, speedExcelPath);
                     List<SpeedData> speedDataList = parseSpeedExcel(speedExcelPath);
                     result.setSpeedDataList(speedDataList);
-                    log.info("speed-{}解析成功: 共{}条记录", FILE_SUFFIX, speedDataList.size());
+                    LOGGER.info("speed-{} parsed successfully: 共{}条记录", FILE_SUFFIX, speedDataList.size());
                 } else {
-                    log.warn("未找到speed-{}文件", FILE_SUFFIX);
+                    LOGGER.warn("未Foundspeed-{} file", FILE_SUFFIX);
                     result.setSpeedDataList(new ArrayList<>());
                 }
             } catch (Exception e) {
-                log.error("解析speed-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                LOGGER.error("解析speed-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
                 result.setSpeedDataList(new ArrayList<>());
             }
 
@@ -1536,16 +1538,16 @@ public class ClientFileProcessor {
                     vmosExcelPath = findVmosExcelFile(extractDir);
                 }
                 if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
-                    log.info("找到vmos-{}文件: {}", FILE_SUFFIX, vmosExcelPath);
+                    LOGGER.info("Foundvmos-{} file: {}", FILE_SUFFIX, vmosExcelPath);
                     List<VmosData> vmosDataList = parseVmosExcel(vmosExcelPath);
                     result.setVmosDataList(vmosDataList);
-                    log.info("vmos-{}解析成功: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
+                    LOGGER.info("vmos-{} parsed successfully: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
                 } else {
-                    log.warn("未找到vmos-{}文件", FILE_SUFFIX);
+                    LOGGER.warn("未Foundvmos-{} file", FILE_SUFFIX);
                     result.setVmosDataList(new ArrayList<>());
                 }
             } catch (Exception e) {
-                log.error("解析vmos-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                LOGGER.error("解析vmos-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
                 result.setVmosDataList(new ArrayList<>());
             }
 
@@ -1556,16 +1558,16 @@ public class ClientFileProcessor {
                     rttCsvPath = findRttCsvFile(extractDir);
                 }
                 if (rttCsvPath != null && Files.exists(rttCsvPath)) {
-                    log.info("找到rtt-{}文件: {}", FILE_SUFFIX, rttCsvPath);
+                    LOGGER.info("Foundrtt-{} file: {}", FILE_SUFFIX, rttCsvPath);
                     List<RttData> rttDataList = parseRttCsv(rttCsvPath);
                     result.setRttDataList(rttDataList);
-                    log.info("rtt-{}解析成功: 共{}条记录", FILE_SUFFIX, rttDataList.size());
+                    LOGGER.info("rtt-{} parsed successfully: 共{}条记录", FILE_SUFFIX, rttDataList.size());
                 } else {
-                    log.warn("未找到rtt-{}文件", FILE_SUFFIX);
+                    LOGGER.warn("未Foundrtt-{} file", FILE_SUFFIX);
                     result.setRttDataList(new ArrayList<>());
                 }
             } catch (Exception e) {
-                log.error("解析rtt-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                LOGGER.error("解析rtt-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
                 result.setRttDataList(new ArrayList<>());
             }
 
@@ -1576,16 +1578,16 @@ public class ClientFileProcessor {
                     lostCsvPath = findLostCsvFile(extractDir);
                 }
                 if (lostCsvPath != null && Files.exists(lostCsvPath)) {
-                    log.info("找到lost-{}文件: {}", FILE_SUFFIX, lostCsvPath);
+                    LOGGER.info("Foundlost-{} file: {}", FILE_SUFFIX, lostCsvPath);
                     List<LostData> lostDataList = parseLostCsv(lostCsvPath);
                     result.setLostDataList(lostDataList);
-                    log.info("lost-{}解析成功: 共{}条记录", FILE_SUFFIX, lostDataList.size());
+                    LOGGER.info("lost-{} parsed successfully: 共{}条记录", FILE_SUFFIX, lostDataList.size());
                 } else {
-                    log.warn("未找到lost-{}文件", FILE_SUFFIX);
+                    LOGGER.warn("未Foundlost-{} file", FILE_SUFFIX);
                     result.setLostDataList(new ArrayList<>());
                 }
             } catch (Exception e) {
-                log.error("解析lost-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                LOGGER.error("解析lost-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
                 result.setLostDataList(new ArrayList<>());
             }
 
@@ -1596,28 +1598,28 @@ public class ClientFileProcessor {
                     videoCsvPath = findVideoCsvFile(extractDir);
                 }
                 if (videoCsvPath != null && Files.exists(videoCsvPath)) {
-                    log.info("找到video-{}文件: {}", FILE_SUFFIX, videoCsvPath);
+                    LOGGER.info("Foundvideo-{} file: {}", FILE_SUFFIX, videoCsvPath);
                     List<VideoData> videoDataList = parseVideoCsv(videoCsvPath);
                     result.setVideoDataList(videoDataList);
-                    log.info("video-{}解析成功: 共{}条记录", FILE_SUFFIX, videoDataList.size());
+                    LOGGER.info("video-{} parsed successfully: 共{}条记录", FILE_SUFFIX, videoDataList.size());
                 } else {
-                    log.warn("未找到video-{}文件", FILE_SUFFIX);
+                    LOGGER.warn("未Foundvideo-{} file", FILE_SUFFIX);
                     result.setVideoDataList(new ArrayList<>());
                 }
             } catch (Exception e) {
-                log.error("解析video-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                LOGGER.error("Failed to parse video-{}: {}", FILE_SUFFIX, e.getMessage(), e);
                 result.setVideoDataList(new ArrayList<>());
             }
 
-            log.info("所有数据解析完成");
+            LOGGER.info("所有数据解析完成");
 
         } finally {
             // 清理临时目录
             try {
                 deleteDirectory(extractDir);
-                log.info("临时解压目录已清理: {}", extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
             } catch (Exception e) {
-                log.warn("清理临时目录失败: {}", e.getMessage());
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
             }
         }
 
@@ -1625,20 +1627,20 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 递归删除目录
+     * 递归delete目录
      *
-     * @param directory 要删除的目录
+     * @param directory 要delete的目录
      * @throws IOException IO异常
      */
     private static void deleteDirectory(Path directory) throws IOException {
         if (Files.exists(directory)) {
             Files.walk(directory)
-                    .sorted((a, b) -> b.compareTo(a)) // 先删除文件，再删除目录
+                    .sorted((a, b) -> b.compareTo(a)) // 先delete文件，再delete目录
                     .forEach(path -> {
                         try {
                             Files.delete(path);
                         } catch (IOException e) {
-                            log.warn("删除文件/目录失败: {}", path, e);
+                            LOGGER.warn("删除文件/目录失败: {}", path, e);
                         }
                     });
         }

@@ -12,7 +12,6 @@ import com.datacollect.entity.TestSettingsNetworkFtp;
 import com.datacollect.util.ClientFileProcessor;
 import com.datacollect.util.FtpClientUtil;
 import com.datacollect.util.GoHttpServerClient;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -26,13 +25,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * FTP文件处理服务
  * 负责从FTP服务器下载文件、MD5校验、上传到gohttpserver
  */
-@Slf4j
 @Service
 public class FtpFileProcessService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FtpFileProcessService.class);
 
     @Autowired
     private GoHttpServerClient goHttpServerClient;
@@ -73,9 +75,9 @@ public class FtpFileProcessService {
      * @throws IOException IO异常
      */
     public String processClientFtpFile(String fileName) throws IOException {
-        log.info("Processing client FTP file: {}", fileName);
+        LOGGER.info("Processing client FTP file: {}", fileName);
 
-        // 获取端侧FTP服务器配置
+        // get端侧FTP服务器配置
         TestSettingsClientFtp ftpConfig = clientFtpService.getClientFtpConfig();
         if (ftpConfig == null) {
             throw new IOException("Client FTP server configuration not found");
@@ -98,10 +100,10 @@ public class FtpFileProcessService {
         // 如果解析到了taskinfo，保存到数据库
         if (!taskInfoHolder.isEmpty()) {
             TaskInfoDTO taskInfo = taskInfoHolder.get(0);
-            log.info("端侧文件taskinfo解析完成: taskId={}, app={}, service={}, nation={}, operator={}, deviceId={}",
+            LOGGER.info("端侧文件taskinfoParsing  completed: taskId={}, app={}, service={}, nation={}, operator={}, deviceId={}",
                     taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService(),
                     taskInfo.getNation(), taskInfo.getOperator(), taskInfo.getDeviceId());
-            log.info("端侧文件数据报告: stunNumber={}, stunRate={}, avgUplinkRtt={}, avgDownlinkRtt={}, avgUplinkSpeed={}, avgDownlinkSpeed={}",
+            LOGGER.info("端侧文件数据报告: stunNumber={}, stunRate={}, avgUplinkRtt={}, avgDownlinkRtt={}, avgUplinkSpeed={}, avgDownlinkSpeed={}",
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("stunNumber") : null,
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("stunRate") : null,
                     taskInfo.getSummary() != null ? taskInfo.getSummary().get("avgUplinkRtt") : null,
@@ -112,12 +114,12 @@ public class FtpFileProcessService {
             try {
                 boolean saved = taskInfoService.saveTaskInfo(taskInfo);
                 if (saved) {
-                    log.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
+                    LOGGER.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
                 } else {
-                    log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                    LOGGER.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
                 }
             } catch (Exception e) {
-                log.error("Error saving TaskInfo to database - taskId: {}, error: {}", taskInfo.getTaskId(), e.getMessage(), e);
+                LOGGER.error("Error saving TaskInfo to database - taskId: {}, error: {}", taskInfo.getTaskId(), e.getMessage(), e);
             }
 
         }
@@ -151,9 +153,9 @@ public class FtpFileProcessService {
      * @throws IOException IO异常
      */
     public String processNetworkFtpFile(String fileName) throws IOException {
-        log.info("Processing network FTP file: {}", fileName);
+        LOGGER.info("Processing network FTP file: {}", fileName);
 
-        // 获取网络侧FTP服务器配置
+        // get网络侧FTP服务器配置
         TestSettingsNetworkFtp ftpConfig = networkFtpService.getNetworkFtpConfig();
         if (ftpConfig == null) {
             throw new IOException("Network FTP server configuration not found");
@@ -211,22 +213,22 @@ public class FtpFileProcessService {
 
         try {
             // 1. 从FTP服务器下载文件
-            log.info("Downloading file from FTP server: {}", fileName);
+            LOGGER.info("Downloading file from FTP server: {}", fileName);
             boolean downloadSuccess = FtpClientUtil.downloadFile(
                     serverAddress, account, password, directory, fileName, localFilePath
             );
 
             if (!downloadSuccess) {
-                log.error("FTP文件下载失败 - fileName: {}, serverAddress: {}, directory: {}, account: {}",
+                LOGGER.error("FTP file download failed - fileName: {}, serverAddress: {}, directory: {}, account: {}",
                         fileName, serverAddress, directory, account);
                 throw new IOException("Failed to download file from FTP server: " + fileName);
             }
 
-            log.info("File downloaded successfully: {}", localFilePath);
+            LOGGER.info("File downloaded successfully: {}", localFilePath);
 
             // 2. 如果开启MD5校验，进行校验
             if (checkMd5) {
-                log.info("MD5 check enabled, verifying file integrity");
+                LOGGER.info("MD5 check enabled, verifying file integrity");
                 String md5FileName = fileName + ".md5";
                 String md5Content = null;
 
@@ -235,19 +237,19 @@ public class FtpFileProcessService {
                     md5Content = FtpClientUtil.readFileContent(
                             serverAddress, account, password, directory, md5FileName
                     );
-                    log.info("MD5 file content: {}", md5Content);
+                    LOGGER.info("MD5 file content: {}", md5Content);
                 } catch (IOException e) {
-                    log.warn("Failed to read MD5 file: {}. Error: {}", md5FileName, e.getMessage());
+                    LOGGER.warn("Failed to read MD5 file: {}. Error: {}", md5FileName, e.getMessage());
                     throw new IOException("MD5 file not found or cannot be read: " + md5FileName, e);
                 }
 
                 // 计算下载文件的MD5值
                 String calculatedMd5 = calculateFileMd5(localFilePath);
-                log.info("Calculated MD5: {}", calculatedMd5);
+                LOGGER.info("Calculated MD5: {}", calculatedMd5);
 
                 // 从MD5文件内容中提取MD5值（格式可能是：MD5值 文件名 或 只有MD5值）
                 String expectedMd5 = extractMd5FromContent(md5Content, fileName);
-                log.info("Expected MD5: {}", expectedMd5);
+                LOGGER.info("Expected MD5: {}", expectedMd5);
 
                 // 比较MD5值
                 if (!calculatedMd5.equalsIgnoreCase(expectedMd5)) {
@@ -257,7 +259,7 @@ public class FtpFileProcessService {
                     ));
                 }
 
-                log.info("MD5 verification passed");
+                LOGGER.info("MD5 verification passed");
             }
 
             // 3. 如果是网络侧压缩包，解析CSV文件
@@ -267,16 +269,16 @@ public class FtpFileProcessService {
                     if (networkDataList != null && !networkDataList.isEmpty()) {
                         boolean saved = networkDataService.batchSaveNetworkData(networkDataList, fileName);
                         if (saved) {
-                            log.info("NetworkData saved to database successfully - fileName: {}, count: {}", 
+                            LOGGER.info("NetworkData saved to database successfully - fileName: {}, count: {}", 
                                     fileName, networkDataList.size());
                         } else {
-                            log.warn("Failed to save NetworkData to database - fileName: {}", fileName);
+                            LOGGER.warn("Failed to save NetworkData to database - fileName: {}", fileName);
                         }
                     }
                 } catch (Exception e) {
-                    log.error("Error parsing or saving NetworkData - fileName: {}, error: {}", 
+                    LOGGER.error("Error parsing or saving NetworkData - fileName: {}, error: {}", 
                             fileName, e.getMessage(), e);
-                    // 不抛出异常，继续处理文件上传
+                    // 不抛出异常，continueprocess文件上传
                 }
             }
 
@@ -289,7 +291,7 @@ public class FtpFileProcessService {
                     TaskInfoDTO taskInfo = clientDataResult.getTaskInfo();
                     if (taskInfo != null) {
                         taskInfoHolder.add(taskInfo);
-                        log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
+                        LOGGER.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
                                 taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
                         
                         // 保存speed数据
@@ -298,97 +300,97 @@ public class FtpFileProcessService {
                             if (speedDataList != null && !speedDataList.isEmpty()) {
                                 boolean saved = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
                                 if (saved) {
-                                    log.info("SpeedData saved to database successfully - taskId: {}, count: {}", 
+                                    LOGGER.info("SpeedData saved to database successfully - taskId: {}, count: {}", 
                                             taskInfo.getTaskId(), speedDataList.size());
                                 } else {
-                                    log.warn("Failed to save SpeedData to database - taskId: {}", taskInfo.getTaskId());
+                                    LOGGER.warn("Failed to save SpeedData to database - taskId: {}", taskInfo.getTaskId());
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error saving SpeedData - taskId: {}, error: {}", 
+                            LOGGER.error("Error saving SpeedData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                         }
 
-                        // 保存vmos数据
+                        // savevmos数据
                         try {
                             List<VmosData> vmosDataList = clientDataResult.getVmosDataList();
                             if (vmosDataList != null && !vmosDataList.isEmpty()) {
                                 boolean saved = vmosDataService.batchSaveVmosData(vmosDataList, taskInfo.getTaskId());
                                 if (saved) {
-                                    log.info("VmosData saved to database successfully - taskId: {}, count: {}", 
+                                    LOGGER.info("VmosData saved to database successfully - taskId: {}, count: {}", 
                                             taskInfo.getTaskId(), vmosDataList.size());
                                 } else {
-                                    log.warn("Failed to save VmosData to database - taskId: {}", taskInfo.getTaskId());
+                                    LOGGER.warn("Failed to save VmosData to database - taskId: {}", taskInfo.getTaskId());
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error saving VmosData - taskId: {}, error: {}", 
+                            LOGGER.error("Error saving VmosData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                         }
 
-                        // 保存rtt数据
+                        // savertt数据
                         try {
                             List<RttData> rttDataList = clientDataResult.getRttDataList();
                             if (rttDataList != null && !rttDataList.isEmpty()) {
                                 boolean saved = rttDataService.batchSaveRttData(rttDataList, taskInfo.getTaskId());
                                 if (saved) {
-                                    log.info("RttData saved to database successfully - taskId: {}, count: {}", 
+                                    LOGGER.info("RttData saved to database successfully - taskId: {}, count: {}", 
                                             taskInfo.getTaskId(), rttDataList.size());
                                 } else {
-                                    log.warn("Failed to save RttData to database - taskId: {}", taskInfo.getTaskId());
+                                    LOGGER.warn("Failed to save RttData to database - taskId: {}", taskInfo.getTaskId());
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error saving RttData - taskId: {}, error: {}", 
+                            LOGGER.error("Error saving RttData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                         }
 
-                        // 保存lost数据
+                        // savelost数据
                         try {
                             List<LostData> lostDataList = clientDataResult.getLostDataList();
                             if (lostDataList != null && !lostDataList.isEmpty()) {
                                 boolean saved = lostDataService.batchSaveLostData(lostDataList, taskInfo.getTaskId());
                                 if (saved) {
-                                    log.info("LostData saved to database successfully - taskId: {}, count: {}", 
+                                    LOGGER.info("LostData saved to database successfully - taskId: {}, count: {}", 
                                             taskInfo.getTaskId(), lostDataList.size());
                                 } else {
-                                    log.warn("Failed to save LostData to database - taskId: {}", taskInfo.getTaskId());
+                                    LOGGER.warn("Failed to save LostData to database - taskId: {}", taskInfo.getTaskId());
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error saving LostData - taskId: {}, error: {}", 
+                            LOGGER.error("Error saving LostData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                         }
 
-                        // 保存video数据
+                        // savevideo数据
                         try {
                             List<VideoData> videoDataList = clientDataResult.getVideoDataList();
                             if (videoDataList != null && !videoDataList.isEmpty()) {
                                 boolean saved = videoDataService.batchSaveVideoData(videoDataList, taskInfo.getTaskId());
                                 if (saved) {
-                                    log.info("VideoData saved to database successfully - taskId: {}, count: {}", 
+                                    LOGGER.info("VideoData saved to database successfully - taskId: {}, count: {}", 
                                             taskInfo.getTaskId(), videoDataList.size());
                                 } else {
-                                    log.warn("Failed to save VideoData to database - taskId: {}", taskInfo.getTaskId());
+                                    LOGGER.warn("Failed to save VideoData to database - taskId: {}", taskInfo.getTaskId());
                                 }
                             }
                         } catch (Exception e) {
-                            log.error("Error saving VideoData - taskId: {}, error: {}", 
+                            LOGGER.error("Error saving VideoData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                         }
                     } else {
-                        log.warn("未能解析taskinfo.json");
+                        LOGGER.warn("未能解析taskinfo.json");
                     }
                 } catch (Exception e) {
-                    log.error("解析端侧文件失败: {}", e.getMessage(), e);
-                    // 不抛出异常，继续处理文件上传
+                    LOGGER.error("解析端侧文件失败: {}", e.getMessage(), e);
+                    // 不抛出异常，continueprocess文件上传
                 }
             }
 
             // 4. 上传文件到gohttpserver
-            log.info("Uploading file to gohttpserver: {}", fileName);
+            LOGGER.info("Uploading file to gohttpserver: {}", fileName);
             String fileUrl = goHttpServerClient.uploadLocalFile(localFilePath, fileName);
-            log.info("File uploaded to gohttpserver successfully: {}", fileUrl);
+            LOGGER.info("File uploaded to gohttpserver successfully: {}", fileUrl);
 
             return fileUrl;
 
@@ -397,9 +399,9 @@ public class FtpFileProcessService {
             try {
                 Files.deleteIfExists(Paths.get(localFilePath));
                 Files.deleteIfExists(tempDir);
-                log.info("Temporary files cleaned up");
+                LOGGER.info("Temporary files cleaned up");
             } catch (IOException e) {
-                log.warn("Failed to clean up temporary files: {}", e.getMessage());
+                LOGGER.warn("Failed to clean up temporary files: {}", e.getMessage());
             }
         }
     }
@@ -502,9 +504,9 @@ public class FtpFileProcessService {
                     fileUrl = processNetworkFtpFile(fileName);
                 }
                 fileUrls.add(fileUrl);
-                log.info("File processed successfully: {} -> {}", fileName, fileUrl);
+                LOGGER.info("File processed successfully: {} -> {}", fileName, fileUrl);
             } catch (Exception e) {
-                log.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
+                LOGGER.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
                 failedFiles.add(fileName);
             }
         }
@@ -538,9 +540,9 @@ public class FtpFileProcessService {
      * @throws IOException IO异常
      */
     public List<String> processClientFtpFilesByDate(String dateStr, List<TaskInfoDTO> taskInfoList) throws IOException {
-        log.info("Processing client FTP files for date: {}", dateStr);
+        LOGGER.info("Processing client FTP files for date: {}", dateStr);
 
-        // 获取端侧FTP服务器配置
+        // get端侧FTP服务器配置
         TestSettingsClientFtp ftpConfig = clientFtpService.getClientFtpConfig();
         if (ftpConfig == null) {
             throw new IOException("Client FTP server configuration not found");
@@ -559,13 +561,13 @@ public class FtpFileProcessService {
         );
 
         if (fileNames.isEmpty()) {
-            log.warn("No files found in date directory: {}", dateDirectory);
+            LOGGER.warn("No files found in date directory: {}", dateDirectory);
             return new ArrayList<>();
         }
 
-        log.info("Found {} files in date directory: {}", fileNames.size(), dateDirectory);
+        LOGGER.info("Found {} files in date directory: {}", fileNames.size(), dateDirectory);
 
-        // 处理每个文件
+        // process每个文件
         List<String> fileUrls = new ArrayList<>();
         List<String> failedFiles = new ArrayList<>();
         if (taskInfoList == null) {
@@ -592,24 +594,24 @@ public class FtpFileProcessService {
                     if (!fileTaskInfoHolder.isEmpty()) {
                         taskInfoList.addAll(fileTaskInfoHolder);
                     }
-                    log.info("File processed successfully: {} -> {}", fileName, fileUrl);
+                    LOGGER.info("File processed successfully: {} -> {}", fileName, fileUrl);
                 } else {
                     // 非压缩包，直接处理
                     String fileUrl = processClientFtpFile(fileName);
                     fileUrls.add(fileUrl);
-                    log.info("File processed successfully: {} -> {}", fileName, fileUrl);
+                    LOGGER.info("File processed successfully: {} -> {}", fileName, fileUrl);
                 }
             } catch (Exception e) {
-                log.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
+                LOGGER.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
                 failedFiles.add(fileName);
             }
         }
 
         if (!failedFiles.isEmpty()) {
-            log.warn("Some files failed to process: {}", String.join(", ", failedFiles));
+            LOGGER.warn("Some files failed to process: {}", String.join(", ", failedFiles));
         }
 
-        // 批量保存taskinfo到数据库
+        // 批量savetaskinfo到数据库
         if (taskInfoList != null && !taskInfoList.isEmpty()) {
             int savedCount = 0;
             int failedCount = 0;
@@ -618,35 +620,35 @@ public class FtpFileProcessService {
                     boolean saved = taskInfoService.saveTaskInfo(taskInfo);
                     if (saved) {
                         savedCount++;
-                        log.debug("TaskInfo saved to database - taskId: {}", taskInfo.getTaskId());
+                        LOGGER.debug("TaskInfo saved to database - taskId: {}", taskInfo.getTaskId());
                     } else {
                         failedCount++;
-                        log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                        LOGGER.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
                     }
                 } catch (Exception e) {
                     failedCount++;
-                    log.error("Error saving TaskInfo to database - taskId: {}, error: {}", 
+                    LOGGER.error("Error saving TaskInfo to database - taskId: {}, error: {}", 
                             taskInfo.getTaskId(), e.getMessage(), e);
                 }
             }
-            log.info("Batch saved TaskInfo: {} succeeded, {} failed, total: {}", 
+            LOGGER.info("Batch saved TaskInfo: {} succeeded, {} failed, total: {}", 
                     savedCount, failedCount, taskInfoList.size());
         }
 
-        log.info("Processed {} files successfully, {} files failed, {} taskinfo parsed", 
+        LOGGER.info("Processed {} files successfully, {} files failed, {} taskinfo parsed", 
                 fileUrls.size(), failedFiles.size(), taskInfoList != null ? taskInfoList.size() : 0);
         return fileUrls;
     }
 
     /**
-     * 从网络侧FTP服务器指定日期目录下获取所有文件并上传到gohttpserver
+     * 从网络侧FTP服务器指定日期目录下get所有文件并上传到gohttpserver
      *
      * @param dateStr 日期字符串，格式：YYYY-MM-DD，如：2025-12-05
      * @return 上传后的文件URL列表
      * @throws IOException IO异常
      */
     public List<String> processNetworkFtpFilesByDate(String dateStr) throws IOException {
-        log.info("Processing network FTP files for date: {}", dateStr);
+        LOGGER.info("Processing network FTP files for date: {}", dateStr);
 
         // 获取网络侧FTP服务器配置
         TestSettingsNetworkFtp ftpConfig = networkFtpService.getNetworkFtpConfig();
@@ -724,19 +726,19 @@ public class FtpFileProcessService {
      */
     private List<String> processFtpFilesByDate(String serverAddress, String account, String password,
                                                String dateDirectory, boolean checkMd5, boolean isNetworkFtp) throws IOException {
-        log.info("Processing FTP files from date directory: {}", dateDirectory);
+        LOGGER.info("Processing FTP files from date directory: {}", dateDirectory);
 
         // 1. 列出日期目录下的所有文件
         List<String> fileNames = FtpClientUtil.listFiles(serverAddress, account, password, dateDirectory);
         
         if (fileNames.isEmpty()) {
-            log.warn("No files found in date directory: {}", dateDirectory);
+            LOGGER.warn("No files found in date directory: {}", dateDirectory);
             return new ArrayList<>();
         }
 
-        log.info("Found {} files in date directory: {}", fileNames.size(), dateDirectory);
+        LOGGER.info("Found {} files in date directory: {}", fileNames.size(), dateDirectory);
 
-        // 2. 处理每个文件
+        // 2. process每个文件
         List<String> fileUrls = new ArrayList<>();
         List<String> failedFiles = new ArrayList<>();
 
@@ -744,33 +746,33 @@ public class FtpFileProcessService {
             try {
                 String fileUrl = processFtpFile(serverAddress, account, password, dateDirectory, fileName, checkMd5, null, isNetworkFtp);
                 fileUrls.add(fileUrl);
-                log.info("File processed successfully: {} -> {}", fileName, fileUrl);
+                LOGGER.info("File processed successfully: {} -> {}", fileName, fileUrl);
             } catch (Exception e) {
-                log.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
+                LOGGER.error("Failed to process file: {}. Error: {}", fileName, e.getMessage(), e);
                 failedFiles.add(fileName);
             }
         }
 
         if (!failedFiles.isEmpty()) {
-            log.warn("Some files failed to process: {}", String.join(", ", failedFiles));
+            LOGGER.warn("Some files failed to process: {}", String.join(", ", failedFiles));
         }
 
-        log.info("Processed {} files successfully, {} files failed", fileUrls.size(), failedFiles.size());
+        LOGGER.info("Processed {} files successfully, {} files failed", fileUrls.size(), failedFiles.size());
         return fileUrls;
     }
 
-    // ========== 本地文件处理（用于测试验证） ==========
+    // ========== 本地文件process（用于测试validate） ==========
 
     /**
-     * 处理本地端侧文件（用于测试验证，不依赖FTP服务器）
+     * process本地端侧文件（用于测试validate，不依赖FTP服务器）
      * 如果是压缩包，会解压并解析taskinfo.json、speed-10s.xlsx、vmos-10s.xlsx、rtt-10s.csv、lost-10s.csv、video-10s.csv
      *
      * @param filePath 本地文件路径
-     * @return 处理结果信息
+     * @return process结果信息
      * @throws IOException IO异常
      */
     public Map<String, Object> processLocalClientFile(String filePath) throws IOException {
-        log.info("Processing local client file: {}", filePath);
+        LOGGER.info("Processing local client file: {}", filePath);
 
         Path localPath = Paths.get(filePath);
         if (!Files.exists(localPath)) {
@@ -793,106 +795,106 @@ public class FtpFileProcessService {
                 TaskInfoDTO taskInfo = clientDataResult.getTaskInfo();
                 if (taskInfo != null) {
                     taskInfoList.add(taskInfo);
-                    log.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
+                    LOGGER.info("解析taskinfo.json成功: taskId={}, app={}, service={}",
                             taskInfo.getTaskId(), taskInfo.getApp(), taskInfo.getService());
 
-                    // 保存taskinfo到数据库
+                    // savetaskinfo到数据库
                     boolean saved = taskInfoService.saveTaskInfo(taskInfo);
                     if (saved) {
-                        log.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
+                        LOGGER.info("TaskInfo saved to database successfully - taskId: {}", taskInfo.getTaskId());
                     } else {
-                        log.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
+                        LOGGER.warn("Failed to save TaskInfo to database - taskId: {}", taskInfo.getTaskId());
                     }
 
-                    // 保存speed数据
+                    // savespeed数据
                     try {
                         List<SpeedData> speedDataList = clientDataResult.getSpeedDataList();
                         if (speedDataList != null && !speedDataList.isEmpty()) {
                             boolean savedSpeed = speedDataService.batchSaveSpeedData(speedDataList, taskInfo.getTaskId());
                             if (savedSpeed) {
-                                log.info("SpeedData saved to database successfully - taskId: {}, count: {}",
+                                LOGGER.info("SpeedData saved to database successfully - taskId: {}, count: {}",
                                         taskInfo.getTaskId(), speedDataList.size());
                                 result.put("speedDataCount", speedDataList.size());
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error saving SpeedData - taskId: {}, error: {}",
+                        LOGGER.error("Error saving SpeedData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 保存vmos数据
+                    // savevmos数据
                     try {
                         List<VmosData> vmosDataList = clientDataResult.getVmosDataList();
                         if (vmosDataList != null && !vmosDataList.isEmpty()) {
                             boolean savedVmos = vmosDataService.batchSaveVmosData(vmosDataList, taskInfo.getTaskId());
                             if (savedVmos) {
-                                log.info("VmosData saved to database successfully - taskId: {}, count: {}",
+                                LOGGER.info("VmosData saved to database successfully - taskId: {}, count: {}",
                                         taskInfo.getTaskId(), vmosDataList.size());
                                 result.put("vmosDataCount", vmosDataList.size());
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error saving VmosData - taskId: {}, error: {}",
+                        LOGGER.error("Error saving VmosData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 保存rtt数据
+                    // savertt数据
                     try {
                         List<RttData> rttDataList = clientDataResult.getRttDataList();
                         if (rttDataList != null && !rttDataList.isEmpty()) {
                             boolean savedRtt = rttDataService.batchSaveRttData(rttDataList, taskInfo.getTaskId());
                             if (savedRtt) {
-                                log.info("RttData saved to database successfully - taskId: {}, count: {}",
+                                LOGGER.info("RttData saved to database successfully - taskId: {}, count: {}",
                                         taskInfo.getTaskId(), rttDataList.size());
                                 result.put("rttDataCount", rttDataList.size());
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error saving RttData - taskId: {}, error: {}",
+                        LOGGER.error("Error saving RttData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 保存lost数据
+                    // savelost数据
                     try {
                         List<LostData> lostDataList = clientDataResult.getLostDataList();
                         if (lostDataList != null && !lostDataList.isEmpty()) {
                             boolean savedLost = lostDataService.batchSaveLostData(lostDataList, taskInfo.getTaskId());
                             if (savedLost) {
-                                log.info("LostData saved to database successfully - taskId: {}, count: {}",
+                                LOGGER.info("LostData saved to database successfully - taskId: {}, count: {}",
                                         taskInfo.getTaskId(), lostDataList.size());
                                 result.put("lostDataCount", lostDataList.size());
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error saving LostData - taskId: {}, error: {}",
+                        LOGGER.error("Error saving LostData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
-                    // 保存video数据
+                    // savevideo数据
                     try {
                         List<VideoData> videoDataList = clientDataResult.getVideoDataList();
                         if (videoDataList != null && !videoDataList.isEmpty()) {
                             boolean savedVideo = videoDataService.batchSaveVideoData(videoDataList, taskInfo.getTaskId());
                             if (savedVideo) {
-                                log.info("VideoData saved to database successfully - taskId: {}, count: {}",
+                                LOGGER.info("VideoData saved to database successfully - taskId: {}, count: {}",
                                         taskInfo.getTaskId(), videoDataList.size());
                                 result.put("videoDataCount", videoDataList.size());
                             }
                         }
                     } catch (Exception e) {
-                        log.error("Error saving VideoData - taskId: {}, error: {}",
+                        LOGGER.error("Error saving VideoData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
                     result.put("taskInfo", taskInfo);
                     result.put("taskId", taskInfo.getTaskId());
                 } else {
-                    log.warn("未解析到taskinfo.json - fileName: {}", fileName);
+                    LOGGER.warn("未解析到taskinfo.json - fileName: {}", fileName);
                     result.put("error", "未解析到taskinfo.json");
                     result.put("success", false);
                 }
             } catch (Exception e) {
-                log.error("Error parsing client file - fileName: {}, error: {}", fileName, e.getMessage(), e);
+                LOGGER.error("Error parsing client file - fileName: {}, error: {}", fileName, e.getMessage(), e);
                 result.put("success", false);
                 result.put("error", "解析文件失败: " + e.getMessage());
                 // 不抛出异常，返回错误信息给前台
@@ -900,7 +902,7 @@ public class FtpFileProcessService {
 
             result.put("taskInfoList", taskInfoList);
         } else {
-            log.info("文件不是压缩包，跳过解析");
+            LOGGER.info("文件不是压缩包，skip解析");
             result.put("success", false);
             result.put("error", "文件不是压缩包，跳过解析");
         }
@@ -917,7 +919,7 @@ public class FtpFileProcessService {
      * @throws IOException IO异常
      */
     public Map<String, Object> processLocalNetworkFile(String filePath) throws IOException {
-        log.info("Processing local network file: {}", filePath);
+        LOGGER.info("Processing local network file: {}", filePath);
 
         Path localPath = Paths.get(filePath);
         if (!Files.exists(localPath)) {
@@ -936,28 +938,28 @@ public class FtpFileProcessService {
                 if (networkDataList != null && !networkDataList.isEmpty()) {
                     boolean saved = networkDataService.batchSaveNetworkData(networkDataList, fileName);
                     if (saved) {
-                        log.info("NetworkData saved to database successfully - fileName: {}, count: {}",
+                        LOGGER.info("NetworkData saved to database successfully - fileName: {}, count: {}",
                                 fileName, networkDataList.size());
                         result.put("networkDataCount", networkDataList.size());
                         result.put("success", true);
                     } else {
-                        log.warn("Failed to save NetworkData to database - fileName: {}", fileName);
+                        LOGGER.warn("Failed to save NetworkData to database - fileName: {}", fileName);
                         result.put("success", false);
                         result.put("error", "保存到数据库失败");
                     }
                 } else {
-                    log.warn("未解析到网络侧数据");
+                    LOGGER.warn("未解析到网络侧数据");
                     result.put("success", false);
                     result.put("error", "未解析到网络侧数据");
                 }
             } catch (Exception e) {
-                log.error("Error parsing or saving NetworkData - fileName: {}, error: {}",
+                LOGGER.error("Error parsing or saving NetworkData - fileName: {}, error: {}",
                         fileName, e.getMessage(), e);
                 result.put("success", false);
                 result.put("error", "解析或保存失败: " + e.getMessage());
             }
         } else {
-            log.info("文件不是压缩包，跳过解析");
+            LOGGER.info("文件不是压缩包，skip解析");
             result.put("success", false);
             result.put("error", "文件不是压缩包，跳过解析");
         }

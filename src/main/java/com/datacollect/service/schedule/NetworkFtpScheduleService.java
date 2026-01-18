@@ -1,7 +1,6 @@
 package com.datacollect.service.schedule;
 
 import com.datacollect.service.FtpFileProcessService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -10,6 +9,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 网络侧FTP文件定时处理服务
  * 定时从网络侧FTP服务器获取当前日期文件夹下的文件并处理
@@ -17,9 +18,10 @@ import java.util.List;
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class NetworkFtpScheduleService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(NetworkFtpScheduleService.class);
 
     @Autowired
     private FtpFileProcessService ftpFileProcessService;
@@ -39,36 +41,36 @@ public class NetworkFtpScheduleService {
         try {
             // 获取当前日期
             String currentDate = LocalDate.now().format(DATE_FORMATTER);
-            log.info("Scheduled task: Starting to process network FTP files for date: {}", currentDate);
+            LOGGER.info("Scheduled task: Starting to process network FTP files for date: {}", currentDate);
             
-            // 处理当前日期文件夹下的所有文件
+            // process当前日期文件夹下的所有文件
             // processNetworkFtpFilesByDate 方法内部会根据配置判断是否需要校验MD5
             List<String> fileUrls = ftpFileProcessService.processNetworkFtpFilesByDate(currentDate);
             
-            log.info("Scheduled task: Network FTP files processing completed for date: {}, processed {} files", 
+            LOGGER.info("Scheduled task: Network FTP files processing completed for date: {}, processed {} files", 
                     currentDate, fileUrls.size());
             
         } catch (Exception e) {
-            log.error("Scheduled task: Failed to process network FTP files - error: {}", e.getMessage(), e);
-            // 不抛出异常，避免影响定时任务继续执行
+            LOGGER.error("Scheduled task: Failed to process network FTP files - error: {}", e.getMessage(), e);
+            // 不抛出异常，避免影响定时任务continue执行
         }
     }
 
     /**
-     * 手动触发处理指定日期的网络侧FTP文件（用于测试或手动刷新）
+     * 手动触发process指定日期的网络侧FTP文件（用于测试或手动刷新）
      * 
      * @param dateStr 日期字符串，格式：YYYY-MM-DD
-     * @return 处理后的文件URL列表
+     * @return process后的文件URL列表
      */
     public List<String> manualProcessNetworkFtpFiles(String dateStr) {
-        log.info("Manual trigger: Starting to process network FTP files for date: {}", dateStr);
+        LOGGER.info("Manual trigger: Starting to process network FTP files for date: {}", dateStr);
         try {
             List<String> fileUrls = ftpFileProcessService.processNetworkFtpFilesByDate(dateStr);
-            log.info("Manual trigger: Network FTP files processing completed for date: {}, processed {} files", 
+            LOGGER.info("Manual trigger: Network FTP files processing completed for date: {}, processed {} files", 
                     dateStr, fileUrls.size());
             return fileUrls;
         } catch (Exception e) {
-            log.error("Manual trigger: Failed to process network FTP files for date: {} - error: {}", 
+            LOGGER.error("Manual trigger: Failed to process network FTP files for date: {} - error: {}", 
                     dateStr, e.getMessage(), e);
             throw new RuntimeException("Failed to process network FTP files: " + e.getMessage(), e);
         }
