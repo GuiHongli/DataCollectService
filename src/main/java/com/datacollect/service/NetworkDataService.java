@@ -35,6 +35,16 @@ public interface NetworkDataService extends IService<NetworkData> {
      * @return 分页结果
      */
     Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size, String gpsi, String date, String subAppId);
+    
+    /**
+     * 删除指定日期下的网络侧数据（逻辑删除）
+     * 
+     * @param gpsi GPSI
+     * @param date 日期（格式：YYYY-MM-DD）
+     * @param subAppId 子应用ID
+     * @return 是否删除成功
+     */
+    boolean deleteByDate(String gpsi, String date, String subAppId);
 }
 
 

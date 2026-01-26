@@ -9,6 +9,8 @@ import com.datacollect.service.NetworkDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 /**
@@ -99,6 +101,62 @@ public class NetworkDataController {
         } catch (Exception e) {
             LOGGER.error("Failed to get grouped network data page: {}", e.getMessage(), e);
             return Result.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除指定日期下的网络侧数据（逻辑删除）
+     *
+     * @param gpsi GPSI
+     * @param date 日期（格式：YYYY-MM-DD）
+     * @param subAppId 子应用ID
+     * @return 删除结果
+     */
+    @DeleteMapping("/by-date")
+    public Result<Void> deleteNetworkDataByDate(
+            @RequestParam String gpsi,
+            @RequestParam String date,
+            @RequestParam String subAppId) {
+        try {
+            boolean success = networkDataService.deleteByDate(gpsi, date, subAppId);
+            if (success) {
+                LOGGER.info("Network data deleted successfully by date - gpsi: {}, date: {}, subAppId: {}", gpsi, date, subAppId);
+                return Result.success(null);
+            } else {
+                LOGGER.warn("No network data found to delete - gpsi: {}, date: {}, subAppId: {}", gpsi, date, subAppId);
+                return Result.error("未找到要删除的数据");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to delete network data by date - gpsi: {}, date: {}, subAppId: {}, error: {}", 
+                    gpsi, date, subAppId, e.getMessage(), e);
+            return Result.error("删除失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 批量删除网络侧数据（逻辑删除）
+     *
+     * @param ids 数据ID列表
+     * @return 删除结果
+     */
+    @DeleteMapping("/batch")
+    public Result<Void> batchDeleteNetworkData(@RequestBody List<Long> ids) {
+        try {
+            if (ids == null || ids.isEmpty()) {
+                return Result.error("请选择要删除的数据");
+            }
+            
+            boolean success = networkDataService.removeByIds(ids);
+            if (success) {
+                LOGGER.info("Network data batch deleted successfully - count: {}", ids.size());
+                return Result.success(null);
+            } else {
+                LOGGER.warn("Failed to batch delete network data - count: {}", ids.size());
+                return Result.error("删除失败");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to batch delete network data - error: {}", e.getMessage(), e);
+            return Result.error("删除失败: " + e.getMessage());
         }
     }
 }

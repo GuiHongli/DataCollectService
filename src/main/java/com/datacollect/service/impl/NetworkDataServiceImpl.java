@@ -1,6 +1,7 @@
 package com.datacollect.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.datacollect.dto.NetworkDataGroupDTO;
@@ -128,6 +129,29 @@ public class NetworkDataServiceImpl extends ServiceImpl<NetworkDataMapper, Netwo
     public Page<NetworkDataGroupDTO> getGroupedNetworkDataPage(Integer current, Integer size, String gpsi, String date, String subAppId) {
         Page<NetworkDataGroupDTO> page = new Page<>(current, size);
         return baseMapper.selectGroupedNetworkDataPage(page, gpsi, date, subAppId);
+    }
+
+    @Override
+    public boolean deleteByDate(String gpsi, String date, String subAppId) {
+        try {
+            QueryWrapper<NetworkData> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("gpsi", gpsi);
+            queryWrapper.eq("sub_app_id", subAppId);
+            // 使用LEFT函数提取日期部分进行匹配
+            queryWrapper.apply("LEFT(start_time, 10) = {0}", date);
+            
+            boolean success = remove(queryWrapper);
+            if (success) {
+                LOGGER.info("Network data deleted by date - gpsi: {}, date: {}, subAppId: {}", gpsi, date, subAppId);
+            } else {
+                LOGGER.warn("No network data found to delete - gpsi: {}, date: {}, subAppId: {}", gpsi, date, subAppId);
+            }
+            return success;
+        } catch (Exception e) {
+            LOGGER.error("Failed to delete network data by date - gpsi: {}, date: {}, subAppId: {}, error: {}", 
+                    gpsi, date, subAppId, e.getMessage(), e);
+            return false;
+        }
     }
 }
 
