@@ -16,7 +16,6 @@ import com.datacollect.mapper.VmosDataMapper;
 import com.datacollect.service.LostDataService;
 import com.datacollect.service.RttDataService;
 import com.datacollect.service.SpeedDataService;
-import com.datacollect.service.TaskInfoService;
 import com.datacollect.service.VideoDataService;
 import com.datacollect.service.VmosDataService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,9 +39,6 @@ import org.slf4j.LoggerFactory;
 public class ClientDataCleanupScheduleService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientDataCleanupScheduleService.class);
-
-    @Autowired
-    private TaskInfoService taskInfoService;
 
     @Autowired
     private TaskInfoMapper taskInfoMapper;
@@ -176,7 +172,9 @@ public class ClientDataCleanupScheduleService {
                     }
                     
                     // 最后删除任务信息（物理删除）
-                    taskInfoMapper.deleteById(taskInfo.getId());
+                    QueryWrapper<ClientTaskInfo> deleteWrapper = new QueryWrapper<>();
+                    deleteWrapper.eq("id", taskInfo.getId());
+                    taskInfoMapper.delete(deleteWrapper);
                     deletedTaskInfoCount++;
                     
                 } catch (Exception e) {
