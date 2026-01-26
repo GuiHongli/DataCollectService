@@ -400,68 +400,133 @@ public class TestSettingsController {
     /**
      * 上传网络侧文件并解析（用于网络侧数据管理页面）
      * 接收文件上传，保存到临时目录，然后解析并保存到数据库
+     * 支持多文件上传
      *
-     * @param file 上传的文件（ZIP、GZ、TAR.GZ、RAR压缩包）
+     * @param files 上传的文件数组（ZIP、GZ、TAR.GZ、RAR压缩包）
      * @return 处理结果信息
      */
     @PostMapping("/network-data/upload")
-    public Result<Map<String, Object>> uploadNetworkDataFile(@RequestParam("file") MultipartFile file) {
-        Path tempFilePath = null;
+    public Result<Map<String, Object>> uploadNetworkDataFile(@RequestParam("files") MultipartFile[] files) {
+        List<Path> tempFilePaths = new ArrayList<>();
+        int successCount = 0;
+        int failCount = 0;
+        long totalNetworkDataCount = 0;
+        List<String> successFiles = new ArrayList<>();
+        List<String> failFiles = new ArrayList<>();
+        
         try {
-            // 验证文件
-            if (file == null || file.isEmpty()) {
+            // 验证文件数组
+            if (files == null || files.length == 0) {
                 return Result.error("文件不能为空");
             }
 
-            String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null || originalFilename.isEmpty()) {
-                return Result.error("文件名不能为空");
+            // 处理每个文件
+            for (MultipartFile file : files) {
+                Path tempFilePath = null;
+                try {
+                    // 验证文件
+                    if (file == null || file.isEmpty()) {
+                        failCount++;
+                        failFiles.add("空文件");
+                        continue;
+                    }
+
+                    String originalFilename = file.getOriginalFilename();
+                    if (originalFilename == null || originalFilename.isEmpty()) {
+                        failCount++;
+                        failFiles.add("未命名文件");
+                        continue;
+                    }
+
+                    // 验证文件类型（只接受ZIP、GZ等压缩文件）
+                    String lowerFilename = originalFilename.toLowerCase();
+                    if (!lowerFilename.endsWith(".zip") && !lowerFilename.endsWith(".gz") && 
+                        !lowerFilename.endsWith(".tar.gz") && !lowerFilename.endsWith(".rar")) {
+                        failCount++;
+                        failFiles.add(originalFilename + " (不支持的文件格式)");
+                        continue;
+                    }
+
+                    // 保存文件到临时目录
+                    Path tempDir = Files.createTempDirectory("network_data_upload_");
+                    tempFilePath = tempDir.resolve(originalFilename);
+                    File tempFile = tempFilePath.toFile();
+                    if (tempFile != null) {
+                        file.transferTo(tempFile);
+                    } else {
+                        throw new IOException("Failed to create temporary file");
+                    }
+                    tempFilePaths.add(tempFilePath);
+                    LOGGER.info("File saved to temporary directory: {}", tempFilePath);
+
+                    // process文件并解析
+                    Map<String, Object> fileResult = ftpFileProcessService.processLocalNetworkFile(tempFilePath.toString());
+                    Object networkDataCountObj = fileResult.get("networkDataCount");
+                    if (networkDataCountObj != null) {
+                        if (networkDataCountObj instanceof Number) {
+                            totalNetworkDataCount += ((Number) networkDataCountObj).longValue();
+                        }
+                    }
+                    
+                    successCount++;
+                    successFiles.add(originalFilename);
+                    LOGGER.info("Network data file processed successfully: {}, result: {}", originalFilename, fileResult);
+
+                } catch (IOException e) {
+                    LOGGER.error("Failed to upload and process network data file: {}", e.getMessage(), e);
+                    failCount++;
+                    if (file != null && file.getOriginalFilename() != null) {
+                        failFiles.add(file.getOriginalFilename() + " (上传或处理失败: " + e.getMessage() + ")");
+                    } else {
+                        failFiles.add("未知文件 (上传或处理失败: " + e.getMessage() + ")");
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Error occurred while processing network data file: {}", e.getMessage(), e);
+                    failCount++;
+                    if (file != null && file.getOriginalFilename() != null) {
+                        failFiles.add(file.getOriginalFilename() + " (处理错误: " + e.getMessage() + ")");
+                    } else {
+                        failFiles.add("未知文件 (处理错误: " + e.getMessage() + ")");
+                    }
+                }
             }
 
-            // 验证文件类型（只接受ZIP、GZ等压缩文件）
-            String lowerFilename = originalFilename.toLowerCase();
-            if (!lowerFilename.endsWith(".zip") && !lowerFilename.endsWith(".gz") && 
-                !lowerFilename.endsWith(".tar.gz") && !lowerFilename.endsWith(".rar")) {
-                return Result.error("只支持ZIP、GZ、TAR.GZ、RAR格式的压缩文件");
+            // 构建返回结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("totalNetworkDataCount", totalNetworkDataCount);
+            result.put("successCount", successCount);
+            result.put("failCount", failCount);
+            result.put("totalFiles", files.length);
+            result.put("successFiles", successFiles);
+            if (failCount > 0) {
+                result.put("failFiles", failFiles);
             }
 
-            // 保存文件到临时目录
-            Path tempDir = Files.createTempDirectory("network_data_upload_");
-            tempFilePath = tempDir.resolve(originalFilename);
-            File tempFile = tempFilePath.toFile();
-            if (tempFile != null) {
-                file.transferTo(tempFile);
+            if (successCount > 0) {
+                LOGGER.info("Network data files processed: success={}, fail={}, totalNetworkDataCount={}", 
+                    successCount, failCount, totalNetworkDataCount);
+                return Result.success(result);
             } else {
-                throw new IOException("Failed to create temporary file");
+                return Result.error("所有文件处理失败");
             }
-            LOGGER.info("File saved to temporary directory: {}", tempFilePath);
 
-            // process文件并解析
-            Map<String, Object> result = ftpFileProcessService.processLocalNetworkFile(tempFilePath.toString());
-            result.put("fileName", originalFilename);
-            result.put("fileSize", file.getSize());
-
-            LOGGER.info("Network data file processed successfully: {}, result: {}", originalFilename, result);
-            return Result.success(result);
-
-        } catch (IOException e) {
-            LOGGER.error("Failed to upload and process network data file: {}", e.getMessage(), e);
-            return Result.error("文件上传或处理失败: " + e.getMessage());
         } catch (Exception e) {
-            LOGGER.error("Error occurred while processing network data file: {}", e.getMessage(), e);
+            LOGGER.error("Error occurred while processing network data files: {}", e.getMessage(), e);
             return Result.error("处理文件时发生错误: " + e.getMessage());
         } finally {
             // 清理临时文件
-            if (tempFilePath != null && Files.exists(tempFilePath)) {
-                try {
-                    Files.deleteIfExists(tempFilePath);
-                    // 尝试删除临时目录
-                    Path tempDir = tempFilePath.getParent();
-                    if (tempDir != null && Files.exists(tempDir)) {
-                        Files.deleteIfExists(tempDir);
+            for (Path tempFilePath : tempFilePaths) {
+                if (tempFilePath != null && Files.exists(tempFilePath)) {
+                    try {
+                        Files.deleteIfExists(tempFilePath);
+                        // 尝试删除临时目录
+                        Path tempDir = tempFilePath.getParent();
+                        if (tempDir != null && Files.exists(tempDir)) {
+                            Files.deleteIfExists(tempDir);
+                        }
+                    } catch (Exception e) {
+                        LOGGER.warn("Failed to cleanup temporary file: {}", e.getMessage());
                     }
-                } catch (Exception e) {
-                    LOGGER.warn("Failed to cleanup temporary file: {}", e.getMessage());
                 }
             }
         }

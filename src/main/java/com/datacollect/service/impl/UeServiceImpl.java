@@ -18,6 +18,8 @@ import com.datacollect.entity.LogicEnvironmentUe;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,11 +27,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 @Service
 public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeService {
-
+    
     private static final Logger LOGGER = LoggerFactory.getLogger(UeServiceImpl.class);
 
     @Autowired
@@ -229,7 +229,7 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
             
             return true;
         } catch (Exception e) {
-            LOGGER.error("标记UE为使用中失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            LOGGER.error("Failed to mark UE as in use - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
             return false;
         }
     }
@@ -249,26 +249,26 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
                 }
             }
             
-            // update相关逻辑环境状态为available
+            // 更新相关逻辑环境状态为可用
             updateLogicEnvironmentStatusAfterUeAvailable(ueIds);
             
-            // releaseUE锁并process排队任务
+            // 释放UE锁并处理排队任务
             if (collectTaskProcessService != null) {
                 try {
-                    // 先releaseUE锁
+                    // 先释放UE锁
                     collectTaskProcessService.releaseUeLocks(ueIds);
-                    LOGGER.info("UE锁已释放 - UE IDs: {}", ueIds);
+                    LOGGER.info("UE locks released - UE IDs: {}", ueIds);
                     
                     // 然后处理排队任务
                     collectTaskProcessService.processQueuedTasksAfterUeAvailable(ueIds);
                 } catch (Exception e) {
-                    LOGGER.warn("releaseUE锁或process排队任务failed - UE IDs: {}, error: {}", ueIds, e.getMessage());
+                    LOGGER.warn("Failed to release UE locks or process queued tasks - UE IDs: {}, error: {}", ueIds, e.getMessage());
                 }
             }
             
             return true;
         } catch (Exception e) {
-            LOGGER.error("标记UE为可用失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            LOGGER.error("Failed to mark UE as available - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
             return false;
         }
     }
@@ -289,14 +289,14 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
                 if (ue == null) {
                     continue;
                 }
-                // checkUE是否available：状态为available(1)且未in use(0)
+                // 检查UE是否可用：状态为可用(1)且未使用中(0)
                 if (ue.getStatus() == null || ue.getStatus() != 1 || 
                     (ue.getInUse() != null && ue.getInUse() == 1)) {
                     unavailableUeIds.add(ue.getId().intValue());
                 }
             }
         } catch (Exception e) {
-            LOGGER.error("检查UE可用性失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            LOGGER.error("Failed to check UE availability - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
             // 如果检查失败，将所有UE标记为不可用，以确保安全
             unavailableUeIds.addAll(ueIds);
         }
@@ -325,7 +325,7 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
         }
         
         if (!shouldDisableEnvironment) {
-            LOGGER.debug("配置为不禁用环境，跳过逻辑环境状态更新 - UE IDs: {}", ueIds);
+            LOGGER.debug("Configuration set to not disable environment, skipping logic environment status update - UE IDs: {}", ueIds);
             return;
         }
         
@@ -354,20 +354,20 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
                     if (logicEnvironment != null && logicEnvironment.getStatus() != null && logicEnvironment.getStatus() == 1) {
                         logicEnvironment.setStatus(0); // 0: 禁用
                         logicEnvironmentService.updateById(logicEnvironment);
-                        LOGGER.info("UEin use，逻辑环境已update为disabled - 逻辑环境ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
+                        LOGGER.info("UE in use, logic environment updated to disabled - logic environment ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
                     }
                 } catch (Exception e) {
-                    LOGGER.warn("update逻辑环境状态failed - 逻辑环境ID: {}, error: {}", logicEnvironmentId, e.getMessage());
+                    LOGGER.warn("Failed to update logic environment status - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage());
                 }
             }
             
         } catch (Exception e) {
-            LOGGER.error("更新逻辑环境状态失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            LOGGER.error("Failed to update logic environment status - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
         }
     }
     
     /**
-     * 当UEavailable后，update相关逻辑环境状态为available
+     * 当UE可用后，更新相关逻辑环境状态为可用
      * 
      * @param ueIds UE ID列表
      */
@@ -421,16 +421,16 @@ public class UeServiceImpl extends ServiceImpl<UeMapper, Ue> implements UeServic
                         if (logicEnvironment != null && logicEnvironment.getStatus() != null && logicEnvironment.getStatus() == 0) {
                             logicEnvironment.setStatus(1); // 1: 可用
                             logicEnvironmentService.updateById(logicEnvironment);
-                            LOGGER.info("UEavailable后，逻辑环境已update为available - 逻辑环境ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
+                            LOGGER.info("After UE available, logic environment updated to available - logic environment ID: {}, UE IDs: {}", logicEnvironmentId, ueIds);
                         }
                     }
                 } catch (Exception e) {
-                    LOGGER.warn("update逻辑环境状态failed - 逻辑环境ID: {}, error: {}", logicEnvironmentId, e.getMessage());
+                    LOGGER.warn("Failed to update logic environment status - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage());
                 }
             }
             
         } catch (Exception e) {
-            LOGGER.error("update逻辑环境状态failed - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
+            LOGGER.error("Failed to update logic environment status - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
         }
     }
 }

@@ -59,9 +59,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 /**
  * 采集任务处理服务实现类
  * 
@@ -70,7 +70,7 @@ import org.slf4j.LoggerFactory;
  */
 @Service
 public class CollectTaskProcessServiceImpl implements CollectTaskProcessService {
-
+    
     private static final Logger LOGGER = LoggerFactory.getLogger(CollectTaskProcessServiceImpl.class);
 
     @Autowired
@@ -251,10 +251,10 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             LOGGER.info("Test case execution instances created and saved - instance count: {} - task ID: {}", 
                     allInstances.size(), collectTaskId);
             
-            // 7. update任务总用例数
+            // 7. 更新任务总用例数
             collectTaskService.updateTaskProgress(collectTaskId, allInstances.size(), 0, 0);
             
-            // 8. save用例配置到任务中（用于后续get用例自定义参数）
+            // 8. 保存用例配置到任务中（用于后续获取用例自定义参数）
             storeTestCaseConfigs(collectTaskId, testCaseConfigMap);
             
             // 9. 异步调用执行机服务
@@ -388,7 +388,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             LOGGER.info("Parsed test case configs - config count: {}", configMap.size());
         } catch (Exception e) {
             LOGGER.error("Failed to parse test case configs JSON: {}", e.getMessage(), e);
-            // Failed to parse 时返回空Map，使用默认配置
+            // 解析失败时返回空Map，使用默认配置
         }
         
         return configMap;
@@ -426,10 +426,10 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             try {
                 boolean callSuccess = callExecutorServices(distributedInstances);
                 
-                // check任务当前状态
+                // 检查任务当前状态
                 CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
                 if (collectTask == null) {
-                    LOGGER.warn("任务不存在 - 任务ID: {}", collectTaskId);
+                    LOGGER.warn("Task not found - task ID: {}", collectTaskId);
                     return;
                 }
                 
@@ -438,16 +438,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 if (!callSuccess) {
                     // 如果任务状态是 WAITING，说明任务已进入队列等待，不需要更新为 STOPPED
                     if ("WAITING".equals(currentStatus)) {
-                        LOGGER.info("任务已进入等待队列，保持等待状态 - 任务ID: {}", collectTaskId);
+                        LOGGER.info("Task already in waiting queue, keeping waiting status - task ID: {}", collectTaskId);
                     } else {
-                        // 如果任务状态不是 WAITING，说明是真正的failed，update为 STOPPED
+                        // 如果任务状态不是 WAITING，说明是真正的失败，更新为 STOPPED
                         collectTaskService.updateTaskStatus(collectTaskId, "STOPPED");
                         collectTaskService.updateTaskFailureReason(collectTaskId, "执行机服务调用失败");
                         LOGGER.error("Executor service call failed - task ID: {}", collectTaskId);
                     }
                 } else {
-                    // 调用success，如果任务状态是 WAITING，说明部分任务在waiting，部分任务已执行
-                    // 如果任务状态不是 WAITING，说明所有任务都已执行，update为 RUNNING
+                    // 调用成功，如果任务状态是 WAITING，说明部分任务在等待，部分任务已执行
+                    // 如果任务状态不是 WAITING，说明所有任务都已执行，更新为 RUNNING
                     if (!"WAITING".equals(currentStatus)) {
                         collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
                         LOGGER.info("Executor service call successful, task status updated to RUNNING - task ID: {}", collectTaskId);
@@ -541,17 +541,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return instances;
         }
         
-        // get逻辑环境信息（包括物理组网）
+        // 获取逻辑环境信息（包括物理组网）
         Map<Long, LogicEnvironmentInfo> environmentInfoMap = getLogicEnvironmentInfoMap(logicEnvironmentIds);
         
-        // get用例信息缓存
+        // 获取用例信息缓存
         Map<Long, TestCase> testCaseCache = new HashMap<>();
         
         // 按物理组网分组用例执行实例（key: 物理组网, value: 实例列表）
         Map<String, List<TestCaseExecutionInstance>> instancesByPhysicalNetwork = new HashMap<>();
         
         for (TestCaseExecutionInstance instance : instances) {
-            // get用例信息
+            // 获取用例信息
             TestCase testCase = testCaseCache.get(instance.getTestCaseId());
             if (testCase == null) {
                 testCase = testCaseService.getById(instance.getTestCaseId());
@@ -723,7 +723,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * create用例信息对象
+     * 创建用例信息对象
      */
     private TestCaseInfo createTestCaseInfo(TestCase testCase, Map<Long, TestCaseConfig> testCaseConfigMap, Integer defaultCollectCount) {
         TestCaseInfo testCaseInfo = new TestCaseInfo();
@@ -834,11 +834,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 为每个逻辑环境create用例执行实例并save
+     * 为每个逻辑环境创建用例执行实例并保存
      * 
      * @param collectTaskId 采集任务ID
      * @param testCasesByLogicEnvironment 按逻辑环境分组的用例信息Map
-     * @return 所有create的用例执行实例列表
+     * @return 所有创建的用例执行实例列表
      */
     private List<TestCaseExecutionInstance> createAndSaveInstancesForLogicEnvironments(
             Long collectTaskId, Map<Long, List<TestCaseInfo>> testCasesByLogicEnvironment) {
@@ -874,7 +874,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
         }
         
-        // 为每个逻辑环境create用例执行实例
+        // 为每个逻辑环境创建用例执行实例
         for (Map.Entry<Long, List<TestCaseInfo>> entry : testCasesByLogicEnvironment.entrySet()) {
             Long logicEnvironmentId = entry.getKey();
             List<TestCaseInfo> testCaseInfos = entry.getValue();
@@ -913,7 +913,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * get逻辑环境信息映射（包括物理组网）
+     * 获取逻辑环境信息映射（包括物理组网）
      */
     private Map<Long, LogicEnvironmentInfo> getLogicEnvironmentInfoMap(List<Long> logicEnvironmentIds) {
         Map<Long, LogicEnvironmentInfo> infoMap = new HashMap<>();
@@ -927,7 +927,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             LogicEnvironmentInfo info = new LogicEnvironmentInfo();
             info.setId(logicEnvironmentId);
             
-            // get执行机IP
+            // 获取执行机IP
             if (dto.getExecutorId() != null) {
                 String executorIp = getExecutorIpByMacAddress(dto.getExecutorId());
                 if (executorIp == null && dto.getExecutorIpAddress() != null) {
@@ -936,7 +936,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 info.setExecutorIp(executorIp);
             }
             
-            // get逻辑环境的物理组网列表
+            // 获取逻辑环境的物理组网列表
             LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
             if (logicEnvironment != null && logicEnvironment.getPhysicalNetwork() != null 
                     && !logicEnvironment.getPhysicalNetwork().trim().isEmpty()) {
@@ -1059,7 +1059,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * validate逻辑环境列表
+     * 验证逻辑环境列表
      */
     private void validateLogicEnvironments(List<Long> logicEnvironmentIds) {
         if (logicEnvironmentIds.isEmpty()) {
@@ -1084,7 +1084,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     // 如果执行机表中没有IP，则使用逻辑环境DTO中的IP地址（兼容旧逻辑）
                     if (logicEnvironmentDTO.getExecutorIpAddress() != null) {
                         environmentToExecutorMap.put(logicEnvironmentId, logicEnvironmentDTO.getExecutorIpAddress());
-                        LOGGER.warn("执行机表中IP地址为空，使用逻辑环境DTO中的IP地址 - 执行机ID: {}, IP: {}", 
+                        LOGGER.warn("Executor IP address is empty in executor table, using IP address from logic environment DTO - executor ID: {}, IP: {}", 
                                 logicEnvironmentDTO.getExecutorId(), logicEnvironmentDTO.getExecutorIpAddress());
                     }
                 }
@@ -1110,20 +1110,20 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 获取执行机信息
             Executor executor = executorService.getById(executorId);
             if (executor == null) {
-                LOGGER.warn("执行机不存在 - 执行机ID: {}", executorId);
+                LOGGER.warn("Executor not found - executor ID: {}", executorId);
                 return null;
             }
             
             // 直接使用执行机表中的IP地址
             if (executor.getIpAddress() != null && !executor.getIpAddress().trim().isEmpty()) {
-                LOGGER.info("获取执行机IP - 执行机ID: {}, IP: {}", executorId, executor.getIpAddress());
+                LOGGER.info("Get executor IP - executor ID: {}, IP: {}", executorId, executor.getIpAddress());
                 return executor.getIpAddress();
             }
             
-            LOGGER.warn("执行机IP地址为空 - 执行机ID: {}", executorId);
+            LOGGER.warn("Executor IP address is empty - executor ID: {}", executorId);
             return null;
         } catch (Exception e) {
-            LOGGER.error("获取执行机IP失败 - 执行机ID: {}, 错误: {}", executorId, e.getMessage(), e);
+            LOGGER.error("Failed to get executor IP - executor ID: {}, error: {}", executorId, e.getMessage(), e);
             return null;
         }
     }
@@ -1167,7 +1167,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         LOGGER.info("Start calling executor service - instance count: {}", instances.size());
         
         try {
-            // check任务状态，如果任务已stop则不再continue下发
+            // 检查任务状态，如果任务已停止则不再继续下发
             if (!checkTaskStatus(instances)) {
                 return false;
             }
@@ -1175,29 +1175,29 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             // 按逻辑环境分组
             java.util.Map<Long, List<TestCaseExecutionInstance>> instancesByLogicEnvironment = groupInstancesByLogicEnvironment(instances);
             
-            // 修改逻辑：所有任务都先进入队列，由定时任务统一process
-            // 将任务加入队列，waiting定时任务checkUE状态后下发
+            // 修改逻辑：所有任务都先进入队列，由定时任务统一处理
+            // 将任务加入队列，等待定时任务检查UE状态后下发
             for (java.util.Map.Entry<Long, List<TestCaseExecutionInstance>> entry : instancesByLogicEnvironment.entrySet()) {
                 Long logicEnvironmentId = entry.getKey();
                 List<TestCaseExecutionInstance> envInstances = entry.getValue();
                 
-                // get该逻辑环境的所有UE
+                // 获取该逻辑环境的所有UE
                 List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
                 List<Integer> ueIds = extractUeIds(ueList);
                 
                 if (ueIds.isEmpty()) {
-                    LOGGER.warn("逻辑环境没有UE，跳过 - 逻辑环境ID: {}", logicEnvironmentId);
+                    LOGGER.warn("Logic environment has no UE, skipping - logic environment ID: {}", logicEnvironmentId);
                     continue;
                 }
                 
                 // 将任务加入UE队列，等待定时任务检查UE状态后下发
                 String taskId = generateTaskId("queue");
                 addTaskToUeQueue(ueIds, logicEnvironmentId, envInstances, taskId);
-                LOGGER.info("任务已加入UE队列，等待定时任务检查 - 逻辑环境ID: {}, UE IDs: {}, 任务实例数: {}", 
+                LOGGER.info("Task added to UE queue, waiting for scheduled task check - logic environment ID: {}, UE IDs: {}, instance count: {}", 
                         logicEnvironmentId, ueIds, envInstances.size());
             }
             
-            // 所有任务都已加入队列，返回true表示success加入队列
+            // 所有任务都已加入队列，返回true表示成功加入队列
             return true;
             
         } catch (Exception e) {
@@ -1267,7 +1267,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 } else {
                     failureCount++;
                     LOGGER.error("Failed to create execution task for logic environment - logic environment ID: {}", logicEnvironmentId);
-                    // continueprocess其他逻辑环境，不立即返回false
+                    // 继续处理其他逻辑环境，不立即返回false
                 }
             } catch (Exception e) {
                 failureCount++;
@@ -1280,8 +1280,8 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         LOGGER.info("Logic environment service call completed - total: {}, success: {}, failure: {}", 
                 totalEnvironments, successCount, failureCount);
         
-        // 只要至少有一个逻辑环境success，就返回true
-        // 这样可以避免因为一个逻辑环境failed而导致整个任务failed
+        // 只要至少有一个逻辑环境成功，就返回true
+        // 这样可以避免因为一个逻辑环境失败而导致整个任务失败
         return successCount > 0;
     }
     
@@ -1294,7 +1294,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return false;
             }
             
-            // get逻辑环境信息
+            // 获取逻辑环境信息
             LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
             if (logicEnvironment == null) {
                 LOGGER.error("Logic environment not found - logic environment ID: {}", logicEnvironmentId);
@@ -1323,12 +1323,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
             
             List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = buildTestCaseList(instances);
-            // get逻辑环境绑定的UE信息
+            // 获取逻辑环境绑定的UE信息
             List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
             
-            // checkUE是否available
+            // 检查UE是否可用
             if (!checkAndHandleUeAvailability(ueList, logicEnvironmentId)) {
-                LOGGER.warn("UE不可用，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, taskId);
+                LOGGER.warn("UE unavailable, task will be queued - logic environment ID: {}, task ID: {}", logicEnvironmentId, taskId);
                 // 将任务加入队列，等待UE可用
                 addTaskToQueue(logicEnvironmentId, instances, taskId);
                 return false; // 返回false表示任务未立即执行，已加入队列
@@ -1339,28 +1339,28 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
             
             if (!unavailableUeIds.isEmpty()) {
-                LOGGER.warn("UE使用中，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}, 不可用UE IDs: {}, 总UE IDs: {}", 
+                LOGGER.warn("UE in use, task will be queued - logic environment ID: {}, task ID: {}, unavailable UE IDs: {}, total UE IDs: {}", 
                         logicEnvironmentId, taskId, unavailableUeIds, ueIds);
-                // 将任务加入UE队列，waitingUE空闲
+                // 将任务加入UE队列，等待UE空闲
                 addTaskToUeQueue(ueIds, logicEnvironmentId, instances, taskId);
                 return false; // 返回false表示任务未立即执行，已加入队列
             }
             
-            // UE空闲，立即mark为in use
+            // UE空闲，立即标记为使用中
             boolean marked = ueService.markUesInUse(ueIds);
             if (!marked) {
-                LOGGER.warn("标记UE为使用中失败，任务将排队等待 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", 
+                LOGGER.warn("Failed to mark UE as in use, task will be queued - logic environment ID: {}, task ID: {}, UE IDs: {}", 
                         logicEnvironmentId, taskId, ueIds);
                 // 标记失败，将任务加入队列
                 addTaskToUeQueue(ueIds, logicEnvironmentId, instances, taskId);
                 return false;
             }
-            LOGGER.info("UE已标记为使用中 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
+            LOGGER.info("UE marked as in use - logic environment ID: {}, task ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
             
             TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo = getCollectStrategyInfo(testCaseSetInfo.getCollectStrategyId());
             String taskCustomParams = getTaskCustomParams(instances);
             
-            // get采集任务的网元ID列表、任务名称、任务描述、网络信息
+            // 获取采集任务的网元ID列表、任务名称、任务描述、网络信息
             List<Long> networkElementIds = null;
             CollectTask collectTask = null;
             String network = null;
@@ -1394,7 +1394,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             
             // 如果任务发送失败，释放UE（标记为可用）
             if (!success) {
-                LOGGER.warn("任务sendfailed，releaseUE - 任务ID: {}, UE IDs: {}", taskId, ueIds);
+                LOGGER.warn("Task send failed, releasing UE - task ID: {}, UE IDs: {}", taskId, ueIds);
                 ueService.markUesAvailable(ueIds);
             }
             
@@ -1484,7 +1484,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * validate用例集信息
+     * 验证用例集信息
      */
     private boolean validateTestCaseSetInfo(TestCaseSetInfo testCaseSetInfo, String executorIp) {
         if (testCaseSetInfo.getTestCaseSetId() == null) {
@@ -1506,7 +1506,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private List<TestCaseExecutionRequest.TestCaseInfo> buildTestCaseList(List<TestCaseExecutionInstance> instances) {
         List<TestCaseExecutionRequest.TestCaseInfo> testCaseList = new ArrayList<>();
         for (TestCaseExecutionInstance instance : instances) {
-            // get用例信息
+            // 获取用例信息
             TestCase testCase = testCaseService.getById(instance.getTestCaseId());
             if (testCase != null) {
                 TestCaseExecutionRequest.TestCaseInfo testCaseInfo = 
@@ -1531,7 +1531,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * get任务自定义参数（包含用例级别的自定义参数）
+     * 获取任务自定义参数（包含用例级别的自定义参数）
      */
     private String getTaskCustomParams(List<TestCaseExecutionInstance> instances) {
         if (instances.isEmpty()) {
@@ -1639,7 +1639,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * get任务级别的用例自定义参数
+     * 获取任务级别的用例自定义参数
      * 
      * @param collectTaskId 采集任务ID
      * @param caseIds 用例ID集合
@@ -1648,7 +1648,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     private Map<String, List<Map<String, String>>> getTaskTestCaseCustomParams(Long collectTaskId, java.util.Set<Long> caseIds) {
         Map<String, List<Map<String, String>>> result = new HashMap<>();
         
-        // 从缓存中get用例配置
+        // 从缓存中获取用例配置
         Map<Long, TestCaseConfig> configMap = testCaseConfigCache.get(collectTaskId);
         if (configMap == null || configMap.isEmpty()) {
             LOGGER.debug("No task-level test case configs found - task ID: {}", collectTaskId);
@@ -1938,14 +1938,14 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * get执行机城市信息（拼音）
+     * 获取执行机城市信息（拼音）
      * 
      * @param executorIp 执行机IP
-     * @return 城市拼音，如果getfailed则返回null
+     * @return 城市拼音，如果获取失败则返回null
      */
     private String getExecutorCityPinyin(String executorIp) {
         try {
-            // 通过执行机IPget执行机信息
+            // 通过执行机IP获取执行机信息
             QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
             executorQuery.eq("ip_address", executorIp);
             Executor executor = executorService.getOne(executorQuery);
@@ -1955,7 +1955,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return null;
             }
             
-            // get地域信息
+            // 获取地域信息
             com.datacollect.entity.Region region = regionService.getById(executor.getRegionId());
             if (region == null) {
                 LOGGER.warn("Region not found - Region ID: {}", executor.getRegionId());
@@ -2002,7 +2002,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      * 从逻辑环境的物理组网中提取网络信息
      * 
      * @param logicEnvironment 逻辑环境
-     * @return 网络信息，如果提取failed则返回null
+     * @return 网络信息，如果提取失败则返回null
      */
     private String extractNetworkFromLogicEnvironment(LogicEnvironment logicEnvironment) {
         if (logicEnvironment == null || logicEnvironment.getPhysicalNetwork() == null 
@@ -2064,11 +2064,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             Executor executor = executorService.getOne(queryWrapper);
             
             if (executor == null) {
-                LOGGER.warn("执行机不存在 - 执行机IP: {}", executorIp);
+                LOGGER.warn("Executor not found - executor IP: {}", executorIp);
                 return null;
             }
             
-            // 2. 优先从executor表的mac_address字段get
+            // 2. 优先从executor表的mac_address字段获取
             if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
                 return executor.getMacAddress();
             }
@@ -2081,41 +2081,41 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 }
             }
             
-            LOGGER.warn("执行机没有MAC地址 - 执行机IP: {}, 执行机ID: {}", executorIp, executor.getId());
+            LOGGER.warn("Executor has no MAC address - executor IP: {}, executor ID: {}", executorIp, executor.getId());
             return null;
             
         } catch (Exception e) {
-            LOGGER.error("获取执行机MAC地址失败 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+            LOGGER.error("Failed to get executor MAC address - executor IP: {}, error: {}", executorIp, e.getMessage(), e);
             return null;
         }
     }
 
     /**
-     * send执行请求
+     * 发送执行请求
      */
     private boolean sendExecutionRequest(TestCaseExecutionRequest request, List<TestCaseExecutionInstance> instances, String taskId, String executorIp) {
-        // 通过IP地址查找执行机，getMAC地址
+        // 通过IP地址查找执行机，获取MAC地址
         String executorMac = getExecutorMacAddress(executorIp);
         if (executorMac == null || executorMac.trim().isEmpty()) {
-            LOGGER.warn("无法获取执行机MAC地址，使用HTTP发送任务 - 执行机IP: {}, 任务ID: {}", executorIp, taskId);
+            LOGGER.warn("Unable to get executor MAC address, using HTTP to send task - executor IP: {}, task ID: {}", executorIp, taskId);
         } else {
         // 优先使用WebSocket发送任务
             if (executorWebSocketService.isExecutorOnline(executorMac)) {
-                LOGGER.info("执行机在线，通过WebSocket发送任务 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+                LOGGER.info("Executor online, sending task via WebSocket - executor MAC: {}, executor IP: {}, task ID: {}", executorMac, executorIp, taskId);
                 boolean sent = executorWebSocketService.sendTaskToExecutor(executorMac, request);
             if (sent) {
-                // update例次状态
+                // 更新例次状态
                 updateInstanceStatus(instances, taskId);
                 return true;
             } else {
-                    LOGGER.warn("WebSocket发送任务失败，尝试使用HTTP发送 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+                    LOGGER.warn("WebSocket task send failed, trying HTTP - executor MAC: {}, executor IP: {}, task ID: {}", executorMac, executorIp, taskId);
             }
         } else {
-                LOGGER.info("执行机不在线，使用HTTP发送任务 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, taskId);
+                LOGGER.info("Executor offline, using HTTP to send task - executor MAC: {}, executor IP: {}, task ID: {}", executorMac, executorIp, taskId);
             }
         }
         
-        // 如果WebSocket不available，回退到HTTP请求
+        // 如果WebSocket不可用，回退到HTTP请求
         String caseExecuteServiceUrl = "http://" + executorIp + ":8081/api/test-case-execution/receive";
         LOGGER.info("Calling CaseExecuteService via HTTP - URL: {}, task ID: {}", caseExecuteServiceUrl, taskId);
         
@@ -2130,7 +2130,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 if (code != null && code == 200) {
                     LOGGER.info("CaseExecuteService call successful via HTTP - task ID: {}, executor IP: {}", taskId, executorIp);
                     
-                    // update例次状态
+                    // 更新例次状态
                     updateInstanceStatus(instances, taskId);
                     
                     return true;
@@ -2152,7 +2152,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * update实例状态
+     * 更新实例状态
      */
     private void updateInstanceStatus(List<TestCaseExecutionInstance> instances, String taskId) {
         for (TestCaseExecutionInstance instance : instances) {
@@ -2185,7 +2185,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     .map(LogicEnvironmentUe::getUeId)
                     .collect(java.util.stream.Collectors.toSet());
             
-            // 3. getUE详细信息并转换为DTO格式
+            // 3. 获取UE详细信息并转换为DTO格式
             ueList = convertUesToDto(ueIds);
             
             LOGGER.info("Successfully got UE information for logic environment - logic environment ID: {}, UE count: {}", logicEnvironmentId, ueList.size());
@@ -2198,7 +2198,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * get执行机关联的UE全部信息（保留此方法用于兼容，但不再使用）
+     * 获取执行机关联的UE全部信息（保留此方法用于兼容，但不再使用）
      * 
      * @param executorIp 执行机IP
      * @return UE信息列表
@@ -2209,7 +2209,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         List<TestCaseExecutionRequest.UeInfo> ueList = new ArrayList<>();
         
         try {
-            // 1. 根据执行机IPget执行机信息
+            // 1. 根据执行机IP获取执行机信息
             QueryWrapper<Executor> executorQuery = new QueryWrapper<>();
             executorQuery.eq("ip_address", executorIp);
             Executor executor = executorService.getOne(executorQuery);
@@ -2219,7 +2219,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return ueList;
             }
             
-            // 2. get执行机关联的逻辑环境
+            // 2. 获取执行机关联的逻辑环境
             List<LogicEnvironment> logicEnvironments = getExecutorLogicEnvironments(executor);
             
             if (logicEnvironments.isEmpty()) {
@@ -2235,7 +2235,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 return ueList;
             }
             
-            // 4. getUE详细信息并转换为DTO格式
+            // 4. 获取UE详细信息并转换为DTO格式
             ueList = convertUesToDto(allUeIds);
             
             LOGGER.info("Successfully got UE information associated with executor - executor IP: {}, UE count: {}", executorIp, ueList.size());
@@ -2248,7 +2248,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
 
     /**
-     * get执行机关联的逻辑环境
+     * 获取执行机关联的逻辑环境
      */
     private List<LogicEnvironment> getExecutorLogicEnvironments(Executor executor) {
         QueryWrapper<LogicEnvironment> envQuery = new QueryWrapper<>();
@@ -2355,7 +2355,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         strategyInfo.setBusinessCategory(collectStrategy.getBusinessCategory());
         strategyInfo.setApp(collectStrategy.getApp());
         
-        // setappen字段：从用例集中查找对应的appen值
+        // 设置appen字段：从用例集中查找对应的appen值
         String appEn = getAppEnFromTestCaseSet(collectStrategy.getTestCaseSetId(), collectStrategy.getApp());
         strategyInfo.setAppEn(appEn);
         
@@ -2375,7 +2375,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         try {
-            // get用例集中的用例列表
+            // 获取用例集中的用例列表
             List<TestCase> testCases = testCaseService.getByTestCaseSetId(testCaseSetId);
             
             // 查找匹配的用例
@@ -2396,7 +2396,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * get用例的is_new状态映射
+     * 获取用例的is_new状态映射
      * 
      * @param instances 用例执行实例列表
      * @return 用例ID到is_new状态的映射
@@ -2419,16 +2419,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
             
             if (!uniqueApps.isEmpty()) {
-                // 为每个APPqueryiOS和非iOS两种版本
+                // 为每个APP查询iOS和非iOS两种版本
                 List<AppCheckRequest> appCheckRequests = new ArrayList<>();
                 for (String appName : uniqueApps) {
-                    // queryiOS版本
+                    // 查询iOS版本
                     appCheckRequests.add(new AppCheckRequest(appName, true));
-                    // query非iOS版本
+                    // 查询非iOS版本
                     appCheckRequests.add(new AppCheckRequest(appName, false));
                 }
                 
-                LOGGER.info("调用checkAppIsNew方法 - 请求参数: {}", appCheckRequests);
+                LOGGER.info("Calling checkAppIsNew method - request parameters: {}", appCheckRequests);
                 
                 AppCheckResponse response = externalApiService.checkAppIsNew(appCheckRequests);
                 
@@ -2458,19 +2458,19 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                             
                             if (isNew != null) {
                                 appIsNewMap.put(instance.getTestCaseId(), isNew);
-                                LOGGER.info("用例 {} (编号: {}) 的APP {} (is_ios: {}) is_new状态: {}", 
+                                LOGGER.info("Test case {} (ID: {}) APP {} (is_ios: {}) is_new status: {}", 
                                     testCase.getName(), testCase.getNumber(), testCase.getApp(), isIos, isNew);
                             } else {
                                 // 没有查询到结果，设置默认值
                                 appIsNewMap.put(instance.getTestCaseId(), false);
-                                LOGGER.warn("用例 {} (编号: {}) 的APP {} (is_ios: {}) 未query到结果，set默认值is_new: false", 
+                                LOGGER.warn("Test case {} (ID: {}) APP {} (is_ios: {}) no result found, setting default is_new: false", 
                                     testCase.getName(), testCase.getNumber(), testCase.getApp(), isIos);
                             }
                         }
                     }
                 } else {
-                    LOGGER.warn("外部接口响应为空，所有用例将使用默认值is_new: false");
-                    // set所有用例的默认值
+                    LOGGER.warn("External API response is empty, all test cases will use default is_new: false");
+                    // 设置所有用例的默认值
                     for (TestCaseExecutionInstance instance : instances) {
                         appIsNewMap.put(instance.getTestCaseId(), false);
                     }
@@ -2478,7 +2478,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             }
             
         } catch (Exception e) {
-            LOGGER.error("获取APP is_new状态失败 - 错误信息: {}", e.getMessage(), e);
+            LOGGER.error("Failed to get APP is_new status - error: {}", e.getMessage(), e);
         }
         
         return appIsNewMap;
@@ -2493,7 +2493,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
      */
     private boolean checkAndHandleUeAvailability(List<TestCaseExecutionRequest.UeInfo> ueList, Long logicEnvironmentId) {
         if (ueList == null || ueList.isEmpty()) {
-            LOGGER.warn("UE列表为空，无法检查可用性 - 逻辑环境ID: {}", logicEnvironmentId);
+            LOGGER.warn("UE list is empty, cannot check availability - logic environment ID: {}", logicEnvironmentId);
             return false;
         }
         
@@ -2506,7 +2506,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         if (ueIds.isEmpty()) {
-            LOGGER.warn("UE ID列表为空，无法检查可用性 - 逻辑环境ID: {}", logicEnvironmentId);
+            LOGGER.warn("UE ID list is empty, cannot check availability - logic environment ID: {}", logicEnvironmentId);
             return false;
         }
         
@@ -2514,9 +2514,9 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
         
         if (!unavailableUeIds.isEmpty()) {
-            LOGGER.warn("部分UE不可用 - 逻辑环境ID: {}, 不可用UE IDs: {}", logicEnvironmentId, unavailableUeIds);
+            LOGGER.warn("Some UEs are unavailable - logic environment ID: {}, unavailable UE IDs: {}", logicEnvironmentId, unavailableUeIds);
             
-            // check配置：如果配置为false，则不disabled环境
+            // 检查配置：如果配置为false，则不禁用环境
             boolean shouldDisableEnvironment = true; // 默认值
             if (configService != null) {
                 Boolean configValue = configService.getUeDisableEnvironmentWhenInUse();
@@ -2525,17 +2525,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 }
             }
             
-            // 根据配置决定是否disabled逻辑环境
+            // 根据配置决定是否禁用逻辑环境
             if (shouldDisableEnvironment) {
-                // mark逻辑环境为不available
+                // 标记逻辑环境为不可用
                 LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
                 if (logicEnvironment != null) {
-                    logicEnvironment.setStatus(0); // 0: 不available
+                    logicEnvironment.setStatus(0); // 0: 不可用
                     logicEnvironmentService.updateById(logicEnvironment);
-                    LOGGER.info("UE使用中，逻辑环境已标记为不可用 - 逻辑环境ID: {}", logicEnvironmentId);
+                    LOGGER.info("UE in use, logic environment marked as unavailable - logic environment ID: {}", logicEnvironmentId);
                 }
             } else {
-                LOGGER.debug("配置为不禁用环境，跳过逻辑环境状态更新 - 逻辑环境ID: {}", logicEnvironmentId);
+                LOGGER.debug("Configuration set to not disable environment, skipping logic environment status update - logic environment ID: {}", logicEnvironmentId);
             }
             return false;
         }
@@ -2562,7 +2562,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * 将任务加入UE队列，waitingUE空闲
+     * 将任务加入UE队列，等待UE空闲
      * 
      * @param ueIds UE ID列表
      * @param logicEnvironmentId 逻辑环境ID
@@ -2576,7 +2576,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         try {
-            // get任务ID并update任务状态为waiting中
+            // 获取任务ID并更新任务状态为等待中
             if (!instances.isEmpty()) {
                 Long collectTaskId = instances.get(0).getCollectTaskId();
                 if (collectTaskId != null) {
@@ -2584,7 +2584,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     if (collectTask != null && !"WAITING".equals(collectTask.getStatus()) && !"STOPPED".equals(collectTask.getStatus())) {
                         // 只有在任务不是等待中或已停止时，才更新为等待中
                         collectTaskService.updateTaskStatus(collectTaskId, "WAITING");
-                        LOGGER.info("任务状态已更新为等待中 - 任务ID: {}, 原因: UE被占用", collectTaskId);
+                        LOGGER.info("Task status updated to WAITING - task ID: {}, reason: UE occupied", collectTaskId);
                     }
                 }
             }
@@ -2596,27 +2596,27 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             QueuedTask queuedTask = new QueuedTask(taskId, instances, logicEnvironmentId);
             queue.offer(queuedTask);
             
-            LOGGER.info("任务已加入UE队列 - 主UE ID: {}, 所有UE IDs: {}, 任务ID: {}, 队列大小: {}", 
+            LOGGER.info("Task added to UE queue - primary UE ID: {}, all UE IDs: {}, task ID: {}, queue size: {}", 
                     primaryUeId, ueIds, taskId, queue.size());
             
             // 启动UE队列处理器（如果还没有启动）
             startUeQueueProcessor(primaryUeId);
             
         } catch (Exception e) {
-            LOGGER.error("将任务加入UE队列失败 - UE IDs: {}, 任务ID: {}, 错误: {}", ueIds, taskId, e.getMessage(), e);
+            LOGGER.error("Failed to add task to UE queue - UE IDs: {}, task ID: {}, error: {}", ueIds, taskId, e.getMessage(), e);
         }
     }
     
     /**
-     * startUE队列process器，异步process排队任务
-     * 使用标志位防止重复start
+     * 启动UE队列处理器，异步处理排队任务
+     * 使用标志位防止重复启动
      * 
      * @param ueId UE ID
      */
     private void startUeQueueProcessor(Integer ueId) {
-        // check是否已经有process器在running
+        // 检查是否已经有处理器在运行
         if (ueQueueProcessorRunning.putIfAbsent(ueId, true) != null) {
-            LOGGER.debug("UE队列处理器已在运行，跳过启动 - UE ID: {}", ueId);
+            LOGGER.debug("UE queue processor already running, skipping start - UE ID: {}", ueId);
             return;
         }
         
@@ -2639,22 +2639,22 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                             emptyCount++;
                             if (emptyCount >= 3) {
                                 // 连续3次检查队列都为空，退出处理器
-                                LOGGER.debug("UE队列连续为空，退出处理器 - UE ID: {}", ueId);
+                                LOGGER.debug("UE queue continuously empty, exiting processor - UE ID: {}", ueId);
                                 break;
                             }
-                            Thread.sleep(2000); // waiting2秒后重试
+                            Thread.sleep(2000); // 等待2秒后重试
                             continue;
                         }
                         
                         // 重置空队列计数
                         emptyCount = 0;
                         
-                        // 在尝试执行前，先check任务状态
+                        // 在尝试执行前，先检查任务状态
                         if (!checkTaskStatus(queuedTask.getInstances())) {
-                            // 任务已stop，从队列中移除并记录日志
+                            // 任务已停止，从队列中移除并记录日志
                             QueuedTask removedTask = queue.poll();
                             if (removedTask != null) {
-                                LOGGER.info("任务在队列中等待时已被停止，从UE队列中移除 - UE ID: {}, 任务ID: {}", ueId, removedTask.getTaskId());
+                                LOGGER.info("Task stopped while waiting in queue, removed from UE queue - UE ID: {}, task ID: {}", ueId, removedTask.getTaskId());
                             }
                             continue; // 继续处理下一个任务
                         }
@@ -2672,42 +2672,42 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                             if (task != null) {
                                 // 再次检查任务状态
                                 if (!checkTaskStatus(task.getInstances())) {
-                                    LOGGER.info("任务已被stop，取消执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
+                                    LOGGER.info("Task stopped, canceling execution - UE ID: {}, task ID: {}", ueId, task.getTaskId());
                                     continue;
                                 }
                                 
-                                LOGGER.info("从UE队列中取出任务执行 - UE ID: {}, 任务ID: {}", ueId, task.getTaskId());
+                                LOGGER.info("Task taken from UE queue for execution - UE ID: {}, task ID: {}", ueId, task.getTaskId());
                                 
-                                // 立即markUE为in use
+                                // 立即标记UE为使用中
                                 boolean marked = ueService.markUesInUse(taskUeIds);
                                 if (!marked) {
-                                    LOGGER.warn("标记UE为使用中失败，任务重新加入队列 - UE ID: {}, 任务ID: {}, UE IDs: {}", 
+                                    LOGGER.warn("Failed to mark UE as in use, task re-added to queue - UE ID: {}, task ID: {}, UE IDs: {}", 
                                             ueId, task.getTaskId(), taskUeIds);
                                     // 标记失败，重新加入队列
                                     queue.offer(task);
                                     Thread.sleep(2000); // 等待2秒后重试
                                     continue;
                                 }
-                                LOGGER.info("UE已标记为使用中 - UE ID: {}, 任务ID: {}, UE IDs: {}", ueId, task.getTaskId(), taskUeIds);
+                                LOGGER.info("UE marked as in use - UE ID: {}, task ID: {}, UE IDs: {}", ueId, task.getTaskId(), taskUeIds);
                                 
-                                // update任务状态为running中（如果任务在waiting中）
+                                // 更新任务状态为运行中（如果任务在等待中）
                                 if (!task.getInstances().isEmpty()) {
                                     Long collectTaskId = task.getInstances().get(0).getCollectTaskId();
                                     if (collectTaskId != null) {
                                         CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
                                         if (collectTask != null && "WAITING".equals(collectTask.getStatus())) {
                                             collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
-                                            LOGGER.info("任务状态已从等待中更新为运行中 - 任务ID: {}", collectTaskId);
+                                            LOGGER.info("Task status updated from WAITING to RUNNING - task ID: {}", collectTaskId);
                                         }
                                     }
                                 }
                                 
-                                // 重新执行任务create流程
+                                // 重新执行任务创建流程
                                 boolean success = createExecutionTaskForLogicEnvironment(task.getLogicEnvironmentId(), task.getInstances());
                                 
-                                // 如果任务createfailed，releaseUE（mark为available）
+                                // 如果任务创建失败，释放UE（标记为可用）
                                 if (!success) {
-                                    LOGGER.warn("任务创建失败，释放UE - UE ID: {}, 任务ID: {}, UE IDs: {}", 
+                                    LOGGER.warn("Task creation failed, releasing UE - UE ID: {}, task ID: {}, UE IDs: {}", 
                                             ueId, task.getTaskId(), taskUeIds);
                                     ueService.markUesAvailable(taskUeIds);
                                 }
@@ -2719,11 +2719,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        LOGGER.warn("UE队列process器被中断 - UE ID: {}", ueId);
+                        LOGGER.warn("UE queue processor interrupted - UE ID: {}", ueId);
                         break;
                     } catch (Exception e) {
-                        LOGGER.error("处理UE队列任务失败 - UE ID: {}, 错误: {}", ueId, e.getMessage(), e);
-                        // 发生错误时，waiting一段时间后continue
+                        LOGGER.error("Failed to process UE queue task - UE ID: {}, error: {}", ueId, e.getMessage(), e);
+                        // 发生错误时，等待一段时间后继续
                         try {
                             Thread.sleep(5000);
                         } catch (InterruptedException ie) {
@@ -2733,14 +2733,14 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     }
                 }
             } finally {
-                // processcompleted后，清除running标志
+                // 处理完成后，清除运行标志
                 ueQueueProcessorRunning.remove(ueId);
-                LOGGER.debug("UE队列处理器处理完成 - UE ID: {}", ueId);
+                LOGGER.debug("UE queue processor completed - UE ID: {}", ueId);
                 
                 // 检查队列中是否还有任务，如果有则重新启动处理器
                 BlockingQueue<QueuedTask> queue = ueTaskQueues.get(ueId);
                 if (queue != null && !queue.isEmpty()) {
-                    LOGGER.info("UE队列中还有任务，重新启动处理器 - UE ID: {}, 队列大小: {}", ueId, queue.size());
+                    LOGGER.info("UE queue still has tasks, restarting processor - UE ID: {}, queue size: {}", ueId, queue.size());
                     startUeQueueProcessor(ueId);
                 }
             }
@@ -2748,7 +2748,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * processUE队列中的任务
+     * 处理UE队列中的任务
      * 
      * @param ueId UE ID
      */
@@ -2758,7 +2758,7 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return;
         }
         
-        LOGGER.info("UE可用，检查排队任务 - UE ID: {}, 队列大小: {}", ueId, queue.size());
+        LOGGER.info("UE available, checking queued tasks - UE ID: {}, queue size: {}", ueId, queue.size());
         startUeQueueProcessor(ueId);
     }
     
@@ -2773,21 +2773,21 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return;
         }
         
-        LOGGER.info("UE可用，检查排队任务 - UE IDs: {}", ueIds);
+        LOGGER.info("UE available, checking queued tasks - UE IDs: {}", ueIds);
         for (Integer ueId : ueIds) {
             processUeQueue(ueId);
         }
     }
     
     /**
-     * release任务对应的UE（兼容方法，实际不做任何操作，因为不再使用锁）
+     * 释放任务对应的UE（兼容方法，实际不做任何操作，因为不再使用锁）
      * 
      * @param taskId 任务ID
      */
     @Override
     public void releaseUeLocksForTask(String taskId) {
-        // 不再需要release锁，因为只通过数据库状态check
-        LOGGER.debug("任务完成 - 任务ID: {}（不再需要释放锁）", taskId);
+        // 不再需要释放锁，因为只通过数据库状态检查
+        LOGGER.debug("Task completed - task ID: {} (no need to release lock)", taskId);
     }
     
     /**
@@ -2807,45 +2807,45 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                     if (collectTask != null && !"WAITING".equals(collectTask.getStatus()) && !"STOPPED".equals(collectTask.getStatus())) {
                         // 只有在任务不是等待中或已停止时，才更新为等待中
                         collectTaskService.updateTaskStatus(collectTaskId, "WAITING");
-                        LOGGER.info("任务状态已更新为等待中 - 任务ID: {}, 原因: UE不可用", collectTaskId);
+                        LOGGER.info("Task status updated to WAITING - task ID: {}, reason: UE unavailable", collectTaskId);
                     }
                 }
             }
             
-            // get或create该逻辑环境的任务队列
+            // 获取或创建该逻辑环境的任务队列
             BlockingQueue<QueuedTask> queue = taskQueues.computeIfAbsent(logicEnvironmentId, k -> new LinkedBlockingQueue<>());
             
-            // create排队任务
+            // 创建排队任务
             QueuedTask queuedTask = new QueuedTask(taskId, instances, logicEnvironmentId);
             
             // 加入队列
             queue.offer(queuedTask);
-            LOGGER.info("任务已加入队列 - 逻辑环境ID: {}, 任务ID: {}, 队列大小: {}", logicEnvironmentId, taskId, queue.size());
+            LOGGER.info("Task added to queue - logic environment ID: {}, task ID: {}, queue size: {}", logicEnvironmentId, taskId, queue.size());
             
             // 启动异步任务处理队列（如果还没有启动）
             startQueueProcessor(logicEnvironmentId);
             
         } catch (Exception e) {
-            LOGGER.error("将任务加入队列失败 - 逻辑环境ID: {}, 任务ID: {}, 错误: {}", logicEnvironmentId, taskId, e.getMessage(), e);
+            LOGGER.error("Failed to add task to queue - logic environment ID: {}, task ID: {}, error: {}", logicEnvironmentId, taskId, e.getMessage(), e);
         }
     }
     
     /**
-     * start队列process器，异步process排队任务
+     * 启动队列处理器，异步处理排队任务
      * 
      * @param logicEnvironmentId 逻辑环境ID
      */
     private void startQueueProcessor(Long logicEnvironmentId) {
-        // 使用CompletableFuture异步process队列
+        // 使用CompletableFuture异步处理队列
         CompletableFuture.runAsync(() -> {
-            // 使用 computeIfAbsent 确保队列存在，如果不存在则create
+            // 使用 computeIfAbsent 确保队列存在，如果不存在则创建
             BlockingQueue<QueuedTask> queue = taskQueues.computeIfAbsent(logicEnvironmentId, k -> new LinkedBlockingQueue<>());
             if (queue == null) {
-                LOGGER.warn("无法创建或获取队列 - 逻辑环境ID: {}", logicEnvironmentId);
+                LOGGER.warn("Unable to create or get queue - logic environment ID: {}", logicEnvironmentId);
                 return;
             }
             
-            LOGGER.debug("开始处理队列 - 逻辑环境ID: {}, 队列大小: {}", logicEnvironmentId, queue.size());
+            LOGGER.debug("Start processing queue - logic environment ID: {}, queue size: {}", logicEnvironmentId, queue.size());
             
             while (!queue.isEmpty()) {
                 try {
@@ -2854,12 +2854,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         break;
                     }
                     
-                    // 在尝试执行前，先check任务状态
+                    // 在尝试执行前，先检查任务状态
                     if (!checkTaskStatus(queuedTask.getInstances())) {
-                        // 任务已stop，从队列中移除并记录日志
+                        // 任务已停止，从队列中移除并记录日志
                         QueuedTask removedTask = queue.poll();
                         if (removedTask != null) {
-                            LOGGER.info("任务在队列中等待时已被停止，从队列中移除 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, removedTask.getTaskId());
+                            LOGGER.info("Task stopped while waiting in queue, removed from queue - logic environment ID: {}, task ID: {}", logicEnvironmentId, removedTask.getTaskId());
                         }
                         continue; // 继续处理下一个任务
                     }
@@ -2872,39 +2872,39 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         if (task != null) {
                             // 再次检查任务状态（可能在检查UE可用性的过程中任务被停止）
                             if (!checkTaskStatus(task.getInstances())) {
-                                LOGGER.info("任务在checkUEavailable性后已被stop，取消执行 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, task.getTaskId());
+                                LOGGER.info("Task stopped after checking UE availability, canceling execution - logic environment ID: {}, task ID: {}", logicEnvironmentId, task.getTaskId());
                                 continue;
                             }
                             
-                            LOGGER.info("从队列中取出任务执行 - 逻辑环境ID: {}, 任务ID: {}", logicEnvironmentId, task.getTaskId());
+                            LOGGER.info("Task taken from queue for execution - logic environment ID: {}, task ID: {}", logicEnvironmentId, task.getTaskId());
                             
-                            // update任务状态为running中（如果任务在waiting中）
+                            // 更新任务状态为运行中（如果任务在等待中）
                             if (!task.getInstances().isEmpty()) {
                                 Long collectTaskId = task.getInstances().get(0).getCollectTaskId();
                                 if (collectTaskId != null) {
                                     CollectTask collectTask = collectTaskService.getCollectTaskById(collectTaskId);
                                     if (collectTask != null && "WAITING".equals(collectTask.getStatus())) {
                                         collectTaskService.updateTaskStatus(collectTaskId, "RUNNING");
-                                        LOGGER.info("任务状态已从等待中更新为运行中 - 任务ID: {}", collectTaskId);
+                                        LOGGER.info("Task status updated from WAITING to RUNNING - task ID: {}", collectTaskId);
                                     }
                                 }
                             }
                             
-                            // 重新执行任务create流程
+                            // 重新执行任务创建流程
                             createExecutionTaskForLogicEnvironment(logicEnvironmentId, task.getInstances());
                         }
                     } else {
-                        // UE不available，waiting一段时间后重试
-                        Thread.sleep(5000); // waiting5秒后重试
+                        // UE不可用，等待一段时间后重试
+                        Thread.sleep(5000); // 等待5秒后重试
                     }
                     
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    LOGGER.warn("队列处理器被中断 - 逻辑环境ID: {}", logicEnvironmentId);
+                    LOGGER.warn("Queue processor interrupted - logic environment ID: {}", logicEnvironmentId);
                     break;
                 } catch (Exception e) {
-                    LOGGER.error("处理队列任务失败 - 逻辑环境ID: {}, 错误: {}", logicEnvironmentId, e.getMessage(), e);
-                    // 发生错误时，waiting一段时间后continue
+                    LOGGER.error("Failed to process queue task - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage(), e);
+                    // 发生错误时，等待一段时间后继续
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException ie) {
@@ -2917,11 +2917,11 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
     }
     
     /**
-     * checkUE是否available（用于队列process，不update逻辑环境状态）
+     * 检查UE是否可用（用于队列处理，不更新逻辑环境状态）
      * 
      * @param ueList UE信息列表
      * @param logicEnvironmentId 逻辑环境ID
-     * @return true表示UEavailable，false表示UE不available
+     * @return true表示UE可用，false表示UE不可用
      */
     private boolean checkUeAvailabilityForQueue(List<TestCaseExecutionRequest.UeInfo> ueList, Long logicEnvironmentId) {
         if (ueList == null || ueList.isEmpty()) {
@@ -2940,17 +2940,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             return false;
         }
         
-        // checkUE是否available
+        // 检查UE是否可用
         List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
         
         return unavailableUeIds.isEmpty();
     }
     
     /**
-     * processUE状态update后的队列任务
-     * 当UE从in use变为available时，check是否有排队任务需要执行
+     * 处理UE状态更新后的队列任务
+     * 当UE从使用中变为可用时，检查是否有排队任务需要执行
      * 
-     * @param ueIds update的UE ID列表（Long类型，因为从UeServiceImpl传入）
+     * @param ueIds 更新的UE ID列表（Long类型，因为从UeServiceImpl传入）
      */
     public void processQueuedTasksAfterUeAvailable(List<Integer> ueIds) {
         if (ueIds == null || ueIds.isEmpty()) {
@@ -2958,12 +2958,12 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
         }
         
         try {
-            // 首先processUE级别的队列（优先级更高）
+            // 首先处理UE级别的队列（优先级更高）
             for (Integer ueId : ueIds) {
                 try {
                     processUeQueue(ueId);
                 } catch (Exception e) {
-                    LOGGER.error("处理UE队列失败 - UE ID: {}, 错误: {}", ueId, e.getMessage(), e);
+                    LOGGER.error("Failed to process UE queue - UE ID: {}, error: {}", ueId, e.getMessage(), e);
                 }
             }
             
@@ -2987,38 +2987,38 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 BlockingQueue<QueuedTask> queue = taskQueues.computeIfAbsent(logicEnvironmentId, k -> new LinkedBlockingQueue<>());
                 
                 if (queue != null && !queue.isEmpty()) {
-                    LOGGER.info("UE可用，检查排队任务 - 逻辑环境ID: {}, 队列大小: {}", logicEnvironmentId, queue.size());
+                    LOGGER.info("UE available, checking queued tasks - logic environment ID: {}, queue size: {}", logicEnvironmentId, queue.size());
                     
-                    // checkUE是否available，如果available则恢复逻辑环境状态
+                    // 检查UE是否可用，如果可用则恢复逻辑环境状态
                     List<TestCaseExecutionRequest.UeInfo> ueList = getLogicEnvironmentUeList(logicEnvironmentId);
                     if (checkUeAvailabilityForQueue(ueList, logicEnvironmentId)) {
-                        // UEavailable，恢复逻辑环境状态
+                        // UE可用，恢复逻辑环境状态
                         LogicEnvironment logicEnvironment = logicEnvironmentService.getById(logicEnvironmentId);
                         if (logicEnvironment != null && logicEnvironment.getStatus() != null && logicEnvironment.getStatus() == 0) {
-                            logicEnvironment.setStatus(1); // 1: available
+                            logicEnvironment.setStatus(1); // 1: 可用
                             logicEnvironmentService.updateById(logicEnvironment);
-                            LOGGER.info("逻辑环境已恢复为可用 - 逻辑环境ID: {}", logicEnvironmentId);
+                            LOGGER.info("Logic environment restored to available - logic environment ID: {}", logicEnvironmentId);
                         }
                     }
                     
                     startQueueProcessor(logicEnvironmentId);
                 } else {
-                    LOGGER.debug("逻辑环境队列为空或不存在 - 逻辑环境ID: {}", logicEnvironmentId);
+                    LOGGER.debug("Logic environment queue is empty or does not exist - logic environment ID: {}", logicEnvironmentId);
                 }
             }
             
         } catch (Exception e) {
-            LOGGER.error("处理UE可用后的队列任务失败 - UE IDs: {}, 错误: {}", ueIds, e.getMessage(), e);
+            LOGGER.error("Failed to process queued tasks after UE available - UE IDs: {}, error: {}", ueIds, e.getMessage(), e);
         }
     }
     
     /**
-     * initialize定时任务，在服务start时调用
-     * 每2分钟query一次waiting中的任务，checkUE状态，如果空闲则下发
+     * 初始化定时任务，在服务启动时调用
+     * 每2分钟查询一次等待中的任务，检查UE状态，如果空闲则下发
      */
     @PostConstruct
     public void initScheduledTask() {
-        LOGGER.info("初始化定时任务 - 每{}分钟查询一次等待中的任务", SCHEDULED_TASK_INTERVAL_MINUTES);
+        LOGGER.info("Initializing scheduled task - checking waiting tasks every {} minutes", SCHEDULED_TASK_INTERVAL_MINUTES);
         
         scheduledTaskExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "TaskQueueProcessor");
@@ -3034,16 +3034,16 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
             TimeUnit.MINUTES
         );
         
-        LOGGER.info("定时任务已启动 - 每{}分钟执行一次", SCHEDULED_TASK_INTERVAL_MINUTES);
+        LOGGER.info("Scheduled task started - executing every {} minutes", SCHEDULED_TASK_INTERVAL_MINUTES);
     }
     
     /**
-     * 销毁定时任务，在服务close时调用
+     * 销毁定时任务，在服务关闭时调用
      */
     @PreDestroy
     public void destroyScheduledTask() {
         if (scheduledTaskExecutor != null && !scheduledTaskExecutor.isShutdown()) {
-            LOGGER.info("正在关闭定时任务执行器...");
+            LOGGER.info("Shutting down scheduled task executor...");
             scheduledTaskExecutor.shutdown();
             try {
                 if (!scheduledTaskExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -3053,17 +3053,17 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                 scheduledTaskExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
-            LOGGER.info("定时任务执行器已关闭");
+            LOGGER.info("Scheduled task executor closed");
         }
     }
     
     /**
-     * processwaiting中的任务
-     * 遍历所有UE队列，checkUE状态，如果空闲则下发任务
+     * 处理等待中的任务
+     * 遍历所有UE队列，检查UE状态，如果空闲则下发任务
      */
     private void processWaitingTasks() {
         try {
-            LOGGER.debug("开始处理等待中的任务...");
+            LOGGER.debug("Start processing waiting tasks...");
             
             int totalProcessed = 0;
             int totalQueued = 0;
@@ -3094,27 +3094,27 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                         List<Integer> ueIds = extractUeIds(ueList);
                         
                         if (ueIds.isEmpty()) {
-                            LOGGER.warn("逻辑环境没有UE，跳过 - 逻辑环境ID: {}", logicEnvironmentId);
+                            LOGGER.warn("Logic environment has no UE, skipping - logic environment ID: {}", logicEnvironmentId);
                             continue;
                         }
                         
-                        // checkUE是否available
+                        // 检查UE是否可用
                         List<Integer> unavailableUeIds = ueService.checkUesAvailability(ueIds);
                         
                         if (unavailableUeIds.isEmpty()) {
-                            // UE都空闲，尝试process队列中的任务
+                            // UE都空闲，尝试处理队列中的任务
                             // 查找队列中属于该逻辑环境的任务
                             QueuedTask queuedTask = null;
                             for (QueuedTask task : queue) {
                                 if (task != null && logicEnvironmentId.equals(task.getLogicEnvironmentId())) {
-                                    // check任务状态
+                                    // 检查任务状态
                                     if (checkTaskStatus(task.getInstances())) {
                                         queuedTask = task;
                                         break;
                                     } else {
-                                        // 任务已stop，从队列中移除
+                                        // 任务已停止，从队列中移除
                                         queue.remove(task);
-                                        LOGGER.info("任务已停止，从队列中移除 - 逻辑环境ID: {}, 任务ID: {}", 
+                                        LOGGER.info("Task stopped, removed from queue - logic environment ID: {}, task ID: {}", 
                                                 logicEnvironmentId, task.getTaskId());
                                     }
                                 }
@@ -3128,13 +3128,13 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 // 立即标记UE为使用中
                                 boolean marked = ueService.markUesInUse(ueIds);
                                 if (!marked) {
-                                    LOGGER.warn("标记UE为使用中失败，任务重新加入队列 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", 
+                                    LOGGER.warn("Failed to mark UE as in use, task re-added to queue - logic environment ID: {}, task ID: {}, UE IDs: {}", 
                                             logicEnvironmentId, taskId, ueIds);
-                                    // markfailed，重新加入队列
+                                    // 标记失败，重新加入队列
                                     queue.offer(queuedTask);
                                     continue;
                                 }
-                                LOGGER.info("UE已标记为使用中 - 逻辑环境ID: {}, 任务ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
+                                LOGGER.info("UE marked as in use - logic environment ID: {}, task ID: {}, UE IDs: {}", logicEnvironmentId, taskId, ueIds);
                                 
                                 // 更新任务状态为运行中
                                 if (!queuedTask.getInstances().isEmpty()) {
@@ -3149,34 +3149,34 @@ public class CollectTaskProcessServiceImpl implements CollectTaskProcessService 
                                 
                                 if (success) {
                                     totalProcessed++;
-                                    LOGGER.info("定时任务成功下发任务 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
+                                    LOGGER.info("Scheduled task successfully dispatched task - logic environment ID: {}, UE IDs: {}, task ID: {}", 
                                             logicEnvironmentId, ueIds, taskId);
                                 } else {
-                                    // createfailed，releaseUE（mark为available）并将任务重新加入队列
-                                    LOGGER.warn("创建执行任务失败，释放UE并重新加入队列 - 逻辑环境ID: {}, UE IDs: {}, 任务ID: {}", 
+                                    // 创建失败，释放UE（标记为可用）并将任务重新加入队列
+                                    LOGGER.warn("Failed to create execution task, releasing UE and re-adding to queue - logic environment ID: {}, UE IDs: {}, task ID: {}", 
                                             logicEnvironmentId, ueIds, taskId);
                                     ueService.markUesAvailable(ueIds);
                                     queue.offer(queuedTask);
                                 }
                             }
                         } else {
-                            LOGGER.debug("UEin use，任务continuewaiting - 逻辑环境ID: {}, 不availableUE IDs: {}", 
+                            LOGGER.debug("UE in use, task continues waiting - logic environment ID: {}, unavailable UE IDs: {}", 
                                     logicEnvironmentId, unavailableUeIds);
                         }
                     } catch (Exception e) {
-                        LOGGER.error("process逻辑环境任务failed - 逻辑环境ID: {}, error: {}", logicEnvironmentId, e.getMessage(), e);
+                        LOGGER.error("Failed to process logic environment task - logic environment ID: {}, error: {}", logicEnvironmentId, e.getMessage(), e);
                     }
                 }
             }
             
             if (totalQueued > 0) {
-                LOGGER.info("定时任务processcompleted - 队列中任务数: {}, success下发: {}", totalQueued, totalProcessed);
+                LOGGER.info("Scheduled task processing completed - queued tasks: {}, successfully dispatched: {}", totalQueued, totalProcessed);
             } else {
-                LOGGER.debug("定时任务processcompleted - 没有waiting中的任务");
+                LOGGER.debug("Scheduled task processing completed - no waiting tasks");
             }
             
         } catch (Exception e) {
-            LOGGER.error("processwaiting中的任务异常 - error: {}", e.getMessage(), e);
+            LOGGER.error("处理等待中的任务异常 - 错误: {}", e.getMessage(), e);
         }
     }
 }
