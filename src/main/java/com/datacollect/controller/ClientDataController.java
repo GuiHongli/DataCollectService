@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -72,6 +71,11 @@ public class ClientDataController {
      * @param current 当前页
      * @param size 每页大小
      * @param taskId 任务ID（可选，用于搜索）
+     * @param nation 国家（可选，用于搜索）
+     * @param operator 运营商（可选，用于搜索）
+     * @param prb PRB（可选，用于搜索）
+     * @param rsrp RSRP（可选，用于搜索）
+     * @param userCategory 用户类别（可选，用于搜索）
      * @param service 业务大类（可选，用于搜索）
      * @param app 应用名称（可选，用于搜索）
      * @return 分页结果
@@ -81,6 +85,11 @@ public class ClientDataController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String taskId,
+            @RequestParam(required = false) String nation,
+            @RequestParam(required = false) String operator,
+            @RequestParam(required = false) String prb,
+            @RequestParam(required = false) String rsrp,
+            @RequestParam(required = false) String userCategory,
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String app) {
         try {
@@ -90,6 +99,21 @@ public class ClientDataController {
             // 搜索条件
             if (taskId != null && !taskId.trim().isEmpty()) {
                 queryWrapper.like("task_id", taskId);
+            }
+            if (nation != null && !nation.trim().isEmpty()) {
+                queryWrapper.like("nation", nation);
+            }
+            if (operator != null && !operator.trim().isEmpty()) {
+                queryWrapper.like("operator", operator);
+            }
+            if (prb != null && !prb.trim().isEmpty()) {
+                queryWrapper.like("prb", prb);
+            }
+            if (rsrp != null && !rsrp.trim().isEmpty()) {
+                queryWrapper.like("rsrp", rsrp);
+            }
+            if (userCategory != null && !userCategory.trim().isEmpty()) {
+                queryWrapper.like("user_category", userCategory);
             }
             if (service != null && !service.trim().isEmpty()) {
                 queryWrapper.like("service", service);
