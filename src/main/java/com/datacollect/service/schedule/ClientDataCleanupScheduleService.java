@@ -91,12 +91,12 @@ public class ClientDataCleanupScheduleService {
             LocalDateTime threeMonthsAgo = LocalDateTime.now().minusMonths(3);
             LOGGER.info("Cleaning up client data before: {}", threeMonthsAgo);
             
-            // 查询3个月前的任务信息（包括已逻辑删除的）
+            // 查询3个月前的任务信息（只处理未逻辑删除的数据）
+            // 使用Mapper直接查询，避免逻辑删除过滤
             QueryWrapper<ClientTaskInfo> taskInfoWrapper = new QueryWrapper<>();
             taskInfoWrapper.lt("create_time", threeMonthsAgo);
-            // 注意：这里需要查询所有数据，包括已逻辑删除的，所以不使用逻辑删除过滤
-            taskInfoWrapper.last("AND deleted = 0"); // 只处理未逻辑删除的数据
-            List<ClientTaskInfo> oldTaskInfos = taskInfoService.list(taskInfoWrapper);
+            taskInfoWrapper.eq("deleted", 0); // 只处理未逻辑删除的数据
+            List<ClientTaskInfo> oldTaskInfos = taskInfoMapper.selectList(taskInfoWrapper);
             
             if (oldTaskInfos == null || oldTaskInfos.isEmpty()) {
                 LOGGER.info("No old client data found to cleanup");
