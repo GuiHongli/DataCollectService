@@ -982,5 +982,105 @@ public class ClientDataController {
             return Result.error("获取平均QOE对比数据失败: " + e.getMessage());
         }
     }
+
+    /**
+     * 更新任务信息
+     *
+     * @param taskId 任务ID
+     * @param request 更新数据
+     * @return 更新结果
+     */
+    @PutMapping("/task-info/{taskId}")
+    public Result<ClientTaskInfo> updateTaskInfo(
+            @PathVariable String taskId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskId);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(queryWrapper);
+            
+            if (taskInfo == null) {
+                return Result.error("任务信息不存在");
+            }
+            
+            // 更新字段
+            if (request.containsKey("service")) {
+                taskInfo.setService(request.get("service") != null ? request.get("service").toString() : null);
+            }
+            if (request.containsKey("app")) {
+                taskInfo.setApp(request.get("app") != null ? request.get("app").toString() : null);
+            }
+            if (request.containsKey("nation")) {
+                taskInfo.setNation(request.get("nation") != null ? request.get("nation").toString() : null);
+            }
+            if (request.containsKey("operator")) {
+                taskInfo.setOperator(request.get("operator") != null ? request.get("operator").toString() : null);
+            }
+            if (request.containsKey("deviceId")) {
+                taskInfo.setDeviceId(request.get("deviceId") != null ? request.get("deviceId").toString() : null);
+            }
+            if (request.containsKey("startTime")) {
+                taskInfo.setStartTime(request.get("startTime") != null ? request.get("startTime").toString() : null);
+            }
+            if (request.containsKey("endTime")) {
+                taskInfo.setEndTime(request.get("endTime") != null ? request.get("endTime").toString() : null);
+            }
+            if (request.containsKey("prb")) {
+                taskInfo.setPrb(request.get("prb") != null ? request.get("prb").toString() : null);
+            }
+            if (request.containsKey("rsrp")) {
+                taskInfo.setRsrp(request.get("rsrp") != null ? request.get("rsrp").toString() : null);
+            }
+            if (request.containsKey("userCategory")) {
+                taskInfo.setUserCategory(request.get("userCategory") != null ? request.get("userCategory").toString() : null);
+            }
+            
+            boolean success = taskInfoService.updateById(taskInfo);
+            
+            if (success) {
+                LOGGER.info("Task info updated successfully - taskId: {}", taskId);
+                return Result.success(taskInfo);
+            } else {
+                LOGGER.error("Failed to update task info - taskId: {}", taskId);
+                return Result.error("更新失败");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to update task info - taskId: {}, error: {}", taskId, e.getMessage(), e);
+            return Result.error("更新失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除任务（逻辑删除）
+     *
+     * @param taskId 任务ID
+     * @return 删除结果
+     */
+    @DeleteMapping("/task-info/{taskId}")
+    public Result<Void> deleteTaskInfo(@PathVariable String taskId) {
+        try {
+            QueryWrapper<ClientTaskInfo> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("task_id", taskId);
+            ClientTaskInfo taskInfo = taskInfoService.getOne(queryWrapper);
+            
+            if (taskInfo == null) {
+                return Result.error("任务信息不存在");
+            }
+            
+            // 逻辑删除
+            boolean success = taskInfoService.removeById(taskInfo.getId());
+            
+            if (success) {
+                LOGGER.info("Task info deleted successfully (logical delete) - taskId: {}", taskId);
+                return Result.success(null);
+            } else {
+                LOGGER.error("Failed to delete task info - taskId: {}", taskId);
+                return Result.error("删除失败");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to delete task info - taskId: {}, error: {}", taskId, e.getMessage(), e);
+            return Result.error("删除失败: " + e.getMessage());
+        }
+    }
 }
 
