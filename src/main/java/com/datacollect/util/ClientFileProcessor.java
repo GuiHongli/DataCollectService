@@ -1,6 +1,7 @@
 package com.datacollect.util;
 
 import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.GameDelayData;
 import com.datacollect.entity.LostData;
 import com.datacollect.entity.NetworkData;
 import com.datacollect.entity.RttData;
@@ -432,14 +433,17 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 解压端侧压缩包并解析vmos-10s.xlsx
+     * 解压端侧压缩包并解析vmos Excel文件
+     * 支持多个文件源：short_video_report.xlsx, launch_live_show_report.xlsx, watch_live_show_report.xlsx,
+     * long_video_report.xlsx, office_report.xlsx, im_report.xlsx, game_report.xlsx, cloud_game_report.xlsx
+     * 一次解析只处理一个文件
      *
      * @param zipFilePath 压缩包文件路径
-     * @return VmosData列表，如果Failed to parse 返回空列表
+     * @return VmosData列表，如果解析失败返回空列表
      * @throws IOException IO异常
      */
     public static List<VmosData> extractAndParseVmosExcel(String zipFilePath) throws IOException {
-        LOGGER.info("开始解压端侧文件并解析vmos-{}文件: {}", FILE_SUFFIX, zipFilePath);
+        LOGGER.info("开始解压端侧文件并解析vmos文件: {}", zipFilePath);
 
         Path zipPath = Paths.get(zipFilePath);
         if (!Files.exists(zipPath)) {
@@ -454,19 +458,16 @@ public class ClientFileProcessor {
             // 解压文件
             extractZipFile(zipPath, extractDir);
 
-            // 查找并解析vmos文件
-            Path vmosExcelPath = extractDir.resolve("vmos-" + FILE_SUFFIX + ".xlsx");
-            if (!Files.exists(vmosExcelPath)) {
-                // 尝试在子目录中查找
-                vmosExcelPath = findVmosExcelFile(extractDir);
-            }
+            // 查找并解析vmos文件（按优先级查找，找到第一个就解析）
+            Path vmosExcelPath = findVmosExcelFile(extractDir);
 
             if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
-                LOGGER.info("Foundvmos-{} file: {}", FILE_SUFFIX, vmosExcelPath);
-                vmosDataList = parseVmosExcel(vmosExcelPath);
-                LOGGER.info("vmos-{} parsed successfully: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
+                String fileName = vmosExcelPath.getFileName().toString();
+                LOGGER.info("Found vmos file: {}", vmosExcelPath);
+                vmosDataList = parseVmosExcel(vmosExcelPath, fileName);
+                LOGGER.info("vmos file parsed successfully: {}, 共{}条记录", fileName, vmosDataList.size());
             } else {
-                LOGGER.warn("未找到vmos-{}文件", FILE_SUFFIX);
+                LOGGER.warn("未找到vmos文件");
             }
 
         } finally {
@@ -483,27 +484,50 @@ public class ClientFileProcessor {
     }
 
     /**
-     * 递归查找vmos-10s.xlsx文件
+     * 递归查找vmos Excel文件
+     * 按优先级查找：short_video_report.xlsx, launch_live_show_report.xlsx, watch_live_show_report.xlsx,
+     * long_video_report.xlsx, office_report.xlsx, im_report.xlsx, game_report.xlsx, cloud_game_report.xlsx
      *
      * @param directory 搜索目录
-     * @return vmos-10s.xlsx文件路径，如果未找到返回null
+     * @return vmos Excel文件路径，如果未找到返回null
      */
     private static Path findVmosExcelFile(Path directory) throws IOException {
-        return Files.walk(directory)
-                .filter(path -> path.getFileName() != null && 
-                        path.getFileName().toString().equalsIgnoreCase("vmos-" + FILE_SUFFIX + ".xlsx"))
-                .findFirst()
-                .orElse(null);
+        // 按优先级定义的文件名列表
+        String[] vmosFileNames = {
+            "short_video_report.xlsx",
+            "launch_live_show_report.xlsx",
+            "watch_live_show_report.xlsx",
+            "long_video_report.xlsx",
+            "office_report.xlsx",
+            "im_report.xlsx",
+            "game_report.xlsx",
+            "cloud_game_report.xlsx"
+        };
+
+        // 按优先级查找文件
+        for (String fileName : vmosFileNames) {
+            Path found = Files.walk(directory)
+                    .filter(path -> path.getFileName() != null && 
+                            path.getFileName().toString().equalsIgnoreCase(fileName))
+                    .findFirst()
+                    .orElse(null);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     /**
-     * 解析vmos-10s.xlsx文件
+     * 解析vmos Excel文件
      *
      * @param excelPath Excel文件路径
+     * @param fileName 文件名（用于确定解析格式）
      * @return VmosData列表
      * @throws IOException IO异常
      */
-    private static List<VmosData> parseVmosExcel(Path excelPath) throws IOException {
+    private static List<VmosData> parseVmosExcel(Path excelPath, String fileName) throws IOException {
         List<VmosData> vmosDataList = new ArrayList<>();
 
         try (FileInputStream fis = new FileInputStream(excelPath.toFile());
@@ -519,60 +543,189 @@ public class ClientFileProcessor {
                     continue;
                 }
 
-                VmosData vmosData = parseVmosRow(row, evaluator);
+                VmosData vmosData = parseVmosRowByFileName(row, evaluator, fileName);
                 if (vmosData != null) {
                     vmosDataList.add(vmosData);
                 }
             }
 
-            LOGGER.info("Parsing vmos-{} completed，共{}条记录", FILE_SUFFIX, vmosDataList.size());
+            LOGGER.info("Parsing vmos file {} completed，共{}条记录", fileName, vmosDataList.size());
         } catch (Exception e) {
-            LOGGER.error("Failed to parse vmos-{}: {}", FILE_SUFFIX, e.getMessage(), e);
-            throw new IOException("解析vmos-" + FILE_SUFFIX + "失败: " + e.getMessage(), e);
+            LOGGER.error("Failed to parse vmos file {}: {}", fileName, e.getMessage(), e);
+            throw new IOException("解析vmos文件失败: " + fileName + ", " + e.getMessage(), e);
         }
 
         return vmosDataList;
     }
 
     /**
-     * 解析vMOS数据行
-     * 列顺序：序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率（s_lost_packet_rate）、卡顿占比（s_stall_rate）、α、β、vMOS、avgQOE
+     * 根据文件名解析vMOS数据行
      *
      * @param row 行数据
      * @param evaluator 公式计算器
+     * @param fileName 文件名
      * @return VmosData对象
      */
-    private static VmosData parseVmosRow(Row row, FormulaEvaluator evaluator) {
+    private static VmosData parseVmosRowByFileName(Row row, FormulaEvaluator evaluator, String fileName) {
         try {
             if (isEmptyVmosRow(row, evaluator)) {
                 return null;
             }
 
-            VmosData vmosData = new VmosData();
-            vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
-            vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
-            vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
-            vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
-            vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
-            vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
-            vmosData.setInitialBufferingDelay(getCellValue(row.getCell(6), evaluator));
-            vmosData.setBitrate(getCellValue(row.getCell(7), evaluator));
-            vmosData.setCalculatedResolution(getCellValue(row.getCell(8), evaluator));
-            vmosData.setVideoExperience(getCellValue(row.getCell(9), evaluator));
-            vmosData.setInteractionExperience(getCellValue(row.getCell(10), evaluator));
-            vmosData.setPresentationExperience(getCellValue(row.getCell(11), evaluator));
-            vmosData.setSLostPacketRate(getCellValue(row.getCell(12), evaluator));
-            vmosData.setSStallRate(getCellValue(row.getCell(13), evaluator));
-            vmosData.setAlpha(getCellValue(row.getCell(14), evaluator));
-            vmosData.setBeta(getCellValue(row.getCell(15), evaluator));
-            vmosData.setVmos(getCellValue(row.getCell(16), evaluator));
-            vmosData.setAvgQoe(getCellValue(row.getCell(17), evaluator));
-
-            return vmosData;
+            String lowerFileName = fileName.toLowerCase();
+            
+            if (lowerFileName.equals("short_video_report.xlsx")) {
+                // 18列：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+                return parseVmosRow18Columns(row, evaluator);
+            } else if (lowerFileName.equals("launch_live_show_report.xlsx") || 
+                       lowerFileName.equals("watch_live_show_report.xlsx") || 
+                       lowerFileName.equals("long_video_report.xlsx") ||
+                       lowerFileName.equals("cloud_game_report.xlsx")) {
+                // 17列：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+                return parseVmosRow17Columns(row, evaluator);
+            } else if (lowerFileName.equals("office_report.xlsx") || 
+                       lowerFileName.equals("im_report.xlsx")) {
+                // 18列：vMos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、初始缓冲时间/丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vMoS/vmos、avgQoe
+                return parseVmosRow18ColumnsOffice(row, evaluator, lowerFileName.equals("im_report.xlsx"));
+            } else if (lowerFileName.equals("game_report.xlsx")) {
+                // 13列：vmos类序号、RTT、丢包率、卡顿占比、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vmos、aveQoe
+                return parseVmosRow13Columns(row, evaluator);
+            } else {
+                LOGGER.warn("Unknown vmos file format: {}, using default 18 columns parser", fileName);
+                return parseVmosRow18Columns(row, evaluator);
+            }
         } catch (Exception e) {
             LOGGER.error("Error parsing vMOS row {}: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 解析vMOS数据行（18列格式 - short_video_report.xlsx）
+     * 列顺序：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+     */
+    private static VmosData parseVmosRow18Columns(Row row, FormulaEvaluator evaluator) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
+        vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
+        vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
+        vmosData.setInitialBufferingDelay(getCellValue(row.getCell(6), evaluator));
+        vmosData.setBitrate(getCellValue(row.getCell(7), evaluator));
+        vmosData.setCalculatedResolution(getCellValue(row.getCell(8), evaluator));
+        vmosData.setVideoExperience(getCellValue(row.getCell(9), evaluator));
+        vmosData.setInteractionExperience(getCellValue(row.getCell(10), evaluator));
+        vmosData.setPresentationExperience(getCellValue(row.getCell(11), evaluator));
+        vmosData.setSLostPacketRate(getCellValue(row.getCell(12), evaluator));
+        vmosData.setSStallRate(getCellValue(row.getCell(13), evaluator));
+        vmosData.setAlpha(getCellValue(row.getCell(14), evaluator));
+        vmosData.setBeta(getCellValue(row.getCell(15), evaluator));
+        vmosData.setVmos(getCellValue(row.getCell(16), evaluator));
+        vmosData.setAvgQoe(getCellValue(row.getCell(17), evaluator));
+        return vmosData;
+    }
+
+    /**
+     * 解析vMOS数据行（17列格式 - launch_live_show_report.xlsx, watch_live_show_report.xlsx, long_video_report.xlsx, cloud_game_report.xlsx）
+     * 列顺序：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+     */
+    private static VmosData parseVmosRow17Columns(Row row, FormulaEvaluator evaluator) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
+        vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
+        vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
+        // 跳过初缓时延（第6列不存在）
+        vmosData.setInitialBufferingDelay(null);
+        vmosData.setBitrate(getCellValue(row.getCell(6), evaluator));
+        vmosData.setCalculatedResolution(getCellValue(row.getCell(7), evaluator));
+        vmosData.setVideoExperience(getCellValue(row.getCell(8), evaluator));
+        vmosData.setInteractionExperience(getCellValue(row.getCell(9), evaluator));
+        vmosData.setPresentationExperience(getCellValue(row.getCell(10), evaluator));
+        vmosData.setSLostPacketRate(getCellValue(row.getCell(11), evaluator));
+        vmosData.setSStallRate(getCellValue(row.getCell(12), evaluator));
+        vmosData.setAlpha(getCellValue(row.getCell(13), evaluator));
+        vmosData.setBeta(getCellValue(row.getCell(14), evaluator));
+        vmosData.setVmos(getCellValue(row.getCell(15), evaluator));
+        vmosData.setAvgQoe(getCellValue(row.getCell(16), evaluator));
+        return vmosData;
+    }
+
+    /**
+     * 解析vMOS数据行（18列格式 - office_report.xlsx, im_report.xlsx）
+     * office_report.xlsx列顺序：vMos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、初始缓冲时间、丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vMoS、avgQoe
+     * im_report.xlsx列顺序：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vmos、avgQoe
+     */
+    private static VmosData parseVmosRow18ColumnsOffice(Row row, FormulaEvaluator evaluator, boolean isImReport) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
+        vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
+        vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
+        vmosData.setInitialBufferingDelay(getCellValue(row.getCell(6), evaluator));
+        vmosData.setBitrate(getCellValue(row.getCell(7), evaluator));
+        vmosData.setCalculatedResolution(getCellValue(row.getCell(8), evaluator));
+        
+        if (isImReport) {
+            // im_report.xlsx: 丢包率(s_lost_packet_rate)在第9列
+            vmosData.setSLostPacketRate(getCellValue(row.getCell(9), evaluator));
+            vmosData.setSStallRate(getCellValue(row.getCell(10), evaluator));
+            vmosData.setVideoExperience(getCellValue(row.getCell(11), evaluator));
+            vmosData.setInteractionExperience(getCellValue(row.getCell(12), evaluator));
+            vmosData.setPresentationExperience(getCellValue(row.getCell(13), evaluator));
+            vmosData.setAlpha(getCellValue(row.getCell(14), evaluator));
+            vmosData.setBeta(getCellValue(row.getCell(15), evaluator));
+            vmosData.setVmos(getCellValue(row.getCell(16), evaluator));
+            vmosData.setAvgQoe(getCellValue(row.getCell(17), evaluator));
+        } else {
+            // office_report.xlsx: vMos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、初始缓冲时间、丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vMoS、avgQoe
+            // 初始缓冲时间字段在VmosData中没有对应字段，跳过（索引9）
+            vmosData.setSLostPacketRate(getCellValue(row.getCell(10), evaluator));
+            vmosData.setSStallRate(getCellValue(row.getCell(11), evaluator));
+            vmosData.setVideoExperience(getCellValue(row.getCell(12), evaluator));
+            vmosData.setInteractionExperience(getCellValue(row.getCell(13), evaluator));
+            vmosData.setPresentationExperience(getCellValue(row.getCell(14), evaluator));
+            vmosData.setAlpha(getCellValue(row.getCell(15), evaluator));
+            vmosData.setBeta(getCellValue(row.getCell(16), evaluator));
+            vmosData.setVmos(getCellValue(row.getCell(17), evaluator));
+            vmosData.setAvgQoe(getCellValue(row.getCell(18), evaluator));
+        }
+        return vmosData;
+    }
+
+    /**
+     * 解析vMOS数据行（13列格式 - game_report.xlsx）
+     * 列顺序：vmos类序号、RTT、丢包率、卡顿占比、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vmos、aveQoe
+     */
+    private static VmosData parseVmosRow13Columns(Row row, FormulaEvaluator evaluator) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        // 跳过速率和分辨率（不存在）
+        vmosData.setSpeed(null);
+        vmosData.setResolution(null);
+        vmosData.setRtt(getCellValue(row.getCell(1), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(2), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(3), evaluator));
+        // 跳过初缓时延、码率、计算分辨率（不存在）
+        vmosData.setInitialBufferingDelay(null);
+        vmosData.setBitrate(null);
+        vmosData.setCalculatedResolution(null);
+        vmosData.setVideoExperience(getCellValue(row.getCell(4), evaluator));
+        vmosData.setInteractionExperience(getCellValue(row.getCell(5), evaluator));
+        vmosData.setPresentationExperience(getCellValue(row.getCell(6), evaluator));
+        vmosData.setSLostPacketRate(getCellValue(row.getCell(7), evaluator));
+        vmosData.setSStallRate(getCellValue(row.getCell(8), evaluator));
+        vmosData.setAlpha(getCellValue(row.getCell(9), evaluator));
+        vmosData.setBeta(getCellValue(row.getCell(10), evaluator));
+        vmosData.setVmos(getCellValue(row.getCell(11), evaluator));
+        vmosData.setAvgQoe(getCellValue(row.getCell(12), evaluator));
+        return vmosData;
     }
 
     /**
@@ -1022,6 +1175,124 @@ public class ClientFileProcessor {
     }
 
     /**
+     * 解压端侧压缩包并解析game-delay.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return GameDelayData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<GameDelayData> extractAndParseGameDelayCsv(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsing game-delay.csv file: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<GameDelayData> gameDelayDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析game-delay文件
+            Path gameDelayCsvPath = extractDir.resolve("game-delay.csv");
+            if (!Files.exists(gameDelayCsvPath)) {
+                // 尝试在子目录中查找
+                gameDelayCsvPath = findGameDelayCsvFile(extractDir);
+            }
+
+            if (gameDelayCsvPath != null && Files.exists(gameDelayCsvPath)) {
+                LOGGER.info("Found game-delay.csv file: {}", gameDelayCsvPath);
+                gameDelayDataList = parseGameDelayCsv(gameDelayCsvPath);
+                LOGGER.info("game-delay.csv parsed successfully: 共{}条记录", gameDelayDataList.size());
+            } else {
+                LOGGER.warn("未找到game-delay.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return gameDelayDataList;
+    }
+
+    /**
+     * 递归查找game-delay.csv文件
+     *
+     * @param directory 搜索目录
+     * @return game-delay.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findGameDelayCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("game-delay.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析game-delay.csv文件
+     * 列顺序：index、delay(ms)
+     *
+     * @param csvPath CSV文件路径
+     * @return GameDelayData列表
+     * @throws IOException IO异常
+     */
+    private static List<GameDelayData> parseGameDelayCsv(Path csvPath) throws IOException {
+        List<GameDelayData> gameDelayDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("index") || 
+                        line.toLowerCase().contains("delay")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 2) {
+                    GameDelayData gameDelayData = new GameDelayData();
+                    gameDelayData.setIndexValue(values[0].trim());
+                    gameDelayData.setDelay(values[1].trim());
+                    gameDelayDataList.add(gameDelayData);
+                } else {
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
+                }
+            }
+
+            LOGGER.info("Parsing game-delay.csv completed，共{}条记录", gameDelayDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse game-delay.csv: {}", e.getMessage(), e);
+            throw new IOException("解析game-delay.csv失败: " + e.getMessage(), e);
+        }
+
+        return gameDelayDataList;
+    }
+
+    /**
      * 解压网络侧压缩包并解析CSV文件
      *
      * @param zipFilePath 压缩包文件路径
@@ -1418,6 +1689,7 @@ public class ClientFileProcessor {
         private List<RttData> rttDataList;
         private List<LostData> lostDataList;
         private List<VideoData> videoDataList;
+        private List<GameDelayData> gameDelayDataList;
 
         public TaskInfoDTO getTaskInfo() {
             return taskInfo;
@@ -1466,11 +1738,20 @@ public class ClientFileProcessor {
         public void setVideoDataList(List<VideoData> videoDataList) {
             this.videoDataList = videoDataList;
         }
+
+        public List<GameDelayData> getGameDelayDataList() {
+            return gameDelayDataList;
+        }
+
+        public void setGameDelayDataList(List<GameDelayData> gameDelayDataList) {
+            this.gameDelayDataList = gameDelayDataList;
+        }
     }
 
     /**
-     * 解压端侧压缩包并统一解析所有数据（taskInfo、vmos、rtt、video、speed、lost）
+     * 解压端侧压缩包并统一解析所有数据（taskInfo、vmos、rtt、video、speed、lost、game-delay）
      * 只解压一次，然后统一处理所有数据
+     * 文件存在则解析，不存在则跳过
      *
      * @param zipFilePath 压缩包文件路径
      * @return ClientDataResult对象，包含所有解析结果
@@ -1533,21 +1814,19 @@ public class ClientFileProcessor {
 
             // 解析vmos文件
             try {
-                Path vmosExcelPath = extractDir.resolve("vmos-" + FILE_SUFFIX + ".xlsx");
-                if (!Files.exists(vmosExcelPath)) {
-                    vmosExcelPath = findVmosExcelFile(extractDir);
-                }
+                Path vmosExcelPath = findVmosExcelFile(extractDir);
                 if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
-                    LOGGER.info("Foundvmos-{} file: {}", FILE_SUFFIX, vmosExcelPath);
-                    List<VmosData> vmosDataList = parseVmosExcel(vmosExcelPath);
+                    String fileName = vmosExcelPath.getFileName().toString();
+                    LOGGER.info("Found vmos file: {}", vmosExcelPath);
+                    List<VmosData> vmosDataList = parseVmosExcel(vmosExcelPath, fileName);
                     result.setVmosDataList(vmosDataList);
-                    LOGGER.info("vmos-{} parsed successfully: 共{}条记录", FILE_SUFFIX, vmosDataList.size());
+                    LOGGER.info("vmos file parsed successfully: {}, 共{}条记录", fileName, vmosDataList.size());
                 } else {
-                    LOGGER.warn("未Foundvmos-{} file", FILE_SUFFIX);
+                    LOGGER.warn("未找到vmos文件");
                     result.setVmosDataList(new ArrayList<>());
                 }
             } catch (Exception e) {
-                LOGGER.error("解析vmos-{}失败: {}", FILE_SUFFIX, e.getMessage(), e);
+                LOGGER.error("解析vmos文件失败: {}", e.getMessage(), e);
                 result.setVmosDataList(new ArrayList<>());
             }
 
@@ -1609,6 +1888,26 @@ public class ClientFileProcessor {
             } catch (Exception e) {
                 LOGGER.error("Failed to parse video-quality.csv: {}", e.getMessage(), e);
                 result.setVideoDataList(new ArrayList<>());
+            }
+
+            // 解析game-delay文件
+            try {
+                Path gameDelayCsvPath = extractDir.resolve("game-delay.csv");
+                if (!Files.exists(gameDelayCsvPath)) {
+                    gameDelayCsvPath = findGameDelayCsvFile(extractDir);
+                }
+                if (gameDelayCsvPath != null && Files.exists(gameDelayCsvPath)) {
+                    LOGGER.info("Found game-delay.csv file: {}", gameDelayCsvPath);
+                    List<GameDelayData> gameDelayDataList = parseGameDelayCsv(gameDelayCsvPath);
+                    result.setGameDelayDataList(gameDelayDataList);
+                    LOGGER.info("game-delay.csv parsed successfully: 共{}条记录", gameDelayDataList.size());
+                } else {
+                    LOGGER.warn("未找到game-delay.csv文件");
+                    result.setGameDelayDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析game-delay.csv失败: {}", e.getMessage(), e);
+                result.setGameDelayDataList(new ArrayList<>());
             }
 
             LOGGER.info("所有数据解析完成");

@@ -1,6 +1,7 @@
 package com.datacollect.service;
 
 import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.GameDelayData;
 import com.datacollect.entity.LostData;
 import com.datacollect.entity.NetworkData;
 import com.datacollect.entity.RttData;
@@ -62,6 +63,9 @@ public class FtpFileProcessService {
 
     @Autowired
     private VideoDataService videoDataService;
+
+    @Autowired
+    private GameDelayDataService gameDelayDataService;
 
     @Autowired
     private NetworkDataService networkDataService;
@@ -376,6 +380,23 @@ public class FtpFileProcessService {
                             }
                         } catch (Exception e) {
                             LOGGER.error("Error saving VideoData - taskId: {}, error: {}", 
+                                    taskInfo.getTaskId(), e.getMessage(), e);
+                        }
+
+                        // save game-delay数据
+                        try {
+                            List<GameDelayData> gameDelayDataList = clientDataResult.getGameDelayDataList();
+                            if (gameDelayDataList != null && !gameDelayDataList.isEmpty()) {
+                                boolean saved = gameDelayDataService.batchSaveGameDelayData(gameDelayDataList, taskInfo.getTaskId());
+                                if (saved) {
+                                    LOGGER.info("GameDelayData saved to database successfully - taskId: {}, count: {}", 
+                                            taskInfo.getTaskId(), gameDelayDataList.size());
+                                } else {
+                                    LOGGER.warn("Failed to save GameDelayData to database - taskId: {}", taskInfo.getTaskId());
+                                }
+                            }
+                        } catch (Exception e) {
+                            LOGGER.error("Error saving GameDelayData - taskId: {}, error: {}", 
                                     taskInfo.getTaskId(), e.getMessage(), e);
                         }
                     } else {
@@ -883,6 +904,22 @@ public class FtpFileProcessService {
                         }
                     } catch (Exception e) {
                         LOGGER.error("Error saving VideoData - taskId: {}, error: {}",
+                                taskInfo.getTaskId(), e.getMessage(), e);
+                    }
+
+                    // save game-delay数据
+                    try {
+                        List<GameDelayData> gameDelayDataList = clientDataResult.getGameDelayDataList();
+                        if (gameDelayDataList != null && !gameDelayDataList.isEmpty()) {
+                            boolean savedGameDelay = gameDelayDataService.batchSaveGameDelayData(gameDelayDataList, taskInfo.getTaskId());
+                            if (savedGameDelay) {
+                                LOGGER.info("GameDelayData saved to database successfully - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), gameDelayDataList.size());
+                                result.put("gameDelayDataCount", gameDelayDataList.size());
+                            }
+                        }
+                    } catch (Exception e) {
+                        LOGGER.error("Error saving GameDelayData - taskId: {}, error: {}",
                                 taskInfo.getTaskId(), e.getMessage(), e);
                     }
 
