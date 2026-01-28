@@ -23,3 +23,4 @@ public interface GameDelayDataService extends IService<GameDelayData> {
     boolean batchSaveGameDelayData(List<GameDelayData> gameDelayDataList, String taskId);
 }
 
+

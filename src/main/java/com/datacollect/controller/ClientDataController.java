@@ -57,6 +57,9 @@ public class ClientDataController {
     private VideoDataService videoDataService;
 
     @Autowired
+    private GameDelayDataService gameDelayDataService;
+
+    @Autowired
     private NetworkDataService networkDataService;
 
     @Autowired
@@ -184,6 +187,13 @@ public class ClientDataController {
             videoWrapper.orderByAsc("id");
             List<VideoData> videoDataList = videoDataService.list(videoWrapper);
             result.put("videoDataList", videoDataList);
+
+            // 查询game_delay数据
+            QueryWrapper<GameDelayData> gameDelayWrapper = new QueryWrapper<>();
+            gameDelayWrapper.eq("task_id", taskId);
+            gameDelayWrapper.orderByAsc("id");
+            List<GameDelayData> gameDelayDataList = gameDelayDataService.list(gameDelayWrapper);
+            result.put("gameDelayDataList", gameDelayDataList);
             
             return Result.success(result);
         } catch (Exception e) {

@@ -62,3 +62,4 @@ public class GameDelayData {
     private Integer deleted;
 }
 
+
