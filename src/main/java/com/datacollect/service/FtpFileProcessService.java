@@ -392,8 +392,12 @@ public class FtpFileProcessService {
                                     LOGGER.info("GameDelayData saved to database successfully - taskId: {}, count: {}", 
                                             taskInfo.getTaskId(), gameDelayDataList.size());
                                 } else {
-                                    LOGGER.warn("Failed to save GameDelayData to database - taskId: {}", taskInfo.getTaskId());
+                                    LOGGER.warn("Failed to save GameDelayData to database - taskId: {}, count: {}", 
+                                            taskInfo.getTaskId(), gameDelayDataList.size());
                                 }
+                            } else {
+                                LOGGER.info("GameDelayData list is empty or null, skip saving - taskId: {}",
+                                        taskInfo.getTaskId());
                             }
                         } catch (Exception e) {
                             LOGGER.error("Error saving GameDelayData - taskId: {}, error: {}", 
@@ -916,7 +920,13 @@ public class FtpFileProcessService {
                                 LOGGER.info("GameDelayData saved to database successfully - taskId: {}, count: {}",
                                         taskInfo.getTaskId(), gameDelayDataList.size());
                                 result.put("gameDelayDataCount", gameDelayDataList.size());
+                            } else {
+                                LOGGER.warn("Failed to save GameDelayData to database - taskId: {}, count: {}",
+                                        taskInfo.getTaskId(), gameDelayDataList.size());
                             }
+                        } else {
+                            LOGGER.info("GameDelayData list is empty or null, skip saving - taskId: {}",
+                                    taskInfo.getTaskId());
                         }
                     } catch (Exception e) {
                         LOGGER.error("Error saving GameDelayData - taskId: {}, error: {}",
