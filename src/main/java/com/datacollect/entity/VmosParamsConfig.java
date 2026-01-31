@@ -81,6 +81,54 @@ public class VmosParamsConfig {
   @TableField("g2")
   private BigDecimal g2;
 
+  /**
+   * voip特有的常量参数
+   */
+  @TableField("v1")
+  private BigDecimal v1;
+
+  @TableField("v2")
+  private BigDecimal v2;
+
+  @TableField("v3")
+  private BigDecimal v3;
+
+  @TableField("v4")
+  private BigDecimal v4;
+
+  @TableField("v5")
+  private BigDecimal v5;
+
+  @TableField("fr")
+  private BigDecimal fr;
+
+  @TableField("v12")
+  private BigDecimal v12;
+
+  @TableField("v13")
+  private BigDecimal v13;
+
+  @TableField("v14")
+  private BigDecimal v14;
+
+  @TableField("v58")
+  private BigDecimal v58;
+
+  @TableField("v59")
+  private BigDecimal v59;
+
+  @TableField("v60")
+  private BigDecimal v60;
+
+  @TableField("v61")
+  private BigDecimal v61;
+
+  @TableField("v62")
+  private BigDecimal v62;
+
+  @TableField("v63")
+  private BigDecimal v63;
+
   @TableField("create_by")
   private String createBy;
 
