@@ -13,6 +13,8 @@ import com.datacollect.service.TestSettingsDeviceImsiMappingService;
 import com.datacollect.service.TestSettingsNetworkFtpService;
 import com.datacollect.service.TestSettingsTimeConfigService;
 import com.datacollect.entity.TestSettingsTimeConfig;
+import com.datacollect.service.VmosParamsConfigService;
+import com.datacollect.entity.VmosParamsConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -53,6 +55,9 @@ public class TestSettingsController {
 
     @Autowired
     private TestSettingsTimeConfigService timeConfigService;
+
+    @Autowired
+    private VmosParamsConfigService vmosParamsConfigService;
 
     // ========== 端侧和网络侧时间配置 ==========
     
@@ -529,6 +534,31 @@ public class TestSettingsController {
                     }
                 }
             }
+        }
+    }
+
+    // ========== vMOS参数配置 ==========
+    
+    @GetMapping("/vmos-params")
+    public Result<List<VmosParamsConfig>> getVmosParamsConfig() {
+        List<VmosParamsConfig> configs = vmosParamsConfigService.getAllVmosParamsConfig();
+        return Result.success(configs);
+    }
+
+    @GetMapping("/vmos-params/{service}")
+    public Result<VmosParamsConfig> getVmosParamsConfigByService(@PathVariable String service) {
+        VmosParamsConfig config = vmosParamsConfigService.getVmosParamsConfigByService(service);
+        return Result.success(config);
+    }
+
+    @PostMapping("/vmos-params")
+    public Result<VmosParamsConfig> saveOrUpdateVmosParamsConfig(@Valid @RequestBody VmosParamsConfig config) {
+        boolean success = vmosParamsConfigService.saveOrUpdateVmosParamsConfig(config);
+        if (success) {
+            VmosParamsConfig saved = vmosParamsConfigService.getVmosParamsConfigByService(config.getService());
+            return Result.success(saved);
+        } else {
+            return Result.error("保存失败");
         }
     }
 }
