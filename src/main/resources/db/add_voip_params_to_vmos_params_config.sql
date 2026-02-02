@@ -15,3 +15,4 @@ ADD COLUMN `v60` decimal(10,4) DEFAULT NULL COMMENT 'v60参数（voip特有）' 
 ADD COLUMN `v61` decimal(10,4) DEFAULT NULL COMMENT 'v61参数（voip特有）' AFTER `v60`,
 ADD COLUMN `v62` decimal(10,4) DEFAULT NULL COMMENT 'v62参数（voip特有）' AFTER `v61`,
 ADD COLUMN `v63` decimal(10,4) DEFAULT NULL COMMENT 'v63参数（voip特有）' AFTER `v62`;
+
