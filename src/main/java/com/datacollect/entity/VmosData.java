@@ -156,5 +156,23 @@ public class VmosData {
     @TableLogic
     @TableField("deleted")
     private Integer deleted;
+
+    /**
+     * 下行速率是否已替换并保存：0-否，1-是
+     */
+    @TableField("speed_replaced")
+    private Integer speedReplaced;
+
+    /**
+     * 游戏内RTT是否已替换并保存：0-否，1-是
+     */
+    @TableField("game_rtt_replaced")
+    private Integer gameRttReplaced;
+
+    /**
+     * 网络侧RTT是否已替换并保存：0-否，1-是
+     */
+    @TableField("network_rtt_replaced")
+    private Integer networkRttReplaced;
 }
 
