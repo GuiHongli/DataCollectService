@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
+
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 
@@ -23,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.HttpServletRequest;
+
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
@@ -30,9 +35,10 @@ import com.datacollect.dto.CollectTaskRequest;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.entity.CollectTask;
 import com.datacollect.entity.Executor;
+import com.datacollect.entity.ExecutorMacAddress;
 import com.datacollect.entity.LogicEnvironment;
 import com.datacollect.entity.LogicEnvironmentNetwork;
-import com.datacollect.entity.LogicNetwork;
+import com.datacollect.entity.NetworkType;
 import com.datacollect.entity.TestCase;
 import com.datacollect.entity.TestCaseExecutionInstance;
 import com.datacollect.entity.dto.LogicEnvironmentDTO;
@@ -41,19 +47,21 @@ import com.datacollect.service.CollectStrategyService;
 import com.datacollect.service.CollectTaskProcessService;
 import com.datacollect.service.CollectTaskService;
 import com.datacollect.service.ExecutorService;
+import com.datacollect.service.ExecutorMacAddressService;
 import com.datacollect.service.LogicEnvironmentNetworkService;
 import com.datacollect.service.LogicEnvironmentService;
-import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.NetworkTypeService;
 import com.datacollect.service.TestCaseExecutionInstanceService;
 import com.datacollect.service.TestCaseService;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/collect-task")
 @Validated
 public class CollectTaskController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CollectTaskController.class);
 
     @Autowired
     private CollectTaskService collectTaskService;
@@ -68,13 +76,16 @@ public class CollectTaskController {
     private ExecutorService executorService;
 
     @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
+
+    @Autowired
     private LogicEnvironmentService logicEnvironmentService;
 
     @Autowired
     private LogicEnvironmentNetworkService logicEnvironmentNetworkService;
 
     @Autowired
-    private LogicNetworkService logicNetworkService;
+    private NetworkTypeService networkTypeService;
 
     @Autowired
     private CollectTaskProcessService collectTaskProcessService;
@@ -84,6 +95,12 @@ public class CollectTaskController {
     
     @Autowired
     private CaseExecuteServiceClient caseExecuteServiceClient;
+    
+    @Autowired
+    private com.datacollect.service.ExecutorWebSocketService executorWebSocketService;
+    
+    @Autowired
+    private com.datacollect.service.TestCaseExecutionResultService testCaseExecutionResultService;
 
     @PostMapping
     public Result<CollectTask> create(@Valid @RequestBody CollectTask collectTask) {
@@ -95,23 +112,28 @@ public class CollectTaskController {
      * 创建采集任务（新接口）
      * 
      * @param request 采集任务请求
+     * @param httpRequest HTTP请求对象，用于获取当前用户信息
      * @return 采集任务ID
      */
     @PostMapping("/create")
-    public Result<Map<String, Object>> createCollectTask(@Valid @RequestBody CollectTaskRequest request) {
-        log.info("Received create collect task request - task name: {}, collect strategy ID: {}", request.getName(), request.getCollectStrategyId());
+    public Result<Map<String, Object>> createCollectTask(@Valid @RequestBody CollectTaskRequest request, HttpServletRequest httpRequest) {
+        LOGGER.info("Received create collect task request - task name: {}, collect strategy ID: {}", request.getName(), request.getCollectStrategyId());
         
         try {
-            // 调用处理服务创建采集任务
-            Long collectTaskId = collectTaskProcessService.processCollectTaskCreation(request);
+            // 从请求中get当前用户名（下发人）
+            String createBy = (String) httpRequest.getAttribute("username");
+            LOGGER.info("Create collect task - createBy: {}", createBy);
+            
+            // 调用process服务create采集任务
+            Long collectTaskId = collectTaskProcessService.processCollectTaskCreation(request, createBy);
             
             Map<String, Object> result = createSuccessResult(collectTaskId);
             
-            log.info("Collect task created successfully - task ID: {}", collectTaskId);
+            LOGGER.info("Collect task created successfully - task ID: {}, createBy: {}", collectTaskId, createBy);
             return Result.success(result);
             
         } catch (Exception e) {
-            log.error("Failed to create collect task - task name: {}, error: {}", request.getName(), e.getMessage(), e);
+            LOGGER.error("Failed to create collect task - task name: {}, error: {}", request.getName(), e.getMessage(), e);
             return Result.error("Failed to create collect task: " + e.getMessage());
         }
     }
@@ -152,10 +174,11 @@ public class CollectTaskController {
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) Long strategyId,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            HttpServletRequest httpRequest) {
         
         Page<CollectTask> page = new Page<>(current, size);
-        QueryWrapper<CollectTask> queryWrapper = buildPageQueryWrapper(name, strategyId, status);
+        QueryWrapper<CollectTask> queryWrapper = buildPageQueryWrapper(name, strategyId, status, httpRequest);
         Page<CollectTask> result = collectTaskService.page(page, queryWrapper);
         return Result.success(result);
     }
@@ -163,8 +186,21 @@ public class CollectTaskController {
     /**
      * 构建分页查询条件
      */
-    private QueryWrapper<CollectTask> buildPageQueryWrapper(String name, Long strategyId, String status) {
+    private QueryWrapper<CollectTask> buildPageQueryWrapper(String name, Long strategyId, String status, HttpServletRequest httpRequest) {
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
+        
+        // 获取当前用户信息
+        String role = (String) httpRequest.getAttribute("role");
+        String username = (String) httpRequest.getAttribute("username");
+        
+        // 根据用户角色过滤数据
+        // admin 可以查看全部任务，普通用户只能查看自己下发的任务
+        if (role != null && !"admin".equals(role) && username != null) {
+            queryWrapper.eq("create_by", username);
+            LOGGER.debug("普通用户query采集任务 - 用户名: {}, 只能查看自己下发的任务", username);
+        } else {
+            LOGGER.debug("管理员query采集任务 - 角色: {}, 可以查看全部任务", role);
+        }
         
         if (name != null && !name.isEmpty()) {
             queryWrapper.like("name", name);
@@ -181,8 +217,22 @@ public class CollectTaskController {
     }
 
     @GetMapping("/list")
-    public Result<List<CollectTask>> list() {
+    public Result<List<CollectTask>> list(HttpServletRequest httpRequest) {
         QueryWrapper<CollectTask> queryWrapper = new QueryWrapper<>();
+        
+        // 获取当前用户信息
+        String role = (String) httpRequest.getAttribute("role");
+        String username = (String) httpRequest.getAttribute("username");
+        
+        // 根据用户角色过滤数据
+        // admin 可以查看全部任务，普通用户只能查看自己下发的任务
+        if (role != null && !"admin".equals(role) && username != null) {
+            queryWrapper.eq("create_by", username);
+            LOGGER.debug("普通用户query采集任务列表 - 用户名: {}, 只能查看自己下发的任务", username);
+        } else {
+            LOGGER.debug("管理员query采集任务列表 - 角色: {}, 可以查看全部任务", role);
+        }
+        
         queryWrapper.orderByDesc("create_time");
         List<CollectTask> list = collectTaskService.list(queryWrapper);
         return Result.success(list);
@@ -199,7 +249,7 @@ public class CollectTaskController {
 
     @PostMapping("/{id}/start")
     public Result<Boolean> startTask(@PathVariable @NotNull Long id) {
-        log.info("Start task - task ID: {}", id);
+        LOGGER.info("Start task - task ID: {}", id);
         
         try {
             CollectTask collectTask = validateAndGetTask(id);
@@ -216,11 +266,11 @@ public class CollectTaskController {
             // 更新所有PENDING状态的用例执行例次为RUNNING
             updatePendingInstancesToRunning(id);
             
-            log.info("Task started successfully - task ID: {}", id);
+            LOGGER.info("Task started successfully - task ID: {}", id);
             return Result.success(true);
             
         } catch (Exception e) {
-            log.error("Failed to start task - task ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Failed to start task - task ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("Failed to start task: " + e.getMessage());
         }
     }
@@ -240,12 +290,12 @@ public class CollectTaskController {
         for (TestCaseExecutionInstance instance : pendingInstances) {
             testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "RUNNING", null);
         }
-        log.info("Task started successfully - task ID: {}, updated instance count: {}", taskId, pendingInstances.size());
+        LOGGER.info("Task started successfully - task ID: {}, updated instance count: {}", taskId, pendingInstances.size());
     }
 
     @PostMapping("/{id}/stop")
     public Result<Boolean> stopTask(@PathVariable @NotNull Long id) {
-        log.info("Stop task - task ID: {}", id);
+        LOGGER.info("Stop task - task ID: {}", id);
         
         try {
             CollectTask collectTask = validateAndGetTask(id);
@@ -274,11 +324,11 @@ public class CollectTaskController {
             // 更新采集任务和用例执行例次的执行进度
             updateTaskExecutionProgress(id);
             
-            log.info("Task stopped successfully - task ID: {}, updated instance count: {}", id, runningInstances.size());
+            LOGGER.info("Task stopped successfully - task ID: {}, updated instance count: {}", id, runningInstances.size());
             return Result.success(true);
             
         } catch (Exception e) {
-            log.error("Failed to stop task - task ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Failed to stop task - task ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("Failed to stop task: " + e.getMessage());
         }
     }
@@ -291,6 +341,43 @@ public class CollectTaskController {
                 .filter(instance -> instance.getExecutionTaskId() != null && instance.getExecutorIp() != null)
                 .collect(Collectors.groupingBy(TestCaseExecutionInstance::getExecutorIp));
     }
+    
+    /**
+     * 通过执行机IP获取MAC地址
+     */
+    private String getExecutorMacAddress(String executorIp) {
+        try {
+            // 1. 通过IP地址查找执行机
+            QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("ip_address", executorIp);
+            Executor executor = executorService.getOne(queryWrapper);
+            
+            if (executor == null) {
+                LOGGER.warn("执行机不存在 - 执行机IP: {}", executorIp);
+                return null;
+            }
+            
+            // 2. 优先从executor表的mac_address字段get
+            if (executor.getMacAddress() != null && !executor.getMacAddress().trim().isEmpty()) {
+                return executor.getMacAddress();
+            }
+            
+            // 3. 如果executor表没有MAC地址，尝试通过macAddressId查找
+            if (executor.getMacAddressId() != null) {
+                ExecutorMacAddress macAddress = executorMacAddressService.getById(executor.getMacAddressId());
+                if (macAddress != null && macAddress.getMacAddress() != null) {
+                    return macAddress.getMacAddress();
+                }
+            }
+            
+            LOGGER.warn("执行机没有MAC地址 - 执行机IP: {}, 执行机ID: {}", executorIp, executor.getId());
+            return null;
+            
+        } catch (Exception e) {
+            LOGGER.error("获取执行机MAC地址失败 - 执行机IP: {}, 错误: {}", executorIp, e.getMessage(), e);
+            return null;
+        }
+    }
 
     /**
      * 取消执行机任务
@@ -300,27 +387,52 @@ public class CollectTaskController {
             String executorIp = entry.getKey();
             List<TestCaseExecutionInstance> instances = entry.getValue();
             
-            // 取第一个实例的executionTaskId作为停止目标（因为同一执行机的任务通常使用相同的taskId）
+            // 取第一个实例的executionTaskId作为stop目标（因为同一执行机的任务通常使用相同的taskId）
             String executionTaskId = instances.get(0).getExecutionTaskId();
             
             try {
-                boolean cancelled = caseExecuteServiceClient.cancelTaskExecution(executorIp, executionTaskId);
-                if (cancelled) {
-                    log.info("Successfully cancelled executor task - task ID: {}, executor IP: {}, execution task ID: {}, affected instance count: {}", 
-                            taskId, executorIp, executionTaskId, instances.size());
+                boolean cancelled = false;
+                
+                // 通过IP地址查找执行机，getMAC地址
+                String executorMac = getExecutorMacAddress(executorIp);
+                if (executorMac != null && !executorMac.trim().isEmpty()) {
+                // 优先使用WebSocketsendstop命令
+                    if (executorWebSocketService.isExecutorOnline(executorMac)) {
+                        LOGGER.info("执行机在线，通过WebSocket发送停止命令 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
+                        cancelled = executorWebSocketService.sendCancelCommand(executorMac, executionTaskId);
+                    if (cancelled) {
+                        LOGGER.info("stop命令已通过WebSocketsendsuccess - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 受影响例次数: {}", 
+                                taskId, executorIp, executionTaskId, instances.size());
+                    } else {
+                        LOGGER.warn("WebSocketsendstop命令failed，尝试使用HTTPsend - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
+                    }
                 } else {
-                    log.warn("Failed to cancel executor task - task ID: {}, executor IP: {}, execution task ID: {}", 
-                            taskId, executorIp, executionTaskId);
+                    LOGGER.info("执行机不在线，使用HTTPsendstop命令 - 执行机MAC地址: {}, 执行机IP: {}, 任务ID: {}", executorMac, executorIp, executionTaskId);
+                }
+            } else {
+                LOGGER.warn("无法获取执行机MAC地址，使用HTTP发送停止命令 - 执行机IP: {}, 任务ID: {}", executorIp, executionTaskId);
+                }
+                
+                // 如果WebSocket不available或sendfailed，回退到HTTP请求
+                if (!cancelled) {
+                    cancelled = caseExecuteServiceClient.cancelTaskExecution(executorIp, executionTaskId);
+                    if (cancelled) {
+                        LOGGER.info("通过HTTP成功取消执行机任务 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 受影响例次数: {}", 
+                                taskId, executorIp, executionTaskId, instances.size());
+                    } else {
+                        LOGGER.warn("通过HTTP取消执行机任务failed - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}", 
+                                taskId, executorIp, executionTaskId);
+                    }
                 }
             } catch (Exception e) {
-                log.error("Exception calling CaseExecuteService to cancel task - task ID: {}, executor IP: {}, execution task ID: {}, error: {}", 
-                        taskId, executorIp, executionTaskId, e.getMessage());
+                LOGGER.error("取消执行机任务异常 - 任务ID: {}, 执行机IP: {}, 执行任务ID: {}, 错误: {}", 
+                        taskId, executorIp, executionTaskId, e.getMessage(), e);
             }
         }
     }
 
     /**
-     * 更新运行实例为停止状态
+     * updaterunning实例为stop状态
      */
     private void updateRunningInstancesToStopped(List<TestCaseExecutionInstance> runningInstances) {
         for (TestCaseExecutionInstance instance : runningInstances) {
@@ -330,7 +442,7 @@ public class CollectTaskController {
 
     @PostMapping("/{id}/pause")
     public Result<Boolean> pauseTask(@PathVariable @NotNull Long id) {
-        log.info("Pause task - task ID: {}", id);
+        LOGGER.info("Pause task - task ID: {}", id);
         
         try {
             CollectTask collectTask = validateAndGetTask(id);
@@ -347,11 +459,11 @@ public class CollectTaskController {
             // 更新所有RUNNING状态的用例执行例次为PAUSED
             updateRunningInstancesToPaused(id);
             
-            log.info("Task paused successfully - task ID: {}", id);
+            LOGGER.info("Task paused successfully - task ID: {}", id);
             return Result.success(true);
             
         } catch (Exception e) {
-            log.error("Failed to pause task - task ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Failed to pause task - task ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("Failed to pause task: " + e.getMessage());
         }
     }
@@ -364,7 +476,7 @@ public class CollectTaskController {
         for (TestCaseExecutionInstance instance : runningInstances) {
             testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), "PAUSED", instance.getExecutionTaskId());
         }
-        log.info("Task paused successfully - task ID: {}, updated instance count: {}", taskId, runningInstances.size());
+        LOGGER.info("Task paused successfully - task ID: {}, updated instance count: {}", taskId, runningInstances.size());
     }
 
     @GetMapping("/status/{status}")
@@ -385,7 +497,7 @@ public class CollectTaskController {
      */
     @PutMapping("/{id}/status")
     public Result<Boolean> updateTaskStatus(@PathVariable @NotNull Long id, @RequestParam @NotNull String status) {
-        log.info("Update task status - task ID: {}, new status: {}", id, status);
+        LOGGER.info("Update task status - task ID: {}, new status: {}", id, status);
         
         try {
             CollectTask collectTask = validateAndGetTask(id);
@@ -407,11 +519,11 @@ public class CollectTaskController {
             // 根据状态转换更新相关的用例执行例次状态
             updateExecutionInstancesStatus(id, collectTask.getStatus(), status);
             
-            log.info("Task status updated successfully - task ID: {}, status: {} -> {}", id, collectTask.getStatus(), status);
+            LOGGER.info("Task status updated successfully - task ID: {}, status: {} -> {}", id, collectTask.getStatus(), status);
             return Result.success(true);
             
         } catch (Exception e) {
-            log.error("Failed to update task status - task ID: {}, new status: {}, error: {}", id, status, e.getMessage(), e);
+            LOGGER.error("Failed to update task status - task ID: {}, new status: {}, error: {}", id, status, e.getMessage(), e);
             return Result.error("Failed to update task status: " + e.getMessage());
         }
     }
@@ -426,6 +538,8 @@ public class CollectTaskController {
     private boolean isValidStatusTransition(String currentStatus, String newStatus) {
         // 定义有效的状态转换规则
         if ("PENDING".equals(currentStatus)) {
+            return "RUNNING".equals(newStatus) || "WAITING".equals(newStatus) || "STOPPED".equals(newStatus);
+        } else if ("WAITING".equals(currentStatus)) {
             return "RUNNING".equals(newStatus) || "STOPPED".equals(newStatus);
         } else if ("RUNNING".equals(currentStatus)) {
             return "COMPLETED".equals(newStatus) || "STOPPED".equals(newStatus) || "PAUSED".equals(newStatus);
@@ -456,11 +570,11 @@ public class CollectTaskController {
                 for (TestCaseExecutionInstance instance : instances) {
                     testCaseExecutionInstanceService.updateExecutionStatus(instance.getId(), transitionInfo.getTargetStatus(), instance.getExecutionTaskId());
                 }
-                log.info("Updated test case execution instance status - task ID: {}, status transition: {} -> {}, affected instance count: {}", 
+                LOGGER.info("Updated test case execution instance status - task ID: {}, status transition: {} -> {}, affected instance count: {}", 
                         taskId, transitionInfo.getSourceStatus(), transitionInfo.getTargetStatus(), instances.size());
             }
         } catch (Exception e) {
-            log.error("Failed to update test case execution instance status - task ID: {}, error: {}", taskId, e.getMessage(), e);
+            LOGGER.error("Failed to update test case execution instance status - task ID: {}, error: {}", taskId, e.getMessage(), e);
         }
     }
 
@@ -481,10 +595,10 @@ public class CollectTaskController {
     }
 
     /**
-     * 获取状态转换信息
+     * get状态转换信息
      */
     private StatusTransitionInfo getStatusTransitionInfo(String oldStatus, String newStatus) {
-        // 根据状态转换确定需要更新的例次状态
+        // 根据状态转换确定需要update的例次状态
         if ("STOPPED".equals(oldStatus) && "RUNNING".equals(newStatus)) {
              return new StatusTransitionInfo("STOPPED", "PENDING");
          }
@@ -497,7 +611,7 @@ public class CollectTaskController {
      */
     @GetMapping("/{id}/progress")
     public Result<Map<String, Object>> getTaskProgress(@PathVariable @NotNull Long id) {
-        log.info("Get task execution progress - task ID: {}", id);
+        LOGGER.info("Get task execution progress - task ID: {}", id);
         
         try {
             CollectTask task = collectTaskService.getById(id);
@@ -512,7 +626,7 @@ public class CollectTaskController {
             
             return Result.success(progress);
         } catch (Exception e) {
-            log.error("Failed to get task execution progress - task ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Failed to get task execution progress - task ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("Failed to get task execution progress: " + e.getMessage());
         }
     }
@@ -561,7 +675,7 @@ public class CollectTaskController {
      */
     @GetMapping("/{id}/execution-instances")
     public Result<List<Map<String, Object>>> getExecutionInstances(@PathVariable @NotNull Long id) {
-        log.info("Get task execution instance list - task ID: {}", id);
+        LOGGER.info("Get task execution instance list - task ID: {}", id);
         
         try {
             CollectTask task = collectTaskService.getById(id);
@@ -575,7 +689,7 @@ public class CollectTaskController {
             
             return Result.success(result);
         } catch (Exception e) {
-            log.error("Failed to get task execution instance list - task ID: {}, error: {}", id, e.getMessage(), e);
+            LOGGER.error("Failed to get task execution instance list - task ID: {}, error: {}", id, e.getMessage(), e);
             return Result.error("Failed to get task execution instance list: " + e.getMessage());
         }
     }
@@ -625,17 +739,37 @@ public class CollectTaskController {
             instanceMap.put("logicEnvironmentName", logicEnvironment.getName());
         }
         
+        // 获取用例执行结果中的采集路径和质检结果
+        if (instance.getExecutionTaskId() != null) {
+            try {
+                List<com.datacollect.entity.TestCaseExecutionResult> executionResults = 
+                    testCaseExecutionResultService.getByTaskId(instance.getExecutionTaskId());
+                // 查找匹配的用例ID和轮次
+                for (com.datacollect.entity.TestCaseExecutionResult result : executionResults) {
+                    if (result.getTestCaseId().equals(instance.getTestCaseId()) && 
+                        result.getRound().equals(instance.getRound())) {
+                        instanceMap.put("collectPath", result.getCollectPath());
+                        instanceMap.put("qcResult", result.getQcResult());
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to get collect path and QC result for instance - instance ID: {}, error: {}", 
+                        instance.getId(), e.getMessage());
+            }
+        }
+        
         return instanceMap;
     }
     
     /**
-     * 更新任务执行进度
+     * update任务执行进度
      * 
      * @param taskId 任务ID
      */
     private void updateTaskExecutionProgress(Long taskId) {
         try {
-            // 获取任务的所有用例执行例次
+            // get任务的所有用例执行例次
             List<TestCaseExecutionInstance> allInstances = testCaseExecutionInstanceService.getByCollectTaskId(taskId);
             
             // 统计各种状态的例次数量
@@ -646,15 +780,15 @@ public class CollectTaskController {
             // 更新任务进度
             collectTaskService.updateTaskProgress(taskId, (int) totalCount, (int) completedCount, (int) failedCount);
             
-            log.info("Updated task execution progress - task ID: {}, total: {}, completed: {}, failed: {}", taskId, totalCount, completedCount, failedCount);
+            LOGGER.info("Updated task execution progress - task ID: {}, total: {}, completed: {}, failed: {}", taskId, totalCount, completedCount, failedCount);
             
         } catch (Exception e) {
-            log.error("Failed to update task execution progress - task ID: {}, error: {}", taskId, e.getMessage(), e);
+            LOGGER.error("Failed to update task execution progress - task ID: {}, error: {}", taskId, e.getMessage(), e);
         }
     }
 
     /**
-     * 根据采集策略和环境筛选条件获取可用的逻辑环境列表
+     * 根据采集策略和环境筛选条件getavailable的逻辑环境列表
      */
     @GetMapping("/available-logic-environments")
     public Result<List<LogicEnvironmentDTO>> getAvailableLogicEnvironments(
@@ -662,13 +796,15 @@ public class CollectTaskController {
             @RequestParam(required = false) Long regionId,
             @RequestParam(required = false) Long countryId,
             @RequestParam(required = false) Long provinceId,
-            @RequestParam(required = false) Long cityId) {
+            @RequestParam(required = false) Long cityId,
+            @RequestParam(required = false) String network,
+            @RequestParam(required = false) List<String> manufacturer) {
         
-        log.info("Start getting available logic environment list - strategy ID: {}, region filter: regionId={}, countryId={}, provinceId={}, cityId={}", 
-                strategyId, regionId, countryId, provinceId, cityId);
+        LOGGER.info("Start getting available logic environment list - strategy ID: {}, region filter: regionId={}, countryId={}, provinceId={}, cityId={}, network={}, manufacturer={}", 
+                strategyId, regionId, countryId, provinceId, cityId, network, manufacturer);
         
         try {
-            // 1. 获取采集策略信息
+            // 1. get采集策略信息
             CollectStrategy strategy = validateAndGetStrategy(strategyId);
             if (strategy == null) {
                 return Result.error("Collect strategy not found");
@@ -677,8 +813,8 @@ public class CollectTaskController {
             // 2. 获取策略关联的测试用例（基于筛选条件）
             List<TestCase> testCases = getFilteredTestCases(strategy);
             
-            // 3. 提取测试用例中的环境组网列表A
-            Set<String> requiredNetworks = extractRequiredNetworks(testCases);
+            // 3. 根据用例的逻辑组网、网络和厂商，组成物理组网列表
+            Set<String> requiredPhysicalNetworks = extractRequiredPhysicalNetworks(testCases, network, manufacturer);
             
             // 4. 根据环境筛选条件获取可用的执行机
             List<Executor> availableExecutors = getAvailableExecutors(regionId, countryId, provinceId, cityId);
@@ -686,15 +822,15 @@ public class CollectTaskController {
             // 5. 获取执行机关联的逻辑环境列表B
             List<LogicEnvironment> allLogicEnvironments = getAllLogicEnvironments(availableExecutors);
             
-            // 6. 筛选逻辑环境，检查其环境组网是否存在于环境组网列表A中
-            List<LogicEnvironmentDTO> availableLogicEnvironments = filterMatchingLogicEnvironments(allLogicEnvironments, requiredNetworks);
+            // 6. 筛选逻辑环境，检查其物理组网是否存在于物理组网列表A中
+            List<LogicEnvironmentDTO> availableLogicEnvironments = filterMatchingLogicEnvironmentsByPhysicalNetwork(allLogicEnvironments, requiredPhysicalNetworks);
             
-            log.info("Matching completed - available logic environment count: {}", availableLogicEnvironments.size());
+            LOGGER.info("Matching completed - available logic environment count: {}", availableLogicEnvironments.size());
             
             return Result.success(availableLogicEnvironments);
             
         } catch (Exception e) {
-            log.error("Failed to get available logic environment list", e);
+            LOGGER.error("Failed to get available logic environment list", e);
             return Result.error("Failed to get available logic environment list: " + e.getMessage());
         }
     }
@@ -703,88 +839,199 @@ public class CollectTaskController {
      * 验证并获取采集策略
      */
     private CollectStrategy validateAndGetStrategy(Long strategyId) {
-        log.info("Step 1: Get collect strategy information - strategy ID: {}", strategyId);
+        LOGGER.info("Step 1: Get collect strategy information - strategy ID: {}", strategyId);
         CollectStrategy strategy = collectStrategyService.getById(strategyId);
         if (strategy == null) {
-            log.error("Collect strategy not found - strategy ID: {}", strategyId);
+            LOGGER.error("Collect strategy not found - strategy ID: {}", strategyId);
             return null;
         }
-        log.info("Got collect strategy: {} (test case set ID: {})", strategy.getName(), strategy.getTestCaseSetId());
+        LOGGER.info("Got collect strategy: {} (test case set ID: {})", strategy.getName(), strategy.getTestCaseSetId());
         return strategy;
     }
 
     /**
-     * 获取筛选后的测试用例
+     * 获取测试用例（根据策略中勾选的用例返回）
      */
     private List<TestCase> getFilteredTestCases(CollectStrategy strategy) {
-        log.info("Step 2: Get test cases associated with strategy - test case set ID: {}, filter criteria: business category={}, APP={}", 
-                strategy.getTestCaseSetId(), strategy.getBusinessCategory(), strategy.getApp());
+        LOGGER.info("Step 2: Get test cases associated with strategy - test case set ID: {}", 
+                strategy.getTestCaseSetId());
         List<TestCase> allTestCases = testCaseService.getByTestCaseSetId(strategy.getTestCaseSetId());
-        log.info("Got original test case count: {}", allTestCases.size());
+        LOGGER.info("Got all test case count: {}", allTestCases.size());
         
-        // 根据策略的筛选条件过滤用例
-        List<TestCase> testCases = allTestCases.stream()
-            .filter(testCase -> {
-                // 业务大类筛选
-                if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
-                    if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
-                        return false;
+        // get策略中勾选的用例ID列表
+        List<Long> selectedTestCaseIds = getSelectedTestCaseIds(strategy);
+        
+        if (selectedTestCaseIds == null || selectedTestCaseIds.isEmpty()) {
+            LOGGER.info("No selected test cases found in strategy, returning all test cases");
+            return allTestCases;
+        }
+        
+        LOGGER.info("Strategy has {} selected test case IDs: {}", selectedTestCaseIds.size(), selectedTestCaseIds);
+        
+        // 根据勾选的用例ID筛选用例
+        List<TestCase> filteredTestCases = allTestCases.stream()
+                .filter(testCase -> selectedTestCaseIds.contains(testCase.getId()))
+                .collect(Collectors.toList());
+        
+        LOGGER.info("Filtered test case count: {} (from {} total test cases)", 
+                filteredTestCases.size(), allTestCases.size());
+        
+        return filteredTestCases;
+    }
+    
+    /**
+     * 获取策略中勾选的用例ID列表
+     */
+    private List<Long> getSelectedTestCaseIds(CollectStrategy strategy) {
+        List<Long> selectedIds = new ArrayList<>();
+        
+        try {
+            // 首先尝试从 selectedTestCaseIds 字段获取
+            if (strategy.getSelectedTestCaseIds() != null && !strategy.getSelectedTestCaseIds().trim().isEmpty()) {
+                List<Object> ids = JSON.parseArray(strategy.getSelectedTestCaseIds(), Object.class);
+                if (ids != null) {
+                    for (Object id : ids) {
+                        if (id != null) {
+                            Long testCaseId = null;
+                            if (id instanceof Number) {
+                                testCaseId = ((Number) id).longValue();
+                            } else if (id instanceof String) {
+                                try {
+                                    testCaseId = Long.parseLong((String) id);
+                                } catch (NumberFormatException e) {
+                                    LOGGER.warn("Invalid test case ID format: {}", id);
+                                }
+                            }
+                            if (testCaseId != null) {
+                                selectedIds.add(testCaseId);
+                            }
+                        }
                     }
                 }
-                
-                // APP筛选
-                if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
-                    if (!strategy.getApp().equals(testCase.getApp())) {
-                        return false;
+            }
+            
+            // 如果没有 selectedTestCaseIds，尝试从 testCaseExecutionCounts 中get（兼容旧数据）
+            if (selectedIds.isEmpty() && strategy.getTestCaseExecutionCounts() != null 
+                    && !strategy.getTestCaseExecutionCounts().trim().isEmpty()) {
+                try {
+                    Map<String, Object> executionCounts = JSON.parseObject(
+                            strategy.getTestCaseExecutionCounts(), 
+                            new TypeReference<Map<String, Object>>() {});
+                    if (executionCounts != null) {
+                        for (Map.Entry<String, Object> entry : executionCounts.entrySet()) {
+                            try {
+                                Long testCaseId = Long.parseLong(entry.getKey());
+                                Object count = entry.getValue();
+                                // 如果执行次数大于0，则认为该用例被勾选
+                                if (count instanceof Number && ((Number) count).intValue() > 0) {
+                                    selectedIds.add(testCaseId);
+                                }
+                            } catch (NumberFormatException e) {
+                                LOGGER.warn("Invalid test case ID in execution counts: {}", entry.getKey());
+                            }
+                        }
                     }
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to parse testCaseExecutionCounts: {}", e.getMessage());
                 }
-                
-                return true;
-            })
-            .collect(java.util.stream.Collectors.toList());
-        log.info("Filtered test case count: {}", testCases.size());
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse selectedTestCaseIds: {}", e.getMessage());
+        }
         
-        return testCases;
+        return selectedIds;
     }
 
     /**
      * 提取测试用例中的环境组网需求
      */
     private Set<String> extractRequiredNetworks(List<TestCase> testCases) {
-        log.info("Step 3: Extract environment network requirements from test cases");
+        LOGGER.info("Step 3: Extract environment network requirements from test cases");
         Set<String> requiredNetworks = new HashSet<>();
         
         for (TestCase testCase : testCases) {
-            log.debug("Processing test case: {} (number: {})", testCase.getName(), testCase.getNumber());
+            LOGGER.debug("Processing test case: {} (number: {})", testCase.getName(), testCase.getNumber());
             if (testCase.getLogicNetwork() != null && !testCase.getLogicNetwork().trim().isEmpty()) {
                 String[] networks = testCase.getLogicNetwork().split(";");
-                log.debug("Test case {} environment network requirements: {}", testCase.getNumber(), testCase.getLogicNetwork());
+                LOGGER.debug("Test case {} environment network requirements: {}", testCase.getNumber(), testCase.getLogicNetwork());
                 for (String network : networks) {
                     String trimmedNetwork = network.trim();
                     requiredNetworks.add(trimmedNetwork);
-                    log.debug("Added environment network requirement: {}", trimmedNetwork);
+                    LOGGER.debug("Added environment network requirement: {}", trimmedNetwork);
                 }
             } else {
-                log.debug("Test case {} has no environment network requirements", testCase.getNumber());
+                LOGGER.debug("Test case {} has no environment network requirements", testCase.getNumber());
             }
         }
         
-        log.info("Extracted environment network requirements list A: {}", requiredNetworks);
+        LOGGER.info("Extracted environment network requirements list A: {}", requiredNetworks);
         return requiredNetworks;
     }
 
     /**
-     * 获取可用的执行机
+     * 根据用例的逻辑组网、网络和厂商，组成物理组网列表
+     * 物理组网格式：逻辑组网_网络_厂商
+     */
+    private Set<String> extractRequiredPhysicalNetworks(List<TestCase> testCases, String network, List<String> manufacturer) {
+        LOGGER.info("Step 3: Extract physical network requirements from test cases - network: {}, manufacturer: {}", network, manufacturer);
+        Set<String> requiredPhysicalNetworks = new HashSet<>();
+        
+        // 如果没有选择网络或厂商，返回空集合
+        if (network == null || network.trim().isEmpty() || manufacturer == null || manufacturer.isEmpty()) {
+            LOGGER.info("Network or manufacturer not selected, returning empty physical network list");
+            return requiredPhysicalNetworks;
+        }
+        
+        // 过滤掉空的厂商
+        List<String> manufacturers = manufacturer.stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+        
+        if (manufacturers.isEmpty()) {
+            LOGGER.info("No valid manufacturers found, returning empty physical network list");
+            return requiredPhysicalNetworks;
+        }
+        
+        // 遍历所有用例，提取逻辑组网
+        Set<String> logicNetworks = new HashSet<>();
+        for (TestCase testCase : testCases) {
+            if (testCase.getLogicNetwork() != null && !testCase.getLogicNetwork().trim().isEmpty()) {
+                String[] networks = testCase.getLogicNetwork().split(";");
+                for (String logicNetwork : networks) {
+                    String trimmedNetwork = logicNetwork.trim();
+                    if (!trimmedNetwork.isEmpty()) {
+                        logicNetworks.add(trimmedNetwork);
+                    }
+                }
+            }
+        }
+        
+        // 生成所有可能的物理组网组合：逻辑组网_网络_厂商
+        for (String logicNetwork : logicNetworks) {
+            for (String manu : manufacturers) {
+                String physicalNetwork = logicNetwork + "_" + network + "_" + manu;
+                requiredPhysicalNetworks.add(physicalNetwork);
+                LOGGER.debug("Generated physical network: {}", physicalNetwork);
+            }
+        }
+        
+        LOGGER.info("Extracted physical network requirements list: {}", requiredPhysicalNetworks);
+        return requiredPhysicalNetworks;
+    }
+
+    /**
+     * getavailable的执行机
      */
     private List<Executor> getAvailableExecutors(Long regionId, Long countryId, Long provinceId, Long cityId) {
-        log.info("Step 4: Get available executors based on region filter criteria - regionId={}, countryId={}, provinceId={}, cityId={}", 
+        LOGGER.info("Step 4: Get available executors based on region filter criteria - regionId={}, countryId={}, provinceId={}, cityId={}", 
                 regionId, countryId, provinceId, cityId);
         List<Executor> availableExecutors = executorService.getExecutorsByRegion(
             regionId, countryId, provinceId, cityId);
-        log.info("Got available executor count: {}", availableExecutors.size());
+        LOGGER.info("Got available executor count: {}", availableExecutors.size());
         
         for (Executor executor : availableExecutors) {
-            log.debug("Matched executor: {} (ID: {}, IP: {})", executor.getName(), executor.getId(), executor.getIpAddress());
+            LOGGER.debug("Matched executor: {} (ID: {}, IP: {})", executor.getName(), executor.getId(), executor.getIpAddress());
         }
         
         return availableExecutors;
@@ -794,20 +1041,20 @@ public class CollectTaskController {
      * 获取所有逻辑环境
      */
     private List<LogicEnvironment> getAllLogicEnvironments(List<Executor> availableExecutors) {
-        log.info("Step 5: Get logic environments associated with executors");
+        LOGGER.info("Step 5: Get logic environments associated with executors");
         List<LogicEnvironment> allLogicEnvironments = new ArrayList<>();
         
         for (Executor executor : availableExecutors) {
-            log.debug("Get logic environments associated with executor {}", executor.getName());
+            LOGGER.debug("Get logic environments associated with executor {}", executor.getName());
             List<LogicEnvironment> environments = logicEnvironmentService.getByExecutorId(executor.getId());
-            log.debug("Executor {} associated logic environment count: {}", executor.getName(), environments.size());
+            LOGGER.debug("Executor {} associated logic environment count: {}", executor.getName(), environments.size());
             for (LogicEnvironment env : environments) {
-                log.debug("Executor {} associated logic environment: {} (ID: {})", executor.getName(), env.getName(), env.getId());
+                LOGGER.debug("Executor {} associated logic environment: {} (ID: {})", executor.getName(), env.getName(), env.getId());
             }
             allLogicEnvironments.addAll(environments);
         }
         
-        log.info("Got all logic environment count: {}", allLogicEnvironments.size());
+        LOGGER.info("Got all logic environment count: {}", allLogicEnvironments.size());
         return allLogicEnvironments;
     }
 
@@ -815,28 +1062,28 @@ public class CollectTaskController {
      * 筛选匹配的逻辑环境
      */
     private List<LogicEnvironmentDTO> filterMatchingLogicEnvironments(List<LogicEnvironment> allLogicEnvironments, Set<String> requiredNetworks) {
-        log.info("Step 6: Filter matching logic environments");
+        LOGGER.info("Step 6: Filter matching logic environments");
         List<LogicEnvironmentDTO> availableLogicEnvironments = new ArrayList<>();
         
         for (LogicEnvironment logicEnvironment : allLogicEnvironments) {
-            log.debug("Checking logic environment: {} (ID: {})", logicEnvironment.getName(), logicEnvironment.getId());
+            LOGGER.debug("Checking logic environment: {} (ID: {})", logicEnvironment.getName(), logicEnvironment.getId());
             
             // 获取逻辑环境关联的环境组网
             List<LogicEnvironmentNetwork> environmentNetworks = logicEnvironmentNetworkService.getByLogicEnvironmentId(logicEnvironment.getId());
-            log.debug("Logic environment {} associated environment network count: {}", logicEnvironment.getName(), environmentNetworks.size());
+            LOGGER.debug("Logic environment {} associated environment network count: {}", logicEnvironment.getName(), environmentNetworks.size());
             
-            // 检查是否有匹配的环境组网
+            // check是否有匹配的环境组网
             boolean hasMatchingNetwork = checkMatchingNetworks(environmentNetworks, requiredNetworks);
             List<String> logicEnvironmentNetworks = extractLogicEnvironmentNetworks(environmentNetworks);
-            log.debug("Logic environment {} environment networks: {}", logicEnvironment.getName(), logicEnvironmentNetworks);
+            LOGGER.debug("Logic environment {} environment networks: {}", logicEnvironment.getName(), logicEnvironmentNetworks);
             
             // 如果有匹配的环境组网，则添加到可用列表
             if (hasMatchingNetwork) {
-                log.info("Logic environment {} matched successfully, added to available list", logicEnvironment.getName());
+                LOGGER.info("Logic environment {} matched successfully, added to available list", logicEnvironment.getName());
                 LogicEnvironmentDTO dto = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironment.getId());
                 availableLogicEnvironments.add(dto);
             } else {
-                log.debug("Logic environment {} doesn't match, skipping", logicEnvironment.getName());
+                LOGGER.debug("Logic environment {} doesn't match, skipping", logicEnvironment.getName());
             }
         }
         
@@ -844,13 +1091,13 @@ public class CollectTaskController {
     }
 
     /**
-     * 检查是否有匹配的环境组网
+     * check是否有匹配的环境组网
      */
     private boolean checkMatchingNetworks(List<LogicEnvironmentNetwork> environmentNetworks, Set<String> requiredNetworks) {
         for (LogicEnvironmentNetwork envNetwork : environmentNetworks) {
-            LogicNetwork network = logicNetworkService.getById(envNetwork.getLogicNetworkId());
+            NetworkType network = networkTypeService.getById(envNetwork.getLogicNetworkId());
             if (network != null && requiredNetworks.contains(network.getName())) {
-                log.debug("Found matching environment network: {} (logic environment: {})", network.getName(), network.getName());
+                LOGGER.debug("Found matching environment network: {} (logic environment: {})", network.getName(), network.getName());
                 return true;
             }
         }
@@ -863,11 +1110,108 @@ public class CollectTaskController {
     private List<String> extractLogicEnvironmentNetworks(List<LogicEnvironmentNetwork> environmentNetworks) {
         List<String> logicEnvironmentNetworks = new ArrayList<>();
         for (LogicEnvironmentNetwork envNetwork : environmentNetworks) {
-            LogicNetwork network = logicNetworkService.getById(envNetwork.getLogicNetworkId());
+            NetworkType network = networkTypeService.getById(envNetwork.getLogicNetworkId());
             if (network != null) {
                 logicEnvironmentNetworks.add(network.getName());
             }
         }
         return logicEnvironmentNetworks;
     }
+
+    /**
+     * 根据物理组网筛选匹配的逻辑环境
+     */
+    private List<LogicEnvironmentDTO> filterMatchingLogicEnvironmentsByPhysicalNetwork(
+            List<LogicEnvironment> allLogicEnvironments, Set<String> requiredPhysicalNetworks) {
+        LOGGER.info("Step 6: Filter matching logic environments by physical network");
+        List<LogicEnvironmentDTO> availableLogicEnvironments = new ArrayList<>();
+        
+        for (LogicEnvironment logicEnvironment : allLogicEnvironments) {
+            LOGGER.debug("Checking logic environment: {} (ID: {})", logicEnvironment.getName(), logicEnvironment.getId());
+            
+            // 获取逻辑环境的物理组网列表（JSON格式）
+            String physicalNetworkJson = logicEnvironment.getPhysicalNetwork();
+            if (physicalNetworkJson == null || physicalNetworkJson.trim().isEmpty()) {
+                LOGGER.debug("Logic environment {} has no physical network data, skipping", logicEnvironment.getName());
+                continue;
+            }
+            
+            try {
+                // 解析物理组网JSON数组
+                List<String> physicalNetworks = JSON.parseArray(physicalNetworkJson, String.class);
+                LOGGER.debug("Logic environment {} physical networks: {}", logicEnvironment.getName(), physicalNetworks);
+                
+                // 检查是否有匹配的物理组网
+                boolean hasMatchingPhysicalNetwork = false;
+                for (String physicalNetwork : physicalNetworks) {
+                    if (requiredPhysicalNetworks.contains(physicalNetwork)) {
+                        LOGGER.debug("Found matching physical network: {} in logic environment {}", 
+                                physicalNetwork, logicEnvironment.getName());
+                        hasMatchingPhysicalNetwork = true;
+                        break;
+                    }
+                }
+                
+                // 如果有匹配的物理组网，则添加到available列表
+                if (hasMatchingPhysicalNetwork) {
+                    LOGGER.info("Logic environment {} matched successfully by physical network, added to available list", 
+                            logicEnvironment.getName());
+                    LogicEnvironmentDTO dto = logicEnvironmentService.getLogicEnvironmentDTO(logicEnvironment.getId());
+                    availableLogicEnvironments.add(dto);
+                } else {
+                    LOGGER.debug("Logic environment {} doesn't match by physical network, skipping", logicEnvironment.getName());
+                }
+            } catch (Exception e) {
+                LOGGER.error("Failed to parse physical network JSON for logic environment {}: {}", 
+                        logicEnvironment.getName(), e.getMessage());
+            }
+        }
+        
+        return availableLogicEnvironments;
+    }
+
+    /**
+     * 批量check执行机在线状态（通过WebSocketcheck）
+     * 
+     * @param executorIps 执行机IP地址列表
+     * @return 执行机在线状态映射，key为IP地址，value为是否在线
+     */
+    @PostMapping("/check-executors-online")
+    public Result<Map<String, Boolean>> checkExecutorsOnline(@RequestBody List<String> executorIps) {
+        LOGGER.info("Checking executors online status - IPs: {}", executorIps);
+        
+        try {
+            Map<String, Boolean> onlineStatusMap = new HashMap<>();
+            
+            for (String ip : executorIps) {
+                // 通过执行机IP查找执行机
+                QueryWrapper<Executor> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("ip_address", ip);
+                queryWrapper.eq("deleted", 0);
+                Executor executor = executorService.getOne(queryWrapper);
+                
+                if (executor != null) {
+                    // 检查执行机状态：status=1表示在线（通过WebSocket连接活跃）
+                    // 这里可以根据实际的WebSocket服务来检查连接状态
+                    // 目前先使用数据库中的status字段，如果WebSocket服务已实现，可以改为检查WebSocket连接状态
+                    boolean isOnline = executor.getStatus() != null && executor.getStatus() == 1;
+                    onlineStatusMap.put(ip, isOnline);
+                    LOGGER.debug("Executor online status - IP: {}, status: {}, isOnline: {}", 
+                            ip, executor.getStatus(), isOnline);
+                } else {
+                    // 执行机不存在，认为不在线
+                    onlineStatusMap.put(ip, false);
+                    LOGGER.warn("Executor not found - IP: {}", ip);
+                }
+            }
+            
+            LOGGER.info("Checked executors online status - result: {}", onlineStatusMap);
+            return Result.success(onlineStatusMap);
+            
+        } catch (Exception e) {
+            LOGGER.error("Failed to check executors online status", e);
+            return Result.error("Failed to check executors online status: " + e.getMessage());
+        }
+    }
+
 }

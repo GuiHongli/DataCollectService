@@ -7,7 +7,6 @@ import com.datacollect.entity.Ue;
 import com.datacollect.entity.dto.UeDTO;
 import com.datacollect.enums.UeBrandEnum;
 import com.datacollect.service.UeService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -19,11 +18,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/ue")
 @Validated
 public class UeController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UeController.class);
 
     @Autowired
     private UeService ueService;
@@ -101,5 +103,29 @@ public class UeController {
             vendors.add(vendorMap);
         }
         return Result.success(vendors);
+    }
+
+    /**
+     * 释放UE（标记为可用）
+     * 
+     * @param id UE ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/release")
+    public Result<Boolean> releaseUe(@PathVariable @NotNull Long id) {
+        try {
+            List<Integer> ueIds = new ArrayList<>();
+            ueIds.add(id.intValue());
+            boolean success = ueService.markUesAvailable(ueIds);
+            if (success) {
+                LOGGER.info("UE已release - UE ID: {}", id);
+                return Result.success(true);
+            } else {
+                return Result.error("释放UE失败");
+            }
+        } catch (Exception e) {
+            LOGGER.error("releaseUEfailed - UE ID: {}, error: {}", id, e.getMessage(), e);
+            return Result.error("释放UE失败: " + e.getMessage());
+        }
     }
 }

@@ -37,6 +37,15 @@ public class TestCase {
     @TableField("app")
     private String app;
 
+    @TableField("app_en")
+    private String appEn;
+
+    @TableField("model_scenario")
+    private String modelScenario;
+
+    @TableField("phone_os_type")
+    private String phoneOsType;
+
     @TableField("test_steps")
     private String testSteps;
 

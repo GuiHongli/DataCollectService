@@ -1,0 +1,1948 @@
+package com.datacollect.util;
+
+import com.datacollect.dto.TaskInfoDTO;
+import com.datacollect.entity.GameDelayData;
+import com.datacollect.entity.LostData;
+import com.datacollect.entity.NetworkData;
+import com.datacollect.entity.RttData;
+import com.datacollect.entity.SpeedData;
+import com.datacollect.entity.VideoData;
+import com.datacollect.entity.VmosData;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+/**
+ * 端侧文件处理工具类
+ * 负责解压端侧压缩包并解析taskinfo.json
+ */
+public class ClientFileProcessor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClientFileProcessor.class);
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 文件后缀（时间间隔）
+     */
+    private static final String FILE_SUFFIX = "10s";
+
+    /**
+     * 解压端侧压缩包并解析taskinfo.json
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return TaskInfoDTO对象，如果解析失败返回null
+     * @throws IOException IO异常
+     */
+    public static TaskInfoDTO extractAndParseTaskInfo(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsingtaskinfo.json: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        TaskInfoDTO taskInfo = null;
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析taskinfo.json
+            Path taskInfoPath = extractDir.resolve("taskinfo.json");
+            if (!Files.exists(taskInfoPath)) {
+                // 尝试在子目录中查找
+                taskInfoPath = findTaskInfoFile(extractDir);
+            }
+
+            if (taskInfoPath != null && Files.exists(taskInfoPath)) {
+                LOGGER.info("Foundtaskinfo.json file: {}", taskInfoPath);
+                taskInfo = parseTaskInfoJson(taskInfoPath);
+                LOGGER.info("taskinfo.json parsed successfully: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
+            } else {
+                LOGGER.warn("未找到taskinfo.json文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return taskInfo;
+    }
+
+    /**
+     * Extracting 压缩 file到指定目录（支持ZIP和GZ格式）
+     *
+     * @param filePath 压缩文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractZipFile(Path filePath, Path extractDir) throws IOException {
+        String fileName = filePath.getFileName().toString().toLowerCase();
+        
+        if (fileName.endsWith(".gz")) {
+            LOGGER.info("Extracting GZ file: {} -> {}", filePath, extractDir);
+            extractGzFile(filePath, extractDir);
+        } else {
+            LOGGER.info("解压ZIP文件: {} -> {}", filePath, extractDir);
+            extractZipFileInternal(filePath, extractDir);
+        }
+    }
+
+    /**
+     * Extracting ZIP file到指定目录
+     *
+     * @param zipPath ZIP文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractZipFileInternal(Path zipPath, Path extractDir) throws IOException {
+        try (FileInputStream fis = new FileInputStream(zipPath.toFile());
+             ZipInputStream zis = new ZipInputStream(fis)) {
+
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                Path filePath = extractDir.resolve(entry.getName());
+
+                if (entry.isDirectory()) {
+                    Files.createDirectories(filePath);
+                } else {
+                    Files.createDirectories(filePath.getParent());
+                    Files.copy(zis, filePath);
+                }
+
+                zis.closeEntry();
+            }
+
+            LOGGER.info("ZIP文件解压完成");
+        }
+    }
+
+    /**
+     * 解压GZ文件到指定目录
+     * 如果是.tar.gz文件，会先解压gz，再解压tar
+     * 如果是单独的.gz文件，直接解压
+     *
+     * @param gzPath GZ文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractGzFile(Path gzPath, Path extractDir) throws IOException {
+        String fileName = gzPath.getFileName().toString().toLowerCase();
+        
+        // 创建临时文件用于存储解压后的内容
+        Path tempFile = Files.createTempFile("gz_extract_", fileName.replace(".gz", ""));
+        
+        try {
+            // 解压GZ文件
+            try (FileInputStream fis = new FileInputStream(gzPath.toFile());
+                 GZIPInputStream gzis = new GZIPInputStream(fis);
+                 FileOutputStream fos = new FileOutputStream(tempFile.toFile())) {
+                
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = gzis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                }
+            }
+            
+            LOGGER.info("GZ文件解压完成，临时文件: {}", tempFile);
+            
+            // check是否是tar.gz文件
+            if (fileName.endsWith(".tar.gz")) {
+                // 解压TAR文件
+                extractTarFile(tempFile, extractDir);
+            } else {
+                // 单独的gz文件，直接复制到解压目录
+                String originalFileName = fileName.replace(".gz", "");
+                Path targetFile = extractDir.resolve(originalFileName);
+                Files.createDirectories(targetFile.getParent());
+                Files.copy(tempFile, targetFile);
+                LOGGER.info("GZ文件内容已复制到: {}", targetFile);
+            }
+            
+        } finally {
+            // 清理临时文件
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时文件失败: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 解压TAR文件到指定目录
+     * 使用Apache Commons Compress库处理TAR文件
+     *
+     * @param tarPath TAR文件路径
+     * @param extractDir 解压目录
+     * @throws IOException IO异常
+     */
+    private static void extractTarFile(Path tarPath, Path extractDir) throws IOException {
+        LOGGER.info("Extracting TAR file: {} -> {}", tarPath, extractDir);
+        
+        try (FileInputStream fis = new FileInputStream(tarPath.toFile());
+             TarArchiveInputStream tis = new TarArchiveInputStream(fis)) {
+            
+            TarArchiveEntry entry;
+            while ((entry = tis.getNextTarEntry()) != null) {
+                Path filePath = extractDir.resolve(entry.getName());
+                
+                if (entry.isDirectory()) {
+                    Files.createDirectories(filePath);
+                } else {
+                    Files.createDirectories(filePath.getParent());
+                    try (FileOutputStream fos = new FileOutputStream(filePath.toFile())) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = tis.read(buffer)) != -1) {
+                            fos.write(buffer, 0, bytesRead);
+                        }
+                    }
+                }
+            }
+            
+            LOGGER.info("TAR文件解压完成");
+        } catch (Exception e) {
+            // 如果TARExtracting failed，尝试直接读取 file内容（可能是单个 file被压缩成gz）
+            LOGGER.warn("TAR解压失败，尝试直接读取文件内容: {}", e.getMessage());
+            String fileName = tarPath.getFileName().toString().replace(".tar", "");
+            Path targetFile = extractDir.resolve(fileName);
+            Files.createDirectories(targetFile.getParent());
+            Files.copy(tarPath, targetFile);
+        }
+    }
+
+    /**
+     * 递归查找taskinfo.json文件
+     *
+     * @param directory 搜索目录
+     * @return taskinfo.json文件路径，如果未找到返回null
+     */
+    private static Path findTaskInfoFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("taskinfo.json"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析taskinfo.json文件
+     *
+     * @param taskInfoPath taskinfo.json文件路径
+     * @return TaskInfoDTO对象
+     * @throws IOException IO异常
+     */
+    private static TaskInfoDTO parseTaskInfoJson(Path taskInfoPath) throws IOException {
+        try {
+            String jsonContent = new String(Files.readAllBytes(taskInfoPath), "UTF-8");
+            LOGGER.debug("taskinfo.json内容: {}", jsonContent);
+
+            TaskInfoDTO taskInfo = objectMapper.readValue(jsonContent, TaskInfoDTO.class);
+            return taskInfo;
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse taskinfo.json: {}", e.getMessage(), e);
+            throw new IOException("解析taskinfo.json失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 解压端侧压缩包并解析network-speed.xlsx
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return SpeedData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<SpeedData> extractAndParseSpeedExcel(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsing network-speed.xlsx file: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<SpeedData> speedDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析speed文件
+            Path speedExcelPath = extractDir.resolve("network-speed.xlsx");
+            if (!Files.exists(speedExcelPath)) {
+                // 尝试在子目录中查找
+                speedExcelPath = findSpeedExcelFile(extractDir);
+            }
+
+            if (speedExcelPath != null && Files.exists(speedExcelPath)) {
+                LOGGER.info("Found network-speed.xlsx file: {}", speedExcelPath);
+                speedDataList = parseSpeedExcel(speedExcelPath);
+                LOGGER.info("network-speed.xlsx parsed successfully: 共{}条记录", speedDataList.size());
+            } else {
+                LOGGER.warn("未找到network-speed.xlsx文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return speedDataList;
+    }
+
+    /**
+     * 递归查找network-speed.xlsx文件
+     *
+     * @param directory 搜索目录
+     * @return network-speed.xlsx文件路径，如果未找到返回null
+     */
+    private static Path findSpeedExcelFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("network-speed.xlsx"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析network-speed.xlsx文件
+     * 列顺序：dl_speed(bps)、ul_speed(bps)、total
+     *
+     * @param excelPath Excel文件路径
+     * @return SpeedData列表
+     * @throws IOException IO异常
+     */
+    private static List<SpeedData> parseSpeedExcel(Path excelPath) throws IOException {
+        List<SpeedData> speedDataList = new ArrayList<>();
+
+        try (FileInputStream fis = new FileInputStream(excelPath.toFile());
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0); // 获取第一个工作表
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+
+            // 跳过表头行，从第二行开始读取数据
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) {
+                    continue;
+                }
+
+                SpeedData speedData = parseSpeedRow(row, evaluator);
+                if (speedData != null) {
+                    speedDataList.add(speedData);
+                }
+            }
+
+            LOGGER.info("Parsing network-speed.xlsx completed，共{}条记录", speedDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse network-speed.xlsx: {}", e.getMessage(), e);
+            throw new IOException("解析network-speed.xlsx失败: " + e.getMessage(), e);
+        }
+
+        return speedDataList;
+    }
+
+    /**
+     * 解析速率数据行
+     * 列顺序：dl_speed(bps)、ul_speed(bps)、total
+     *
+     * @param row 行数据
+     * @param evaluator 公式计算器
+     * @return SpeedData对象
+     */
+    private static SpeedData parseSpeedRow(Row row, FormulaEvaluator evaluator) {
+        try {
+            if (isEmptySpeedRow(row, evaluator)) {
+                return null;
+            }
+
+            SpeedData speedData = new SpeedData();
+            speedData.setDlSpeed(getCellValue(row.getCell(0), evaluator));
+            speedData.setUlSpeed(getCellValue(row.getCell(1), evaluator));
+            speedData.setTotal(getCellValue(row.getCell(2), evaluator));
+
+            return speedData;
+        } catch (Exception e) {
+            LOGGER.error("Error parsing speed row {}: {}", row.getRowNum() + 1, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * check是否为空行
+     */
+    private static boolean isEmptySpeedRow(Row row, FormulaEvaluator evaluator) {
+        if (row == null) {
+            return true;
+        }
+
+        // check前几列是否都为空
+        for (int i = 0; i < 3; i++) {
+            Cell cell = row.getCell(i);
+            if (cell != null) {
+                String value = getCellValue(cell, evaluator);
+                if (value != null && !value.trim().isEmpty()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 解压端侧压缩包并解析vmos Excel文件
+     * 支持多个文件源：short_video_report.xlsx, launch_live_show_report.xlsx, watch_live_show_report.xlsx,
+     * long_video_report.xlsx, office_report.xlsx, im_report.xlsx, game_report.xlsx, cloud_game_report.xlsx
+     * 一次解析只处理一个文件
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return VmosData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<VmosData> extractAndParseVmosExcel(String zipFilePath) throws IOException {
+        LOGGER.info("开始解压端侧文件并解析vmos文件: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<VmosData> vmosDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析vmos文件（按优先级查找，找到第一个就解析）
+            Path vmosExcelPath = findVmosExcelFile(extractDir);
+
+            if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
+                String fileName = vmosExcelPath.getFileName().toString();
+                LOGGER.info("Found vmos file: {}", vmosExcelPath);
+                vmosDataList = parseVmosExcel(vmosExcelPath, fileName);
+                LOGGER.info("vmos file parsed successfully: {}, 共{}条记录", fileName, vmosDataList.size());
+            } else {
+                LOGGER.warn("未找到vmos文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return vmosDataList;
+    }
+
+    /**
+     * 递归查找vmos Excel文件
+     * 按优先级查找：short_video_report.xlsx, launch_live_show_report.xlsx, watch_live_show_report.xlsx,
+     * long_video_report.xlsx, office_report.xlsx, im_report.xlsx, game_report.xlsx, cloud_game_report.xlsx
+     *
+     * @param directory 搜索目录
+     * @return vmos Excel文件路径，如果未找到返回null
+     */
+    private static Path findVmosExcelFile(Path directory) throws IOException {
+        // 按优先级定义的文件名列表
+        String[] vmosFileNames = {
+            "short_video_report.xlsx",
+            "launch_live_show_report.xlsx",
+            "watch_live_show_report.xlsx",
+            "long_video_report.xlsx",
+            "office_report.xlsx",
+            "im_report.xlsx",
+            "game_report.xlsx",
+            "cloud_game_report.xlsx"
+        };
+
+        // 按优先级查找文件
+        for (String fileName : vmosFileNames) {
+            Path found = Files.walk(directory)
+                    .filter(path -> path.getFileName() != null && 
+                            path.getFileName().toString().equalsIgnoreCase(fileName))
+                    .findFirst()
+                    .orElse(null);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 解析vmos Excel文件
+     *
+     * @param excelPath Excel文件路径
+     * @param fileName 文件名（用于确定解析格式）
+     * @return VmosData列表
+     * @throws IOException IO异常
+     */
+    private static List<VmosData> parseVmosExcel(Path excelPath, String fileName) throws IOException {
+        List<VmosData> vmosDataList = new ArrayList<>();
+
+        try (FileInputStream fis = new FileInputStream(excelPath.toFile());
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0); // 获取第一个工作表
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+
+            // 跳过表头行，从第二行开始读取数据
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) {
+                    continue;
+                }
+
+                VmosData vmosData = parseVmosRowByFileName(row, evaluator, fileName);
+                if (vmosData != null) {
+                    vmosDataList.add(vmosData);
+                }
+            }
+
+            LOGGER.info("Parsing vmos file {} completed，共{}条记录", fileName, vmosDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse vmos file {}: {}", fileName, e.getMessage(), e);
+            throw new IOException("解析vmos文件失败: " + fileName + ", " + e.getMessage(), e);
+        }
+
+        return vmosDataList;
+    }
+
+    /**
+     * 根据文件名解析vMOS数据行
+     *
+     * @param row 行数据
+     * @param evaluator 公式计算器
+     * @param fileName 文件名
+     * @return VmosData对象
+     */
+    private static VmosData parseVmosRowByFileName(Row row, FormulaEvaluator evaluator, String fileName) {
+        try {
+            if (isEmptyVmosRow(row, evaluator)) {
+                return null;
+            }
+
+            String lowerFileName = fileName.toLowerCase();
+            
+            if (lowerFileName.equals("short_video_report.xlsx")) {
+                // 18列：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+                return parseVmosRow18Columns(row, evaluator);
+            } else if (lowerFileName.equals("launch_live_show_report.xlsx") || 
+                       lowerFileName.equals("watch_live_show_report.xlsx") || 
+                       lowerFileName.equals("long_video_report.xlsx") ||
+                       lowerFileName.equals("cloud_game_report.xlsx")) {
+                // 17列：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+                return parseVmosRow17Columns(row, evaluator);
+            } else if (lowerFileName.equals("office_report.xlsx") || 
+                       lowerFileName.equals("im_report.xlsx")) {
+                // 18列：vMos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、初始缓冲时间/丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vMoS/vmos、avgQoe
+                return parseVmosRow18ColumnsOffice(row, evaluator, lowerFileName.equals("im_report.xlsx"));
+            } else if (lowerFileName.equals("game_report.xlsx")) {
+                // 13列：vmos类序号、RTT、丢包率、卡顿占比、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vmos、aveQoe
+                return parseVmosRow13Columns(row, evaluator);
+            } else {
+                LOGGER.warn("Unknown vmos file format: {}, using default 18 columns parser", fileName);
+                return parseVmosRow18Columns(row, evaluator);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error parsing vMOS row {}: {}", row.getRowNum() + 1, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 解析vMOS数据行（18列格式 - short_video_report.xlsx）
+     * 列顺序：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+     */
+    private static VmosData parseVmosRow18Columns(Row row, FormulaEvaluator evaluator) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
+        vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
+        vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
+        vmosData.setInitialBufferingDelay(getCellValue(row.getCell(6), evaluator));
+        vmosData.setBitrate(getCellValue(row.getCell(7), evaluator));
+        vmosData.setCalculatedResolution(getCellValue(row.getCell(8), evaluator));
+        vmosData.setVideoExperience(getCellValue(row.getCell(9), evaluator));
+        vmosData.setInteractionExperience(getCellValue(row.getCell(10), evaluator));
+        vmosData.setPresentationExperience(getCellValue(row.getCell(11), evaluator));
+        vmosData.setSLostPacketRate(getCellValue(row.getCell(12), evaluator));
+        vmosData.setSStallRate(getCellValue(row.getCell(13), evaluator));
+        vmosData.setAlpha(getCellValue(row.getCell(14), evaluator));
+        vmosData.setBeta(getCellValue(row.getCell(15), evaluator));
+        vmosData.setVmos(getCellValue(row.getCell(16), evaluator));
+        vmosData.setAvgQoe(getCellValue(row.getCell(17), evaluator));
+        return vmosData;
+    }
+
+    /**
+     * 解析vMOS数据行（17列格式 - launch_live_show_report.xlsx, watch_live_show_report.xlsx, long_video_report.xlsx, cloud_game_report.xlsx）
+     * 列顺序：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、码率、计算分辨率、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vMOS、avgQoe
+     */
+    private static VmosData parseVmosRow17Columns(Row row, FormulaEvaluator evaluator) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
+        vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
+        vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
+        // 跳过初缓时延（第6列不存在）
+        vmosData.setInitialBufferingDelay(null);
+        vmosData.setBitrate(getCellValue(row.getCell(6), evaluator));
+        vmosData.setCalculatedResolution(getCellValue(row.getCell(7), evaluator));
+        vmosData.setVideoExperience(getCellValue(row.getCell(8), evaluator));
+        vmosData.setInteractionExperience(getCellValue(row.getCell(9), evaluator));
+        vmosData.setPresentationExperience(getCellValue(row.getCell(10), evaluator));
+        vmosData.setSLostPacketRate(getCellValue(row.getCell(11), evaluator));
+        vmosData.setSStallRate(getCellValue(row.getCell(12), evaluator));
+        vmosData.setAlpha(getCellValue(row.getCell(13), evaluator));
+        vmosData.setBeta(getCellValue(row.getCell(14), evaluator));
+        vmosData.setVmos(getCellValue(row.getCell(15), evaluator));
+        vmosData.setAvgQoe(getCellValue(row.getCell(16), evaluator));
+        return vmosData;
+    }
+
+    /**
+     * 解析vMOS数据行（18列格式 - office_report.xlsx, im_report.xlsx）
+     * office_report.xlsx列顺序：vMos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、初始缓冲时间、丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vMoS、avgQoe
+     * im_report.xlsx列顺序：vmos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vmos、avgQoe
+     */
+    private static VmosData parseVmosRow18ColumnsOffice(Row row, FormulaEvaluator evaluator, boolean isImReport) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        vmosData.setSpeed(getCellValue(row.getCell(1), evaluator));
+        vmosData.setResolution(getCellValue(row.getCell(2), evaluator));
+        vmosData.setRtt(getCellValue(row.getCell(3), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(4), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(5), evaluator));
+        vmosData.setInitialBufferingDelay(getCellValue(row.getCell(6), evaluator));
+        vmosData.setBitrate(getCellValue(row.getCell(7), evaluator));
+        vmosData.setCalculatedResolution(getCellValue(row.getCell(8), evaluator));
+        
+        if (isImReport) {
+            // im_report.xlsx: 丢包率(s_lost_packet_rate)在第9列
+            vmosData.setSLostPacketRate(getCellValue(row.getCell(9), evaluator));
+            vmosData.setSStallRate(getCellValue(row.getCell(10), evaluator));
+            vmosData.setVideoExperience(getCellValue(row.getCell(11), evaluator));
+            vmosData.setInteractionExperience(getCellValue(row.getCell(12), evaluator));
+            vmosData.setPresentationExperience(getCellValue(row.getCell(13), evaluator));
+            vmosData.setAlpha(getCellValue(row.getCell(14), evaluator));
+            vmosData.setBeta(getCellValue(row.getCell(15), evaluator));
+            vmosData.setVmos(getCellValue(row.getCell(16), evaluator));
+            vmosData.setAvgQoe(getCellValue(row.getCell(17), evaluator));
+        } else {
+            // office_report.xlsx: vMos类序号、速率、分辨率、RTT、丢包率、卡顿占比、初缓时延、码率、计算分辨率、初始缓冲时间、丢包率(s_lost_packet_rate)、卡顿占比、视频体验、交互体验、呈现体验、α、β、vMoS、avgQoe
+            // 初始缓冲时间字段在VmosData中没有对应字段，跳过（索引9）
+            vmosData.setSLostPacketRate(getCellValue(row.getCell(10), evaluator));
+            vmosData.setSStallRate(getCellValue(row.getCell(11), evaluator));
+            vmosData.setVideoExperience(getCellValue(row.getCell(12), evaluator));
+            vmosData.setInteractionExperience(getCellValue(row.getCell(13), evaluator));
+            vmosData.setPresentationExperience(getCellValue(row.getCell(14), evaluator));
+            vmosData.setAlpha(getCellValue(row.getCell(15), evaluator));
+            vmosData.setBeta(getCellValue(row.getCell(16), evaluator));
+            vmosData.setVmos(getCellValue(row.getCell(17), evaluator));
+            vmosData.setAvgQoe(getCellValue(row.getCell(18), evaluator));
+        }
+        return vmosData;
+    }
+
+    /**
+     * 解析vMOS数据行（13列格式 - game_report.xlsx）
+     * 列顺序：vmos类序号、RTT、丢包率、卡顿占比、视频体验、交互体验、呈现体验、丢包率(s_lost_packet_rate)、卡顿占比、α、β、vmos、aveQoe
+     */
+    private static VmosData parseVmosRow13Columns(Row row, FormulaEvaluator evaluator) {
+        VmosData vmosData = new VmosData();
+        vmosData.setSequenceNumber(getCellValue(row.getCell(0), evaluator));
+        // 跳过速率和分辨率（不存在）
+        vmosData.setSpeed(null);
+        vmosData.setResolution(null);
+        vmosData.setRtt(getCellValue(row.getCell(1), evaluator));
+        vmosData.setPacketLossRate(getCellValue(row.getCell(2), evaluator));
+        vmosData.setStutterRatio(getCellValue(row.getCell(3), evaluator));
+        // 跳过初缓时延、码率、计算分辨率（不存在）
+        vmosData.setInitialBufferingDelay(null);
+        vmosData.setBitrate(null);
+        vmosData.setCalculatedResolution(null);
+        vmosData.setVideoExperience(getCellValue(row.getCell(4), evaluator));
+        vmosData.setInteractionExperience(getCellValue(row.getCell(5), evaluator));
+        vmosData.setPresentationExperience(getCellValue(row.getCell(6), evaluator));
+        vmosData.setSLostPacketRate(getCellValue(row.getCell(7), evaluator));
+        vmosData.setSStallRate(getCellValue(row.getCell(8), evaluator));
+        vmosData.setAlpha(getCellValue(row.getCell(9), evaluator));
+        vmosData.setBeta(getCellValue(row.getCell(10), evaluator));
+        vmosData.setVmos(getCellValue(row.getCell(11), evaluator));
+        vmosData.setAvgQoe(getCellValue(row.getCell(12), evaluator));
+        return vmosData;
+    }
+
+    /**
+     * check是否为空行
+     */
+    private static boolean isEmptyVmosRow(Row row, FormulaEvaluator evaluator) {
+        if (row == null) {
+            return true;
+        }
+
+        // check前几列是否都为空
+        for (int i = 0; i < 5; i++) {
+            Cell cell = row.getCell(i);
+            if (cell != null) {
+                String value = getCellValue(cell, evaluator);
+                if (value != null && !value.trim().isEmpty()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * get单元格值
+     */
+    private static String getCellValue(Cell cell, FormulaEvaluator evaluator) {
+        if (cell == null) {
+            return null;
+        }
+
+        switch (cell.getCellType()) {
+            case STRING: {
+                return cell.getStringCellValue().trim();
+            }
+            case NUMERIC: {
+                return formatNumericCellValue(cell);
+            }
+            case BOOLEAN: {
+                return String.valueOf(cell.getBooleanCellValue());
+            }
+            case FORMULA: {
+                return getFormulaValue(cell, evaluator);
+            }
+            default: {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * get公式单元格的计算结果
+     */
+    private static String getFormulaValue(Cell cell, FormulaEvaluator evaluator) {
+        try {
+            CellType resultType = evaluator.evaluateFormulaCell(cell);
+            switch (resultType) {
+                case STRING: {
+                    return cell.getStringCellValue().trim();
+                }
+                case NUMERIC: {
+                    return formatNumericCellValue(cell);
+                }
+                case BOOLEAN: {
+                    return String.valueOf(cell.getBooleanCellValue());
+                }
+                default: {
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to evaluate formula in cell {}: {}", cell.getAddress(), e.getMessage());
+            return cell.getCellFormula();
+        }
+    }
+
+    /**
+     * 数值单元格转字符串，避免科学计数法
+     */
+    private static String formatNumericCellValue(Cell cell) {
+        if (DateUtil.isCellDateFormatted(cell)) {
+            return cell.getDateCellValue().toString();
+        }
+        double numericValue = cell.getNumericCellValue();
+        if (Math.abs(numericValue - (long) numericValue) < 1e-10) {
+            return String.valueOf((long) numericValue);
+        } else {
+            return String.valueOf(numericValue);
+        }
+    }
+
+    /**
+     * 解压端侧压缩包并解析network-delay.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return RttData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<RttData> extractAndParseRttCsv(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsing network-delay.csv file: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<RttData> rttDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析rtt文件
+            Path rttCsvPath = extractDir.resolve("network-delay.csv");
+            if (!Files.exists(rttCsvPath)) {
+                // 尝试在子目录中查找
+                rttCsvPath = findRttCsvFile(extractDir);
+            }
+
+            if (rttCsvPath != null && Files.exists(rttCsvPath)) {
+                LOGGER.info("Found network-delay.csv file: {}", rttCsvPath);
+                rttDataList = parseRttCsv(rttCsvPath);
+                LOGGER.info("network-delay.csv parsed successfully: 共{}条记录", rttDataList.size());
+            } else {
+                LOGGER.warn("未找到network-delay.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return rttDataList;
+    }
+
+    /**
+     * 递归查找network-delay.csv文件
+     *
+     * @param directory 搜索目录
+     * @return network-delay.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findRttCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("network-delay.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析network-delay.csv文件
+     *
+     * @param csvPath CSV文件路径
+     * @return RttData列表
+     * @throws IOException IO异常
+     */
+    private static List<RttData> parseRttCsv(Path csvPath) throws IOException {
+        List<RttData> rttDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("index") || 
+                        line.toLowerCase().contains("dl_delay") || 
+                        line.toLowerCase().contains("ul_delay")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 3) {
+                    RttData rttData = new RttData();
+                    rttData.setIndexTime(values[0].trim());
+                    rttData.setDlDelay(values[1].trim());
+                    rttData.setUlDelay(values[2].trim());
+                    rttDataList.add(rttData);
+                } else {
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
+                }
+            }
+
+            LOGGER.info("Parsing network-delay.csv completed，共{}条记录", rttDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse network-delay.csv: {}", e.getMessage(), e);
+            throw new IOException("解析network-delay.csv失败: " + e.getMessage(), e);
+        }
+
+        return rttDataList;
+    }
+
+    /**
+     * 解压端侧压缩包并解析network-loss.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return LostData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<LostData> extractAndParseLostCsv(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsing network-loss.csv file: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<LostData> lostDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析lost文件
+            Path lostCsvPath = extractDir.resolve("network-loss.csv");
+            if (!Files.exists(lostCsvPath)) {
+                // 尝试在子目录中查找
+                lostCsvPath = findLostCsvFile(extractDir);
+            }
+
+            if (lostCsvPath != null && Files.exists(lostCsvPath)) {
+                LOGGER.info("Found network-loss.csv file: {}", lostCsvPath);
+                lostDataList = parseLostCsv(lostCsvPath);
+                LOGGER.info("network-loss.csv parsed successfully: 共{}条记录", lostDataList.size());
+            } else {
+                LOGGER.warn("未找到network-loss.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return lostDataList;
+    }
+
+    /**
+     * 递归查找network-loss.csv文件
+     *
+     * @param directory 搜索目录
+     * @return network-loss.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findLostCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("network-loss.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析network-loss.csv文件
+     *
+     * @param csvPath CSV文件路径
+     * @return LostData列表
+     * @throws IOException IO异常
+     */
+    private static List<LostData> parseLostCsv(Path csvPath) throws IOException {
+        List<LostData> lostDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("index") || 
+                        line.toLowerCase().contains("dl_loss") || 
+                        line.toLowerCase().contains("ul_loss") ||
+                        line.toLowerCase().contains("total_loss")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 4) {
+                    LostData lostData = new LostData();
+                    lostData.setIndexTime(values[0].trim());
+                    lostData.setDlLoss(values[1].trim());
+                    lostData.setUlLoss(values[2].trim());
+                    lostData.setTotalLoss(values[3].trim());
+                    lostDataList.add(lostData);
+                } else {
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
+                }
+            }
+
+            LOGGER.info("Parsing network-loss.csv completed，共{}条记录", lostDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse network-loss.csv: {}", e.getMessage(), e);
+            throw new IOException("解析network-loss.csv失败: " + e.getMessage(), e);
+        }
+
+        return lostDataList;
+    }
+
+    /**
+     * 解压端侧压缩包并解析video-quality.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return VideoData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<VideoData> extractAndParseVideoCsv(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsing video-quality.csv file: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<VideoData> videoDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析video文件
+            Path videoCsvPath = extractDir.resolve("video-quality.csv");
+            if (!Files.exists(videoCsvPath)) {
+                // 尝试在子目录中查找
+                videoCsvPath = findVideoCsvFile(extractDir);
+            }
+
+            if (videoCsvPath != null && Files.exists(videoCsvPath)) {
+                LOGGER.info("Found video-quality.csv file: {}", videoCsvPath);
+                videoDataList = parseVideoCsv(videoCsvPath);
+                LOGGER.info("video-quality.csv parsed successfully: 共{}条记录", videoDataList.size());
+            } else {
+                LOGGER.warn("未找到video-quality.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return videoDataList;
+    }
+
+    /**
+     * 递归查找video-quality.csv文件
+     *
+     * @param directory 搜索目录
+     * @return video-quality.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findVideoCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("video-quality.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析video-quality.csv文件
+     *
+     * @param csvPath CSV文件路径
+     * @return VideoData列表
+     * @throws IOException IO异常
+     */
+    private static List<VideoData> parseVideoCsv(Path csvPath) throws IOException {
+        List<VideoData> videoDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("time") || 
+                        line.toLowerCase().contains("caton_time")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 2) {
+                    VideoData videoData = new VideoData();
+                    videoData.setTime(values[0].trim());
+                    videoData.setCatonTime(values[1].trim());
+                    videoDataList.add(videoData);
+                } else {
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
+                }
+            }
+
+            LOGGER.info("Parsing video-quality.csv completed，共{}条记录", videoDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse video-quality.csv: {}", e.getMessage(), e);
+            throw new IOException("解析video-quality.csv失败: " + e.getMessage(), e);
+        }
+
+        return videoDataList;
+    }
+
+    /**
+     * 解压端侧压缩包并解析game-delay.csv
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return GameDelayData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<GameDelayData> extractAndParseGameDelayCsv(String zipFilePath) throws IOException {
+        LOGGER.info("Start extracting client file and parsing game-delay.csv file: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        List<GameDelayData> gameDelayDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找并解析game-delay文件
+            Path gameDelayCsvPath = extractDir.resolve("game-delay.csv");
+            if (!Files.exists(gameDelayCsvPath)) {
+                // 尝试在子目录中查找
+                gameDelayCsvPath = findGameDelayCsvFile(extractDir);
+            }
+
+            if (gameDelayCsvPath != null && Files.exists(gameDelayCsvPath)) {
+                LOGGER.info("Found game-delay.csv file: {}", gameDelayCsvPath);
+                gameDelayDataList = parseGameDelayCsv(gameDelayCsvPath);
+                LOGGER.info("game-delay.csv parsed successfully: 共{}条记录", gameDelayDataList.size());
+            } else {
+                LOGGER.warn("未找到game-delay.csv文件");
+            }
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return gameDelayDataList;
+    }
+
+    /**
+     * 递归查找game-delay.csv文件
+     *
+     * @param directory 搜索目录
+     * @return game-delay.csv文件路径，如果未找到返回null
+     * @throws IOException IO异常
+     */
+    private static Path findGameDelayCsvFile(Path directory) throws IOException {
+        return Files.walk(directory)
+                .filter(path -> path.getFileName() != null && 
+                        path.getFileName().toString().equalsIgnoreCase("game-delay.csv"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 解析game-delay.csv文件
+     * 列顺序：index、delay(ms)
+     *
+     * @param csvPath CSV文件路径
+     * @return GameDelayData列表
+     * @throws IOException IO异常
+     */
+    private static List<GameDelayData> parseGameDelayCsv(Path csvPath) throws IOException {
+        List<GameDelayData> gameDelayDataList = new ArrayList<>();
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 跳过表头
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    // 检查表头格式
+                    if (line.toLowerCase().contains("index") || 
+                        line.toLowerCase().contains("delay")) {
+                        continue;
+                    }
+                }
+
+                // 解析CSV行
+                String[] values = parseCsvLine(line);
+                if (values.length >= 2) {
+                    GameDelayData gameDelayData = new GameDelayData();
+                    gameDelayData.setIndexValue(values[0].trim());
+                    gameDelayData.setDelay(values[1].trim());
+                    gameDelayDataList.add(gameDelayData);
+                } else {
+                    LOGGER.warn("CSV行格式不正确，skip: {}", line);
+                }
+            }
+
+            LOGGER.info("Parsing game-delay.csv completed，共{}条记录", gameDelayDataList.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse game-delay.csv: {}", e.getMessage(), e);
+            throw new IOException("解析game-delay.csv失败: " + e.getMessage(), e);
+        }
+
+        return gameDelayDataList;
+    }
+
+    /**
+     * 解压网络侧压缩包并解析CSV文件
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return NetworkData列表，如果解析失败返回空列表
+     * @throws IOException IO异常
+     */
+    public static List<NetworkData> extractAndParseNetworkCsv(String zipFilePath) throws IOException {
+        LOGGER.info("startExtracting 网络侧 file并解析CSV: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("network_file_extract_");
+        List<NetworkData> networkDataList = new ArrayList<>();
+
+        try {
+            // 解压文件
+            extractZipFile(zipPath, extractDir);
+
+            // 查找所有CSV文件
+            List<Path> csvFiles = findCsvFiles(extractDir);
+            
+            if (csvFiles.isEmpty()) {
+                LOGGER.warn("未找到CSV文件");
+                return networkDataList;
+            }
+
+            // 解析所有CSV文件
+            for (Path csvFile : csvFiles) {
+                LOGGER.info("找到CSV文件: {}", csvFile);
+                try {
+                    List<NetworkData> dataList = parseNetworkCsv(csvFile);
+                    networkDataList.addAll(dataList);
+                    LOGGER.info("CSV文件 parsed successfully: {}, 共{}条记录", csvFile.getFileName(), dataList.size());
+                } catch (Exception e) {
+                    LOGGER.error("解析CSV文件失败: {}, error: {}", csvFile, e.getMessage(), e);
+                    // continue解析其他文件
+                }
+            }
+
+            LOGGER.info("网络侧CSV解析完成，共{}条记录", networkDataList.size());
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("Temporary extraction directory cleaned: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return networkDataList;
+    }
+
+    /**
+     * 递归查找所有CSV文件
+     *
+     * @param directory 搜索目录
+     * @return CSV文件路径列表
+     * @throws IOException IO异常
+     */
+    private static List<Path> findCsvFiles(Path directory) throws IOException {
+        List<Path> csvFiles = new ArrayList<>();
+        Files.walk(directory)
+                .filter(path -> {
+                    String fileName = path.getFileName() != null ? path.getFileName().toString().toLowerCase() : "";
+                    return Files.isRegularFile(path) && fileName.endsWith(".csv");
+                })
+                .forEach(csvFiles::add);
+        return csvFiles;
+    }
+
+    /**
+     * 解析网络侧CSV文件
+     *
+     * @param csvPath CSV文件路径
+     * @return NetworkData列表
+     * @throws IOException IO异常
+     */
+    private static List<NetworkData> parseNetworkCsv(Path csvPath) throws IOException {
+        List<NetworkData> networkDataList = new ArrayList<>();
+        int filteredCount = 0; // 记录被过滤的数据条数
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8)) {
+            String line;
+            boolean isFirstLine = true;
+            int[] columnIndexMap = null; // 存储列索引映射
+
+            while ((line = reader.readLine()) != null) {
+                // 跳过空行
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+
+                // 解析表头，建立列索引映射
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    columnIndexMap = parseHeader(line);
+                    if (columnIndexMap == null) {
+                        LOGGER.warn("CSV表头格式不正确，跳过文件: {}", csvPath);
+                        return networkDataList;
+                    }
+                    continue;
+                }
+
+                // 解析数据行
+                String[] values = parseCsvLine(line);
+                if (values.length > 0) {
+                    NetworkData networkData = createNetworkDataFromRow(values, columnIndexMap);
+                    if (networkData != null) {
+                        // 只导入infoIndicate为2的数据
+                        String infoIndicate = networkData.getInfoIndicate();
+                        if (infoIndicate != null && "2".equals(infoIndicate.trim())) {
+                            networkDataList.add(networkData);
+                        } else {
+                            filteredCount++;
+                        }
+                    }
+                }
+            }
+
+            LOGGER.info("Parsing 网络侧CSV completed，共{}条记录，过滤掉{}条infoIndicate不为2的记录", 
+                    networkDataList.size(), filteredCount);
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse 网络侧CSV: {}", e.getMessage(), e);
+            throw new IOException("解析网络侧CSV失败: " + e.getMessage(), e);
+        }
+
+        return networkDataList;
+    }
+
+    /**
+     * 解析CSV表头，建立列索引映射
+     *
+     * @param headerLine 表头行
+     * @return 列索引映射数组，索引对应字段顺序
+     */
+    private static int[] parseHeader(String headerLine) {
+        String[] headers = parseCsvLine(headerLine);
+        int[] columnIndexMap = new int[58]; // 58个字段
+        java.util.Arrays.fill(columnIndexMap, -1);
+
+        // 定义字段名称映射
+        String[] fieldNames = {
+            "serialNo", "TimeStamp", "startTime", "Gpsi", "Dnn", "S_NSSAI", "RatType", "Qci",
+            "ExpOptFlag", "ExpOptStartTime", "AppId", "SubAppId", "AppStatus", "AppQuality",
+            "Tai", "CellId", "DelayAn", "DelayDn", "UplinkBandwidth", "DownlinkBandwidth",
+            "UplinkPkg", "DownlinkPkg", "LostUplinkPkg", "LostDownLinkPkg", "SubAppStartTime",
+            "InfoIndicate", "Upfld", "Pei", "SubAppEffDuration", "MaxDelayAn", "MaxDelayDn",
+            "AvgBandwidthUI", "AvgBandwidthDI", "MaxBandwidthUI", "MaxBandwidthDI", "VolumeUI",
+            "VolumeDI", "ExpOptEndTime", "SubAppEdrStartTime", "UserServiceLoadUIEcn",
+            "UserServiceLoadDIEcn", "AssuranceFailedReason", "GnbQncNotifType", "AvgQoe",
+            "MaxResolution", "MostResolution", "MaxBitRateUI", "AvgBitRateUI", "MaxBitRateDI",
+            "AvgBitRateDI", "StallingDuration", "StallingNumber", "ServiceDelay", "ServiceInitialDuration"
+        };
+
+        // 建立列索引映射
+        for (int i = 0; i < headers.length; i++) {
+            String header = headers[i].trim();
+            for (int j = 0; j < fieldNames.length; j++) {
+                if (header.equalsIgnoreCase(fieldNames[j]) || 
+                    header.replaceAll("[_\\s-]", "").equalsIgnoreCase(fieldNames[j].replaceAll("[_\\s-]", ""))) {
+                    columnIndexMap[j] = i;
+                    break;
+                }
+            }
+        }
+
+        return columnIndexMap;
+    }
+
+    /**
+     * 从CSV行数据创建NetworkData对象
+     *
+     * @param values CSV行数据
+     * @param columnIndexMap 列索引映射
+     * @return NetworkData对象
+     */
+    private static NetworkData createNetworkDataFromRow(String[] values, int[] columnIndexMap) {
+        NetworkData networkData = new NetworkData();
+        
+        try {
+            if (columnIndexMap[0] >= 0 && columnIndexMap[0] < values.length) {
+                networkData.setSerialNo(values[columnIndexMap[0]].trim());
+            }
+            if (columnIndexMap[1] >= 0 && columnIndexMap[1] < values.length) {
+                networkData.setTimeStamp(values[columnIndexMap[1]].trim());
+            }
+            if (columnIndexMap[2] >= 0 && columnIndexMap[2] < values.length) {
+                networkData.setStartTime(values[columnIndexMap[2]].trim());
+            }
+            if (columnIndexMap[3] >= 0 && columnIndexMap[3] < values.length) {
+                networkData.setGpsi(values[columnIndexMap[3]].trim());
+            }
+            if (columnIndexMap[4] >= 0 && columnIndexMap[4] < values.length) {
+                networkData.setDnn(values[columnIndexMap[4]].trim());
+            }
+            if (columnIndexMap[5] >= 0 && columnIndexMap[5] < values.length) {
+                networkData.setSNssai(values[columnIndexMap[5]].trim());
+            }
+            if (columnIndexMap[6] >= 0 && columnIndexMap[6] < values.length) {
+                networkData.setRatType(values[columnIndexMap[6]].trim());
+            }
+            if (columnIndexMap[7] >= 0 && columnIndexMap[7] < values.length) {
+                networkData.setQci(values[columnIndexMap[7]].trim());
+            }
+            if (columnIndexMap[8] >= 0 && columnIndexMap[8] < values.length) {
+                networkData.setExpOptFlag(values[columnIndexMap[8]].trim());
+            }
+            if (columnIndexMap[9] >= 0 && columnIndexMap[9] < values.length) {
+                networkData.setExpOptStartTime(values[columnIndexMap[9]].trim());
+            }
+            if (columnIndexMap[10] >= 0 && columnIndexMap[10] < values.length) {
+                networkData.setAppId(values[columnIndexMap[10]].trim());
+            }
+            if (columnIndexMap[11] >= 0 && columnIndexMap[11] < values.length) {
+                networkData.setSubAppId(values[columnIndexMap[11]].trim());
+            }
+            if (columnIndexMap[12] >= 0 && columnIndexMap[12] < values.length) {
+                networkData.setAppStatus(values[columnIndexMap[12]].trim());
+            }
+            if (columnIndexMap[13] >= 0 && columnIndexMap[13] < values.length) {
+                networkData.setAppQuality(values[columnIndexMap[13]].trim());
+            }
+            if (columnIndexMap[14] >= 0 && columnIndexMap[14] < values.length) {
+                networkData.setTai(values[columnIndexMap[14]].trim());
+            }
+            if (columnIndexMap[15] >= 0 && columnIndexMap[15] < values.length) {
+                networkData.setCellId(values[columnIndexMap[15]].trim());
+            }
+            if (columnIndexMap[16] >= 0 && columnIndexMap[16] < values.length) {
+                networkData.setDelayAn(values[columnIndexMap[16]].trim());
+            }
+            if (columnIndexMap[17] >= 0 && columnIndexMap[17] < values.length) {
+                networkData.setDelayDn(values[columnIndexMap[17]].trim());
+            }
+            if (columnIndexMap[18] >= 0 && columnIndexMap[18] < values.length) {
+                networkData.setUplinkBandwidth(values[columnIndexMap[18]].trim());
+            }
+            if (columnIndexMap[19] >= 0 && columnIndexMap[19] < values.length) {
+                networkData.setDownlinkBandwidth(values[columnIndexMap[19]].trim());
+            }
+            if (columnIndexMap[20] >= 0 && columnIndexMap[20] < values.length) {
+                networkData.setUplinkPkg(values[columnIndexMap[20]].trim());
+            }
+            if (columnIndexMap[21] >= 0 && columnIndexMap[21] < values.length) {
+                networkData.setDownlinkPkg(values[columnIndexMap[21]].trim());
+            }
+            if (columnIndexMap[22] >= 0 && columnIndexMap[22] < values.length) {
+                networkData.setLostUplinkPkg(values[columnIndexMap[22]].trim());
+            }
+            if (columnIndexMap[23] >= 0 && columnIndexMap[23] < values.length) {
+                networkData.setLostDownlinkPkg(values[columnIndexMap[23]].trim());
+            }
+            if (columnIndexMap[24] >= 0 && columnIndexMap[24] < values.length) {
+                networkData.setSubAppStartTime(values[columnIndexMap[24]].trim());
+            }
+            if (columnIndexMap[25] >= 0 && columnIndexMap[25] < values.length) {
+                networkData.setInfoIndicate(values[columnIndexMap[25]].trim());
+            }
+            if (columnIndexMap[26] >= 0 && columnIndexMap[26] < values.length) {
+                networkData.setUpfld(values[columnIndexMap[26]].trim());
+            }
+            if (columnIndexMap[27] >= 0 && columnIndexMap[27] < values.length) {
+                networkData.setPei(values[columnIndexMap[27]].trim());
+            }
+            if (columnIndexMap[28] >= 0 && columnIndexMap[28] < values.length) {
+                networkData.setSubAppEffDuration(values[columnIndexMap[28]].trim());
+            }
+            if (columnIndexMap[29] >= 0 && columnIndexMap[29] < values.length) {
+                networkData.setMaxDelayAn(values[columnIndexMap[29]].trim());
+            }
+            if (columnIndexMap[30] >= 0 && columnIndexMap[30] < values.length) {
+                networkData.setMaxDelayDn(values[columnIndexMap[30]].trim());
+            }
+            if (columnIndexMap[31] >= 0 && columnIndexMap[31] < values.length) {
+                networkData.setAvgBandwidthUI(values[columnIndexMap[31]].trim());
+            }
+            if (columnIndexMap[32] >= 0 && columnIndexMap[32] < values.length) {
+                networkData.setAvgBandwidthDI(values[columnIndexMap[32]].trim());
+            }
+            if (columnIndexMap[33] >= 0 && columnIndexMap[33] < values.length) {
+                networkData.setMaxBandwidthUI(values[columnIndexMap[33]].trim());
+            }
+            if (columnIndexMap[34] >= 0 && columnIndexMap[34] < values.length) {
+                networkData.setMaxBandwidthDI(values[columnIndexMap[34]].trim());
+            }
+            if (columnIndexMap[35] >= 0 && columnIndexMap[35] < values.length) {
+                networkData.setVolumeUI(values[columnIndexMap[35]].trim());
+            }
+            if (columnIndexMap[36] >= 0 && columnIndexMap[36] < values.length) {
+                networkData.setVolumeDI(values[columnIndexMap[36]].trim());
+            }
+            if (columnIndexMap[37] >= 0 && columnIndexMap[37] < values.length) {
+                networkData.setExpOptEndTime(values[columnIndexMap[37]].trim());
+            }
+            if (columnIndexMap[38] >= 0 && columnIndexMap[38] < values.length) {
+                networkData.setSubAppEdrStartTime(values[columnIndexMap[38]].trim());
+            }
+            if (columnIndexMap[39] >= 0 && columnIndexMap[39] < values.length) {
+                networkData.setUserServiceLoadUIEcn(values[columnIndexMap[39]].trim());
+            }
+            if (columnIndexMap[40] >= 0 && columnIndexMap[40] < values.length) {
+                networkData.setUserServiceLoadDIEcn(values[columnIndexMap[40]].trim());
+            }
+            if (columnIndexMap[41] >= 0 && columnIndexMap[41] < values.length) {
+                networkData.setAssuranceFailedReason(values[columnIndexMap[41]].trim());
+            }
+            if (columnIndexMap[42] >= 0 && columnIndexMap[42] < values.length) {
+                networkData.setGnbQncNotifType(values[columnIndexMap[42]].trim());
+            }
+            if (columnIndexMap[43] >= 0 && columnIndexMap[43] < values.length) {
+                networkData.setAvgQoe(values[columnIndexMap[43]].trim());
+            }
+            if (columnIndexMap[44] >= 0 && columnIndexMap[44] < values.length) {
+                networkData.setMaxResolution(values[columnIndexMap[44]].trim());
+            }
+            if (columnIndexMap[45] >= 0 && columnIndexMap[45] < values.length) {
+                networkData.setMostResolution(values[columnIndexMap[45]].trim());
+            }
+            if (columnIndexMap[46] >= 0 && columnIndexMap[46] < values.length) {
+                networkData.setMaxBitRateUI(values[columnIndexMap[46]].trim());
+            }
+            if (columnIndexMap[47] >= 0 && columnIndexMap[47] < values.length) {
+                networkData.setAvgBitRateUI(values[columnIndexMap[47]].trim());
+            }
+            if (columnIndexMap[48] >= 0 && columnIndexMap[48] < values.length) {
+                networkData.setMaxBitRateDI(values[columnIndexMap[48]].trim());
+            }
+            if (columnIndexMap[49] >= 0 && columnIndexMap[49] < values.length) {
+                networkData.setAvgBitRateDI(values[columnIndexMap[49]].trim());
+            }
+            if (columnIndexMap[50] >= 0 && columnIndexMap[50] < values.length) {
+                networkData.setStallingDuration(values[columnIndexMap[50]].trim());
+            }
+            if (columnIndexMap[51] >= 0 && columnIndexMap[51] < values.length) {
+                networkData.setStallingNumber(values[columnIndexMap[51]].trim());
+            }
+            if (columnIndexMap[52] >= 0 && columnIndexMap[52] < values.length) {
+                networkData.setServiceDelay(values[columnIndexMap[52]].trim());
+            }
+            if (columnIndexMap[53] >= 0 && columnIndexMap[53] < values.length) {
+                networkData.setServiceInitialDuration(values[columnIndexMap[53]].trim());
+            }
+            
+            return networkData;
+        } catch (Exception e) {
+            LOGGER.warn("创建NetworkData对象失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 解析CSV行（简单实现，process逗号分隔）
+     *
+     * @param line CSV行
+     * @return 字段值数组
+     */
+    private static String[] parseCsvLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder currentValue = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                values.add(currentValue.toString());
+                currentValue = new StringBuilder();
+            } else {
+                currentValue.append(c);
+            }
+        }
+
+        // 添加最后一个值
+        values.add(currentValue.toString());
+
+        return values.toArray(new String[0]);
+    }
+
+    /**
+     * 客户端数据解析结果
+     */
+    public static class ClientDataResult {
+        private TaskInfoDTO taskInfo;
+        private List<SpeedData> speedDataList;
+        private List<VmosData> vmosDataList;
+        private List<RttData> rttDataList;
+        private List<LostData> lostDataList;
+        private List<VideoData> videoDataList;
+        private List<GameDelayData> gameDelayDataList;
+
+        public TaskInfoDTO getTaskInfo() {
+            return taskInfo;
+        }
+
+        public void setTaskInfo(TaskInfoDTO taskInfo) {
+            this.taskInfo = taskInfo;
+        }
+
+        public List<SpeedData> getSpeedDataList() {
+            return speedDataList;
+        }
+
+        public void setSpeedDataList(List<SpeedData> speedDataList) {
+            this.speedDataList = speedDataList;
+        }
+
+        public List<VmosData> getVmosDataList() {
+            return vmosDataList;
+        }
+
+        public void setVmosDataList(List<VmosData> vmosDataList) {
+            this.vmosDataList = vmosDataList;
+        }
+
+        public List<RttData> getRttDataList() {
+            return rttDataList;
+        }
+
+        public void setRttDataList(List<RttData> rttDataList) {
+            this.rttDataList = rttDataList;
+        }
+
+        public List<LostData> getLostDataList() {
+            return lostDataList;
+        }
+
+        public void setLostDataList(List<LostData> lostDataList) {
+            this.lostDataList = lostDataList;
+        }
+
+        public List<VideoData> getVideoDataList() {
+            return videoDataList;
+        }
+
+        public void setVideoDataList(List<VideoData> videoDataList) {
+            this.videoDataList = videoDataList;
+        }
+
+        public List<GameDelayData> getGameDelayDataList() {
+            return gameDelayDataList;
+        }
+
+        public void setGameDelayDataList(List<GameDelayData> gameDelayDataList) {
+            this.gameDelayDataList = gameDelayDataList;
+        }
+    }
+
+    /**
+     * 解压端侧压缩包并统一解析所有数据（taskInfo、vmos、rtt、video、speed、lost、game-delay）
+     * 只解压一次，然后统一处理所有数据
+     * 文件存在则解析，不存在则跳过
+     *
+     * @param zipFilePath 压缩包文件路径
+     * @return ClientDataResult对象，包含所有解析结果
+     * @throws IOException IO异常
+     */
+    public static ClientDataResult extractAndParseAllClientData(String zipFilePath) throws IOException {
+        LOGGER.info("startExtracting 端侧 file并统一解析所有数据: {}", zipFilePath);
+
+        Path zipPath = Paths.get(zipFilePath);
+        if (!Files.exists(zipPath)) {
+            throw new IOException("压缩包文件不存在: " + zipFilePath);
+        }
+
+        // 创建临时解压目录
+        Path extractDir = Files.createTempDirectory("client_file_extract_");
+        ClientDataResult result = new ClientDataResult();
+
+        try {
+            // 解压文件（只解压一次）
+            extractZipFile(zipPath, extractDir);
+            LOGGER.info("文件解压完成，解压目录: {}", extractDir);
+
+            // 解析taskinfo.json
+            try {
+                Path taskInfoPath = extractDir.resolve("taskinfo.json");
+                if (!Files.exists(taskInfoPath)) {
+                    taskInfoPath = findTaskInfoFile(extractDir);
+                }
+                if (taskInfoPath != null && Files.exists(taskInfoPath)) {
+                    LOGGER.info("Foundtaskinfo.json file: {}", taskInfoPath);
+                    TaskInfoDTO taskInfo = parseTaskInfoJson(taskInfoPath);
+                    result.setTaskInfo(taskInfo);
+                    LOGGER.info("taskinfo.json parsed successfully: taskId={}", taskInfo != null ? taskInfo.getTaskId() : "null");
+                } else {
+                    LOGGER.warn("未Foundtaskinfo.json file");
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析taskinfo.json失败: {}", e.getMessage(), e);
+            }
+
+            // 解析speed文件
+            try {
+                Path speedExcelPath = extractDir.resolve("network-speed.xlsx");
+                if (!Files.exists(speedExcelPath)) {
+                    speedExcelPath = findSpeedExcelFile(extractDir);
+                }
+                if (speedExcelPath != null && Files.exists(speedExcelPath)) {
+                    LOGGER.info("Found network-speed.xlsx file: {}", speedExcelPath);
+                    List<SpeedData> speedDataList = parseSpeedExcel(speedExcelPath);
+                    result.setSpeedDataList(speedDataList);
+                    LOGGER.info("network-speed.xlsx parsed successfully: 共{}条记录", speedDataList.size());
+                } else {
+                    LOGGER.warn("未找到network-speed.xlsx文件");
+                    result.setSpeedDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析network-speed.xlsx失败: {}", e.getMessage(), e);
+                result.setSpeedDataList(new ArrayList<>());
+            }
+
+            // 解析vmos文件
+            try {
+                Path vmosExcelPath = findVmosExcelFile(extractDir);
+                if (vmosExcelPath != null && Files.exists(vmosExcelPath)) {
+                    String fileName = vmosExcelPath.getFileName().toString();
+                    LOGGER.info("Found vmos file: {}", vmosExcelPath);
+                    List<VmosData> vmosDataList = parseVmosExcel(vmosExcelPath, fileName);
+                    result.setVmosDataList(vmosDataList);
+                    LOGGER.info("vmos file parsed successfully: {}, 共{}条记录", fileName, vmosDataList.size());
+                } else {
+                    LOGGER.warn("未找到vmos文件");
+                    result.setVmosDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析vmos文件失败: {}", e.getMessage(), e);
+                result.setVmosDataList(new ArrayList<>());
+            }
+
+            // 解析rtt文件
+            try {
+                Path rttCsvPath = extractDir.resolve("network-delay.csv");
+                if (!Files.exists(rttCsvPath)) {
+                    rttCsvPath = findRttCsvFile(extractDir);
+                }
+                if (rttCsvPath != null && Files.exists(rttCsvPath)) {
+                    LOGGER.info("Found network-delay.csv file: {}", rttCsvPath);
+                    List<RttData> rttDataList = parseRttCsv(rttCsvPath);
+                    result.setRttDataList(rttDataList);
+                    LOGGER.info("network-delay.csv parsed successfully: 共{}条记录", rttDataList.size());
+                } else {
+                    LOGGER.warn("未找到network-delay.csv文件");
+                    result.setRttDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析network-delay.csv失败: {}", e.getMessage(), e);
+                result.setRttDataList(new ArrayList<>());
+            }
+
+            // 解析lost文件
+            try {
+                Path lostCsvPath = extractDir.resolve("network-loss.csv");
+                if (!Files.exists(lostCsvPath)) {
+                    lostCsvPath = findLostCsvFile(extractDir);
+                }
+                if (lostCsvPath != null && Files.exists(lostCsvPath)) {
+                    LOGGER.info("Found network-loss.csv file: {}", lostCsvPath);
+                    List<LostData> lostDataList = parseLostCsv(lostCsvPath);
+                    result.setLostDataList(lostDataList);
+                    LOGGER.info("network-loss.csv parsed successfully: 共{}条记录", lostDataList.size());
+                } else {
+                    LOGGER.warn("未找到network-loss.csv文件");
+                    result.setLostDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析network-loss.csv失败: {}", e.getMessage(), e);
+                result.setLostDataList(new ArrayList<>());
+            }
+
+            // 解析video文件
+            try {
+                Path videoCsvPath = extractDir.resolve("video-quality.csv");
+                if (!Files.exists(videoCsvPath)) {
+                    videoCsvPath = findVideoCsvFile(extractDir);
+                }
+                if (videoCsvPath != null && Files.exists(videoCsvPath)) {
+                    LOGGER.info("Found video-quality.csv file: {}", videoCsvPath);
+                    List<VideoData> videoDataList = parseVideoCsv(videoCsvPath);
+                    result.setVideoDataList(videoDataList);
+                    LOGGER.info("video-quality.csv parsed successfully: 共{}条记录", videoDataList.size());
+                } else {
+                    LOGGER.warn("未找到video-quality.csv文件");
+                    result.setVideoDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("Failed to parse video-quality.csv: {}", e.getMessage(), e);
+                result.setVideoDataList(new ArrayList<>());
+            }
+
+            // 解析game-delay文件
+            try {
+                Path gameDelayCsvPath = extractDir.resolve("game-delay.csv");
+                if (!Files.exists(gameDelayCsvPath)) {
+                    gameDelayCsvPath = findGameDelayCsvFile(extractDir);
+                }
+                if (gameDelayCsvPath != null && Files.exists(gameDelayCsvPath)) {
+                    LOGGER.info("Found game-delay.csv file: {}", gameDelayCsvPath);
+                    List<GameDelayData> gameDelayDataList = parseGameDelayCsv(gameDelayCsvPath);
+                    result.setGameDelayDataList(gameDelayDataList);
+                    LOGGER.info("game-delay.csv parsed successfully: 共{}条记录", gameDelayDataList.size());
+                } else {
+                    LOGGER.warn("未找到game-delay.csv文件");
+                    result.setGameDelayDataList(new ArrayList<>());
+                }
+            } catch (Exception e) {
+                LOGGER.error("解析game-delay.csv失败: {}", e.getMessage(), e);
+                result.setGameDelayDataList(new ArrayList<>());
+            }
+
+            LOGGER.info("所有数据解析完成");
+
+        } finally {
+            // 清理临时目录
+            try {
+                deleteDirectory(extractDir);
+                LOGGER.info("临时解压目录已清理: {}", extractDir);
+            } catch (Exception e) {
+                LOGGER.warn("清理临时目录失败: {}", e.getMessage());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 递归delete目录
+     *
+     * @param directory 要delete的目录
+     * @throws IOException IO异常
+     */
+    private static void deleteDirectory(Path directory) throws IOException {
+        if (Files.exists(directory)) {
+            Files.walk(directory)
+                    .sorted((a, b) -> b.compareTo(a)) // 先delete文件，再delete目录
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            LOGGER.warn("删除文件/目录失败: {}", path, e);
+                        }
+                    });
+        }
+    }
+}
+

@@ -12,11 +12,12 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.springframework.stereotype.Component;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Component
 public class ZipProcessor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ZipProcessor.class);
 
     /**
      * 解压ZIP文件并查找指定的Excel文件
@@ -41,14 +42,14 @@ public class ZipProcessor {
             while ((entry = zis.getNextZipEntry()) != null) {
                 if (!entry.isDirectory()) {
                     String entryName = entry.getName();
-                    log.info("Extracting file: {}", entryName);
+                    LOGGER.info("Extracting file: {}", entryName);
                     
-                    // 检查是否是目标Excel文件
+                    // check是否是目标Excel文件
                     if (entryName.equals(excelFileName)) {
                         foundExcelPath = extractDir + File.separator + entryName;
                     }
                     
-                    // 解压文件
+                    // Extracting  file
                     File outputFile = new File(extractDir, entryName);
                     // 确保父目录存在
                     outputFile.getParentFile().mkdirs();
@@ -65,16 +66,16 @@ public class ZipProcessor {
         }
         
         if (foundExcelPath != null) {
-            log.info("Found Excel file: {}", foundExcelPath);
+            LOGGER.info("Found Excel file: {}", foundExcelPath);
         } else {
-            log.warn("Specified Excel file not found: {}", excelFileName);
+            LOGGER.warn("Specified Excel file not found: {}", excelFileName);
         }
         
         return foundExcelPath;
     }
     
     /**
-     * 清理解压的临时文件
+     * 清理Extracting 的临时 file
      * @param extractDir 解压目录
      */
     public void cleanupExtractedFiles(String extractDir) {
@@ -82,10 +83,10 @@ public class ZipProcessor {
             Path extractPath = Paths.get(extractDir);
             if (Files.exists(extractPath)) {
                 deleteDirectory(extractPath.toFile());
-                log.info("Cleaned up temporary file directory: {}", extractDir);
+                LOGGER.info("Cleaned up temporary file directory: {}", extractDir);
             }
         } catch (Exception e) {
-            log.error("Failed to clean up temporary files: {}", e.getMessage());
+            LOGGER.error("Failed to clean up temporary files: {}", e.getMessage());
         }
     }
     

@@ -74,6 +74,31 @@ public class TestCaseExecutionRequest {
     private String taskCustomParams;
     
     /**
+     * 网元信息列表
+     */
+    private List<NetworkElementInfo> networkElementInfoList;
+    
+    /**
+     * 执行机城市信息（拼音）
+     */
+    private String executorCityPinyin;
+    
+    /**
+     * 网络信息
+     */
+    private String network;
+    
+    /**
+     * 采集任务名称
+     */
+    private String collectTaskName;
+    
+    /**
+     * 采集任务描述
+     */
+    private String collectTaskDescription;
+    
+    /**
      * 用例信息
      */
     @Data
@@ -95,6 +120,21 @@ public class TestCaseExecutionRequest {
          */
         @NotNull(message = "轮次不能为空")
         private Integer round;
+        
+        /**
+         * 业务大类
+         */
+        private String businessCategory;
+        
+        /**
+         * APP名称
+         */
+        private String app;
+        
+        /**
+         * APP英文名称
+         */
+        private String appEn;
     }
     
     /**
@@ -137,6 +177,11 @@ public class TestCaseExecutionRequest {
          * UE厂商
          */
         private String vendor;
+
+        /**
+         * UE型号
+         */
+        private String model;
         
         /**
          * UE端口
@@ -191,6 +236,11 @@ public class TestCaseExecutionRequest {
         private String app;
         
         /**
+         * APP英文名
+         */
+        private String appEn;
+        
+        /**
          * 意图
          */
         private String intent;
@@ -209,5 +259,53 @@ public class TestCaseExecutionRequest {
          * 策略状态
          */
         private Integer status;
+    }
+    
+    /**
+     * 网元信息
+     */
+    @Data
+    public static class NetworkElementInfo {
+        
+        /**
+         * 网元ID
+         */
+        private Long id;
+        
+        /**
+         * 网元名称
+         */
+        private String name;
+        
+        /**
+         * 网元描述
+         */
+        private String description;
+        
+        /**
+         * 网元状态
+         */
+        private Integer status;
+        
+        /**
+         * 网元属性列表
+         */
+        private List<AttributeInfo> attributes;
+        
+        /**
+         * 网元属性信息
+         */
+        @Data
+        public static class AttributeInfo {
+            /**
+             * 属性名称
+             */
+            private String name;
+            
+            /**
+             * 属性值
+             */
+            private String value;
+        }
     }
 }

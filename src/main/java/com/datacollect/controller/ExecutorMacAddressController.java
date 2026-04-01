@@ -1,0 +1,52 @@
+package com.datacollect.controller;
+
+import com.datacollect.common.Result;
+import com.datacollect.entity.ExecutorMacAddress;
+import com.datacollect.service.ExecutorMacAddressService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+@RestController
+@RequestMapping("/executor-mac-address")
+public class ExecutorMacAddressController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExecutorMacAddressController.class);
+
+    @Autowired
+    private ExecutorMacAddressService executorMacAddressService;
+
+    /**
+     * 获取所有可用的MAC地址列表（未分配给执行机的）
+     */
+    @GetMapping("/available")
+    public Result<List<ExecutorMacAddress>> getAvailableMacAddresses() {
+        List<ExecutorMacAddress> macAddresses = executorMacAddressService.getAvailableMacAddresses();
+        return Result.success(macAddresses);
+    }
+
+    /**
+     * 获取所有MAC地址列表
+     */
+    @GetMapping("/list")
+    public Result<List<ExecutorMacAddress>> list() {
+        List<ExecutorMacAddress> macAddresses = executorMacAddressService.list();
+        return Result.success(macAddresses);
+    }
+
+    /**
+     * 根据MAC地址获取所有关联的IP地址列表
+     */
+    @GetMapping("/mac/{macAddress}/ips")
+    public Result<List<ExecutorMacAddress>> getIpsByMacAddress(@PathVariable String macAddress) {
+        List<ExecutorMacAddress> macAddresses = executorMacAddressService.getAllByMacAddress(macAddress);
+        return Result.success(macAddresses);
+    }
+}
+

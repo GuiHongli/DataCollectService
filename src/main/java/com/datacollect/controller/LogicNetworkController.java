@@ -3,9 +3,8 @@ package com.datacollect.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.datacollect.common.Result;
-import com.datacollect.entity.LogicNetwork;
-import com.datacollect.service.LogicNetworkService;
-import lombok.extern.slf4j.Slf4j;
+import com.datacollect.entity.NetworkType;
+import com.datacollect.service.NetworkTypeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -14,63 +13,67 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import java.util.List;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/logic-network")
 @Validated
 public class LogicNetworkController {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(LogicNetworkController.class);
+
     @Autowired
-    private LogicNetworkService logicNetworkService;
+    private NetworkTypeService networkTypeService;
 
     @PostMapping
-    public Result<LogicNetwork> create(@Valid @RequestBody LogicNetwork logicNetwork) {
-        logicNetworkService.save(logicNetwork);
-        return Result.success(logicNetwork);
+    public Result<NetworkType> create(@Valid @RequestBody NetworkType networkType) {
+        networkTypeService.save(networkType);
+        return Result.success(networkType);
     }
 
     @PutMapping("/{id}")
-    public Result<LogicNetwork> update(@PathVariable @NotNull Long id, @Valid @RequestBody LogicNetwork logicNetwork) {
-        logicNetwork.setId(id);
-        logicNetworkService.updateById(logicNetwork);
-        return Result.success(logicNetwork);
+    public Result<NetworkType> update(@PathVariable @NotNull Long id, @Valid @RequestBody NetworkType networkType) {
+        networkType.setId(id);
+        networkTypeService.updateById(networkType);
+        return Result.success(networkType);
     }
 
     @DeleteMapping("/{id}")
     public Result<Boolean> delete(@PathVariable @NotNull Long id) {
-        boolean result = logicNetworkService.removeById(id);
+        boolean result = networkTypeService.removeById(id);
         return Result.success(result);
     }
 
     @GetMapping("/{id}")
-    public Result<LogicNetwork> getById(@PathVariable @NotNull Long id) {
-        LogicNetwork logicNetwork = logicNetworkService.getById(id);
-        return Result.success(logicNetwork);
+    public Result<NetworkType> getById(@PathVariable @NotNull Long id) {
+        NetworkType networkType = networkTypeService.getById(id);
+        return Result.success(networkType);
     }
 
     @GetMapping("/page")
-    public Result<Page<LogicNetwork>> page(
+    public Result<Page<NetworkType>> page(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name) {
         
-        Page<LogicNetwork> page = new Page<>(current, size);
-        QueryWrapper<LogicNetwork> queryWrapper = new QueryWrapper<>();
+        Page<NetworkType> page = new Page<>(current, size);
+        QueryWrapper<NetworkType> queryWrapper = new QueryWrapper<>();
         
         if (name != null && !name.isEmpty()) {
             queryWrapper.like("name", name);
         }
         
         queryWrapper.orderByDesc("create_time");
-        Page<LogicNetwork> result = logicNetworkService.page(page, queryWrapper);
+        Page<NetworkType> result = networkTypeService.page(page, queryWrapper);
         return Result.success(result);
     }
 
     @GetMapping("/list")
-    public Result<List<LogicNetwork>> list() {
-        QueryWrapper<LogicNetwork> queryWrapper = new QueryWrapper<>();
+    public Result<List<NetworkType>> list() {
+        QueryWrapper<NetworkType> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", 1); // 只返回启用的网络类型
         queryWrapper.orderByAsc("name");
-        List<LogicNetwork> list = logicNetworkService.list(queryWrapper);
+        List<NetworkType> list = networkTypeService.list(queryWrapper);
         return Result.success(list);
     }
 }

@@ -1,0 +1,207 @@
+@startuml
+!theme plain
+skinparam classAttributeIconSize 0
+
+' 实体类
+class TaskInfo {
+  -Long id
+  -String taskId
+  -String nation
+  -String operator
+  -String prb
+  -String rsrp
+  -String service
+  -String app
+  -String startTime
+  -String endTime
+  -String userCategory
+  -String deviceId
+  -String summary
+  -LocalDateTime createTime
+  -LocalDateTime updateTime
+  -Integer deleted
+}
+
+class SpeedData {
+  -Long id
+  -String taskId
+  -String dlSpeed
+  -String ulSpeed
+  -String total
+  -LocalDateTime createTime
+  -LocalDateTime updateTime
+  -Integer deleted
+}
+
+class VmosData {
+  -Long id
+  -String taskId
+  -String sequenceNumber
+  -String speed
+  -String resolution
+  -String rtt
+  -String packetLossRate
+  -String stutterRatio
+  -String initialBufferingDelay
+  -String bitrate
+  -String videoExperience
+  -String interactionExperience
+  -String presentationExperience
+  -String alpha
+  -String beta
+  -String vmos
+  -String avgQoe
+  -LocalDateTime createTime
+  -LocalDateTime updateTime
+  -Integer deleted
+}
+
+' DTO类
+class TaskInfoDTO {
+  -String taskId
+  -String nation
+  -String operator
+  -String prb
+  -String rsrp
+  -String service
+  -String app
+  -String startTime
+  -String endTime
+  -String userCategory
+  -String deviceId
+  -Map<String, String> summary
+}
+
+' Mapper接口
+interface TaskInfoMapper {
+}
+
+interface SpeedDataMapper {
+}
+
+interface VmosDataMapper {
+}
+
+' Service接口
+interface TaskInfoService {
+  +boolean saveTaskInfo(TaskInfoDTO taskInfoDTO)
+}
+
+interface SpeedDataService {
+  +boolean batchSaveSpeedData(List<SpeedData> speedDataList, String taskId)
+}
+
+interface VmosDataService {
+  +boolean batchSaveVmosData(List<VmosData> vmosDataList, String taskId)
+}
+
+' Service实现类
+class TaskInfoServiceImpl {
+  -ObjectMapper objectMapper
+  +boolean saveTaskInfo(TaskInfoDTO taskInfoDTO)
+  -TaskInfo convertToEntity(TaskInfoDTO dto)
+}
+
+class SpeedDataServiceImpl {
+  +boolean batchSaveSpeedData(List<SpeedData> speedDataList, String taskId)
+}
+
+class VmosDataServiceImpl {
+  +boolean batchSaveVmosData(List<VmosData> vmosDataList, String taskId)
+}
+
+' 工具类
+class ClientFileProcessor {
+  -ObjectMapper objectMapper
+  +{static} TaskInfoDTO extractAndParseTaskInfo(String zipFilePath)
+  +{static} List<SpeedData> extractAndParseSpeedExcel(String zipFilePath)
+  +{static} List<VmosData> extractAndParseVmosExcel(String zipFilePath)
+  -{static} void extractZipFile(Path zipPath, Path extractDir)
+  -{static} Path findTaskInfoFile(Path directory)
+  -{static} TaskInfoDTO parseTaskInfoJson(Path taskInfoPath)
+  -{static} List<SpeedData> parseSpeedExcel(Path excelPath)
+  -{static} List<VmosData> parseVmosExcel(Path excelPath)
+  -{static} void deleteDirectory(Path directory)
+}
+
+' 服务类
+class FtpFileProcessService {
+  -GoHttpServerClient goHttpServerClient
+  -TestSettingsClientFtpService clientFtpService
+  -TestSettingsNetworkFtpService networkFtpService
+  -TaskInfoService taskInfoService
+  -SpeedDataService speedDataService
+  -VmosDataService vmosDataService
+  +String processClientFtpFile(String fileName)
+  +String processNetworkFtpFile(String fileName)
+  +List<String> processClientFtpFilesByDate(String dateStr, List<TaskInfoDTO> taskInfoList)
+  -String processFtpFile(...)
+}
+
+' MyBatis-Plus基类
+interface BaseMapper<T> {
+}
+
+interface IService<T> {
+}
+
+class ServiceImpl<M, T> {
+}
+
+' 关系定义
+TaskInfoMapper ..|> BaseMapper
+SpeedDataMapper ..|> BaseMapper
+VmosDataMapper ..|> BaseMapper
+
+TaskInfoServiceImpl ..|> TaskInfoService
+TaskInfoServiceImpl --|> ServiceImpl
+TaskInfoServiceImpl --> TaskInfoMapper
+TaskInfoServiceImpl --> TaskInfo
+TaskInfoServiceImpl ..> TaskInfoDTO : converts
+
+SpeedDataServiceImpl ..|> SpeedDataService
+SpeedDataServiceImpl --|> ServiceImpl
+SpeedDataServiceImpl --> SpeedDataMapper
+SpeedDataServiceImpl --> SpeedData
+
+VmosDataServiceImpl ..|> VmosDataService
+VmosDataServiceImpl --|> ServiceImpl
+VmosDataServiceImpl --> VmosDataMapper
+VmosDataServiceImpl --> VmosData
+
+TaskInfoMapper --> TaskInfo
+SpeedDataMapper --> SpeedData
+VmosDataMapper --> VmosData
+
+FtpFileProcessService --> TaskInfoService
+FtpFileProcessService --> SpeedDataService
+FtpFileProcessService --> VmosDataService
+FtpFileProcessService ..> ClientFileProcessor : uses
+FtpFileProcessService ..> TaskInfoDTO : uses
+
+ClientFileProcessor ..> TaskInfoDTO : creates
+ClientFileProcessor ..> SpeedData : creates
+ClientFileProcessService ..> VmosData : creates
+
+TaskInfoDTO ..> TaskInfo : converts to
+
+SpeedData --> TaskInfo : taskId references
+VmosData --> TaskInfo : taskId references
+
+note right of TaskInfo
+  表名: client_task_info
+end note
+
+note right of SpeedData
+  表名: speed_data
+end note
+
+note right of VmosData
+  表名: vmos_data
+end note
+
+@enduml
+
+
+
+

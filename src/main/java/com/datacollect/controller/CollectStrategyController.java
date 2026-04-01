@@ -7,7 +7,6 @@ import com.datacollect.dto.CollectStrategyDTO;
 import com.datacollect.entity.CollectStrategy;
 import com.datacollect.service.CollectStrategyService;
 import com.datacollect.enums.CollectIntentEnum;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -20,11 +19,14 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/collect-strategy")
 @Validated
 public class CollectStrategyController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CollectStrategyController.class);
 
     @Autowired
     private CollectStrategyService collectStrategyService;
@@ -49,9 +51,14 @@ public class CollectStrategyController {
     }
 
     @GetMapping("/{id}")
-    public Result<CollectStrategy> getById(@PathVariable @NotNull Long id) {
+    public Result<CollectStrategyDTO> getById(@PathVariable @NotNull Long id) {
         CollectStrategy collectStrategy = collectStrategyService.getById(id);
-        return Result.success(collectStrategy);
+        if (collectStrategy == null) {
+            return Result.error("采集策略不存在");
+        }
+        // 转换为DTO（包含筛选后的用例列表）
+        CollectStrategyDTO dto = collectStrategyService.convertToDTO(collectStrategy);
+        return Result.success(dto);
     }
 
     @GetMapping("/page")
@@ -86,6 +93,7 @@ public class CollectStrategyController {
                     dto.setName(strategy.getName());
                     dto.setCollectCount(strategy.getCollectCount());
                     dto.setTestCaseSetId(strategy.getTestCaseSetId());
+                    dto.setSelectedTestCaseIds(strategy.getSelectedTestCaseIds());
                     dto.setDescription(strategy.getDescription());
                     dto.setStatus(strategy.getStatus());
                     dto.setCreateBy(strategy.getCreateBy());

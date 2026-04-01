@@ -1,0 +1,75 @@
+@startuml
+!theme plain
+
+actor "FTP Server" as FTP
+participant "FtpFileProcessService" as FPS
+participant "ClientFileProcessor" as CFP
+participant "TaskInfoService" as TIS
+participant "SpeedDataService" as SDS
+participant "VmosDataService" as VDS
+participant "Database" as DB
+
+== 处理端侧FTP文件流程 ==
+
+FTP -> FPS: 下载压缩包文件
+activate FPS
+
+FPS -> FPS: 下载文件到本地
+FPS -> FPS: MD5校验（可选）
+
+FPS -> CFP: extractAndParseTaskInfo(zipFilePath)
+activate CFP
+CFP -> CFP: 解压ZIP文件
+CFP -> CFP: 查找taskinfo.json
+CFP -> CFP: 解析JSON文件
+CFP -> CFP: 返回TaskInfoDTO
+deactivate CFP
+FPS <-- CFP: TaskInfoDTO
+
+FPS -> TIS: saveTaskInfo(taskInfoDTO)
+activate TIS
+TIS -> TIS: convertToEntity(DTO)
+TIS -> DB: 保存TaskInfo
+activate DB
+DB --> TIS: 保存成功
+deactivate DB
+deactivate TIS
+FPS <-- TIS: boolean
+
+FPS -> CFP: extractAndParseSpeedExcel(zipFilePath)
+activate CFP
+CFP -> CFP: 解压ZIP文件
+CFP -> CFP: 查找speed-10s.xlsx
+CFP -> CFP: 解析Excel文件
+CFP -> CFP: 返回List<SpeedData>
+deactivate CFP
+FPS <-- CFP: List<SpeedData>
+
+FPS -> SDS: batchSaveSpeedData(speedDataList, taskId)
+activate SDS
+SDS -> SDS: 设置taskId和时间戳
+SDS -> DB: 批量保存SpeedData
+activate DB
+DB --> SDS: 保存成功
+deactivate DB
+deactivate SDS
+FPS <-- SDS: boolean
+
+FPS -> CFP: extractAndParseVmosExcel(zipFilePath)
+activate CFP
+CFP -> CFP: 解压ZIP文件
+CFP -> CFP: 查找vmos-10s.xlsx
+CFP -> CFP: 解析Excel文件
+CFP -> CFP: 返回List<VmosData>
+deactivate CFP
+FPS <-- CFP: List<VmosData>
+
+FPS -> FPS: 上传文件到gohttpserver
+FPS -> FTP: 返回文件URL
+deactivate FPS
+
+@enduml
+
+ 
+
+

@@ -27,6 +27,11 @@ public class CollectTaskRequest {
     private String description;
     
     /**
+     * 网元ID列表（可选）
+     */
+    private List<Long> networkElementIds;
+    
+    /**
      * 采集策略ID
      */
     @NotNull(message = "采集策略ID不能为空")
@@ -59,13 +64,29 @@ public class CollectTaskRequest {
     private Long cityId;
     
     /**
+     * 网络类型（normal、weak、congestion、weakcongestion、sunshang）
+     */
+    private String network;
+    
+    /**
+     * 厂商列表（如：["xiaomi", "oppo", "vivo"]）
+     */
+    private List<String> manufacturer;
+    
+    /**
      * 选中的逻辑环境ID列表
      */
     @NotNull(message = "逻辑环境列表不能为空")
     private List<Long> logicEnvironmentIds;
     
     /**
-     * 自定义参数列表（JSON格式）
+     * 任务级别自定义参数列表（JSON格式）
+     */
+    private String taskCustomParams;
+    
+    /**
+     * 用例配置列表（JSON格式）
+     * 格式：[{"testCaseId": 1, "executionCount": 2, "customParams": [{"key": "k", "value": ["v1", "v2"]}]}]
      */
     private String customParams;
 }

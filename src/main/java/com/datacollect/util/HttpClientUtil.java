@@ -7,17 +7,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-import lombok.extern.slf4j.Slf4j;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * HTTP客户端工具类
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Component
 public class HttpClientUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(HttpClientUtil.class);
 
     private final RestTemplate restTemplate;
 
@@ -40,22 +41,22 @@ public class HttpClientUtil {
             
             HttpEntity<Object> entity = new HttpEntity<>(requestBody, headers);
             
-            log.debug("Sending POST request - URL: {}, Request body: {}", url, requestBody);
+            LOGGER.debug("Sending POST request - URL: {}, Request body: {}", url, requestBody);
             
             ResponseEntity<T> response = restTemplate.postForEntity(url, entity, responseType);
             
-            log.debug("Received response - Status code: {}, Response body: {}", response.getStatusCode(), response.getBody());
+            LOGGER.debug("Received response - Status code: {}, Response body: {}", response.getStatusCode(), response.getBody());
             
             return response;
             
         } catch (Exception e) {
-            log.error("HTTP request exception - URL: {}, Error: {}", url, e.getMessage(), e);
+            LOGGER.error("HTTP request exception - URL: {}, Error: {}", url, e.getMessage(), e);
             throw e;
         }
     }
 
     /**
-     * 发送GET请求
+     * sendGET请求
      * 
      * @param url 请求URL
      * @param responseType 响应类型
@@ -63,16 +64,16 @@ public class HttpClientUtil {
      */
     public <T> ResponseEntity<T> get(String url, Class<T> responseType) {
         try {
-            log.debug("Sending GET request - URL: {}", url);
+            LOGGER.debug("Sending GET request - URL: {}", url);
             
             ResponseEntity<T> response = restTemplate.getForEntity(url, responseType);
             
-            log.debug("Received response - Status code: {}, Response body: {}", response.getStatusCode(), response.getBody());
+            LOGGER.debug("Received response - Status code: {}, Response body: {}", response.getStatusCode(), response.getBody());
             
             return response;
             
         } catch (Exception e) {
-            log.error("HTTP request exception - URL: {}, Error: {}", url, e.getMessage(), e);
+            LOGGER.error("HTTP request exception - URL: {}, Error: {}", url, e.getMessage(), e);
             throw e;
         }
     }

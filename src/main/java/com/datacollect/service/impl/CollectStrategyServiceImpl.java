@@ -76,7 +76,8 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
     /**
      * 转换为DTO
      */
-    private CollectStrategyDTO convertToDTO(CollectStrategy strategy) {
+    @Override
+    public CollectStrategyDTO convertToDTO(CollectStrategy strategy) {
         CollectStrategyDTO dto = new CollectStrategyDTO();
         copyBasicFields(strategy, dto);
         setIntentName(strategy, dto);
@@ -93,6 +94,9 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
         dto.setBusinessCategory(strategy.getBusinessCategory());
         dto.setApp(strategy.getApp());
         dto.setIntent(strategy.getIntent());
+        dto.setCustomParams(strategy.getCustomParams());
+        dto.setTestCaseCustomParams(strategy.getTestCaseCustomParams());
+        dto.setTestCaseExecutionCounts(strategy.getTestCaseExecutionCounts());
         dto.setDescription(strategy.getDescription());
         dto.setStatus(strategy.getStatus());
         dto.setCreateBy(strategy.getCreateBy());
@@ -136,9 +140,41 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
         }
         
         setTestCaseSetBasicInfo(dto, testCaseSet);
-        List<TestCase> testCases = testCaseService.getByTestCaseSetId(testCaseSet.getId());
-        List<CollectStrategyDTO.TestCaseInfo> testCaseInfoList = buildTestCaseInfoList(testCases);
+        // 获取用例集中的所有用例
+        List<TestCase> allTestCases = testCaseService.getByTestCaseSetId(testCaseSet.getId());
+        // 根据策略的筛选条件过滤用例
+        List<TestCase> filteredTestCases = filterTestCasesByStrategy(allTestCases, strategy);
+        List<CollectStrategyDTO.TestCaseInfo> testCaseInfoList = buildTestCaseInfoList(filteredTestCases);
         dto.setTestCaseList(testCaseInfoList);
+    }
+
+    /**
+     * 根据策略筛选测试用例
+     * 
+     * @param allTestCases 所有用例
+     * @param strategy 采集策略
+     * @return 筛选后的用例列表
+     */
+    private List<TestCase> filterTestCasesByStrategy(List<TestCase> allTestCases, CollectStrategy strategy) {
+        return allTestCases.stream()
+                .filter(testCase -> {
+                    // 业务大类筛选
+                    if (strategy.getBusinessCategory() != null && !strategy.getBusinessCategory().isEmpty()) {
+                        if (!strategy.getBusinessCategory().equals(testCase.getBusinessCategory())) {
+                            return false;
+                        }
+                    }
+                    
+                    // APP筛选
+                    if (strategy.getApp() != null && !strategy.getApp().isEmpty()) {
+                        if (!strategy.getApp().equals(testCase.getApp())) {
+                            return false;
+                        }
+                    }
+                    
+                    return true;
+                })
+                .collect(Collectors.toList());
     }
 
     private void setTestCaseSetBasicInfo(CollectStrategyDTO dto, TestCaseSet testCaseSet) {
@@ -161,6 +197,7 @@ public class CollectStrategyServiceImpl extends ServiceImpl<CollectStrategyMappe
         testCaseInfo.setLogicNetwork(testCase.getLogicNetwork());
         testCaseInfo.setBusinessCategory(testCase.getBusinessCategory());
         testCaseInfo.setApp(testCase.getApp());
+        testCaseInfo.setAppEn(testCase.getAppEn());
         testCaseInfo.setTestSteps(testCase.getTestSteps());
         testCaseInfo.setExpectedResult(testCase.getExpectedResult());
         return testCaseInfo;

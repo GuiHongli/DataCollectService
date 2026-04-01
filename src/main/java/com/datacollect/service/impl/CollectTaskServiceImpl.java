@@ -15,36 +15,41 @@ import com.datacollect.mapper.CollectTaskMapper;
 import com.datacollect.service.CollectStrategyService;
 import com.datacollect.service.CollectTaskService;
 
-import lombok.extern.slf4j.Slf4j;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 采集任务服务实现类
  * 
  * @author system
  * @since 2024-01-01
  */
-@Slf4j
 @Service
 public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, CollectTask> implements CollectTaskService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CollectTaskServiceImpl.class);
 
     @Autowired
     private CollectStrategyService collectStrategyService;
 
     @Override
-    public Long createCollectTask(CollectTaskRequest request) {
-        log.info("Create collect task - task name: {}, collect strategy ID: {}, collect count: {}", 
-                request.getName(), request.getCollectStrategyId(), request.getCollectCount());
+    public Long createCollectTask(CollectTaskRequest request, String createBy) {
+        LOGGER.info("Create collect task - task name: {}, collect strategy ID: {}, collect count: {}, createBy: {}", 
+                request.getName(), request.getCollectStrategyId(), request.getCollectCount(), createBy);
         
-        // 获取采集策略信息
+        // get采集策略信息
         CollectStrategy strategy = collectStrategyService.getById(request.getCollectStrategyId());
         if (strategy == null) {
-            log.error("Collect strategy not found - strategy ID: {}", request.getCollectStrategyId());
+            LOGGER.error("Collect strategy not found - strategy ID: {}", request.getCollectStrategyId());
             throw new CollectTaskException("COLLECT_STRATEGY_NOT_FOUND", "采集策略不存在");
         }
         
         CollectTask collectTask = new CollectTask();
         collectTask.setName(request.getName());
         collectTask.setDescription(request.getDescription());
+        // 将网元ID列表转换为JSON字符串存储
+        if (request.getNetworkElementIds() != null && !request.getNetworkElementIds().isEmpty()) {
+            collectTask.setNetworkElementIds(com.alibaba.fastjson.JSON.toJSONString(request.getNetworkElementIds()));
+        }
         collectTask.setCollectStrategyId(request.getCollectStrategyId());
         collectTask.setCollectStrategyName(strategy.getName());
         collectTask.setTestCaseSetId(strategy.getTestCaseSetId());
@@ -59,8 +64,11 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         collectTask.setSuccessTestCaseCount(0);
         collectTask.setFailedTestCaseCount(0);
         
-        // 设置自定义参数
-        collectTask.setCustomParams(request.getCustomParams());
+        // 设置任务级别自定义参数
+        collectTask.setCustomParams(request.getTaskCustomParams());
+        
+        // 设置创建人（下发人）
+        collectTask.setCreateBy(createBy);
         
         LocalDateTime now = LocalDateTime.now();
         collectTask.setCreateTime(now);
@@ -68,26 +76,26 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         boolean success = save(collectTask);
         if (success) {
-            log.info("Collect task created successfully - task ID: {}", collectTask.getId());
+            LOGGER.info("Collect task created successfully - task ID: {}, createBy: {}", collectTask.getId(), createBy);
             return collectTask.getId();
         } else {
-            log.error("Failed to create collect task - task name: {}", request.getName());
+            LOGGER.error("Failed to create collect task - task name: {}", request.getName());
             throw new CollectTaskException("COLLECT_TASK_SAVE_FAILED", "采集任务创建失败");
         }
     }
 
     @Override
     public CollectTask getCollectTaskById(Long id) {
-        log.debug("Get collect task by ID - task ID: {}", id);
+        LOGGER.debug("Get collect task by ID - task ID: {}", id);
         return getById(id);
     }
 
     @Override
     public boolean updateTaskStatus(Long id, String status) {
-        log.info("Update task status - task ID: {}, status: {}", id, status);
+        LOGGER.info("Update task status - task ID: {}, status: {}", id, status);
         
         if (!isValidStatus(status)) {
-            log.error("Invalid task status: {} - task ID: {}", status, id);
+            LOGGER.error("Invalid task status: {} - task ID: {}", status, id);
             return false;
         }
         
@@ -116,15 +124,15 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     private boolean executeUpdate(UpdateWrapper<CollectTask> updateWrapper, Long id, String status) {
         boolean success = update(updateWrapper);
         if (success) {
-            log.info("Task status updated successfully - task ID: {}, status: {}", id, status);
+            LOGGER.info("Task status updated successfully - task ID: {}, status: {}", id, status);
         } else {
-            log.error("Failed to update task status - task ID: {}, status: {}", id, status);
+            LOGGER.error("Failed to update task status - task ID: {}, status: {}", id, status);
         }
         return success;
     }
     
     /**
-     * 验证任务状态是否有效
+     * validate任务状态是否有效
      * 
      * @param status 状态值
      * @return 是否有效
@@ -134,7 +142,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
             return false;
         }
         
-        String[] validStatuses = {"PENDING", "RUNNING", "COMPLETED", "STOPPED", "PAUSED"};
+        String[] validStatuses = {"PENDING", "WAITING", "RUNNING", "COMPLETED", "STOPPED", "PAUSED"};
         for (String validStatus : validStatuses) {
             if (validStatus.equals(status)) {
                 return true;
@@ -146,7 +154,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
 
     @Override
     public boolean updateTaskProgress(Long id, Integer totalCount, Integer successCount, Integer failedCount) {
-        log.debug("Update task progress - task ID: {}, total test case count: {}, success: {}, failed: {}", 
+        LOGGER.debug("Update task progress - task ID: {}, total test case count: {}, success: {}, failed: {}", 
                 id, totalCount, successCount, failedCount);
         
         UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
@@ -158,9 +166,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         boolean success = update(updateWrapper);
         if (success) {
-            log.debug("Task progress updated successfully - task ID: {}", id);
+            LOGGER.debug("Task progress updated successfully - task ID: {}", id);
         } else {
-            log.error("Failed to update task progress - task ID: {}", id);
+            LOGGER.error("Failed to update task progress - task ID: {}", id);
         }
         
         return success;
@@ -168,7 +176,7 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
     
     @Override
     public boolean updateTaskFailureReason(Long id, String failureReason) {
-        log.info("Update task failure reason - task ID: {}, failure reason: {}", id, failureReason);
+        LOGGER.info("Update task failure reason - task ID: {}, failure reason: {}", id, failureReason);
         
         UpdateWrapper<CollectTask> updateWrapper = new UpdateWrapper<>();
         updateWrapper.eq("id", id);
@@ -177,9 +185,9 @@ public class CollectTaskServiceImpl extends ServiceImpl<CollectTaskMapper, Colle
         
         boolean success = update(updateWrapper);
         if (success) {
-            log.info("Task failure reason updated successfully - task ID: {}", id);
+            LOGGER.info("Task failure reason updated successfully - task ID: {}", id);
         } else {
-            log.error("Failed to update task failure reason - task ID: {}", id);
+            LOGGER.error("Failed to update task failure reason - task ID: {}", id);
         }
         
         return success;

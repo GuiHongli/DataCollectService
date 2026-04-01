@@ -55,6 +55,13 @@ logging:
   level:
     com.datacollect: debug
     org.springframework.web: debug
+  file:
+    name: logs/data-collect-service.log
+    max-size: 100MB
+    max-history: 30
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
 # gohttpserver配置
 gohttpserver:
@@ -73,3 +80,8 @@ file:
     base-dir: ./uploads
     testcase-dir: testcase
     temp-dir: temp
+
+# 外部API配置
+external:
+  api:
+    host: http://localhost:9000

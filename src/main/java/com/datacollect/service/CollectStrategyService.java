@@ -18,4 +18,9 @@ public interface CollectStrategyService extends IService<CollectStrategy> {
      * 获取采集策略列表（包含用例集详细信息）
      */
     List<CollectStrategyDTO> listWithTestCaseSet();
+
+    /**
+     * 将采集策略转换为DTO（包含筛选后的用例列表）
+     */
+    CollectStrategyDTO convertToDTO(CollectStrategy strategy);
 }

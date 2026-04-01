@@ -1,6 +1,7 @@
 package com.datacollect.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -82,6 +83,18 @@ public class TestCaseExecutionResult {
      * 用例集ID
      */
     private Long testCaseSetId;
+    
+    /**
+     * 用例采集路径输出（从日志中解析 "save log in xxx" 后面的信息）
+     */
+    @TableField("collect_path")
+    private String collectPath;
+    
+    /**
+     * 质检结果（从日志中解析 "===QC_Result===" 到 "===End" 中间的信息）
+     */
+    @TableField("qc_result")
+    private String qcResult;
     
     /**
      * 创建时间

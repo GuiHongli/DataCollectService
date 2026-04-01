@@ -18,9 +18,10 @@ public interface CollectTaskProcessService {
      * 处理采集任务创建
      * 
      * @param request 采集任务请求
+     * @param createBy 创建人（下发人）
      * @return 采集任务ID
      */
-    Long processCollectTaskCreation(CollectTaskRequest request);
+    Long processCollectTaskCreation(CollectTaskRequest request, String createBy);
     
     /**
      * 组装用例执行例次列表
@@ -37,9 +38,15 @@ public interface CollectTaskProcessService {
      * 
      * @param instances 用例执行例次列表
      * @param logicEnvironmentIds 逻辑环境ID列表
+     * @param network 网络类型
+     * @param manufacturer 厂商列表
      * @return 分配后的用例执行例次列表
      */
-    List<TestCaseExecutionInstance> distributeInstancesToEnvironments(List<TestCaseExecutionInstance> instances, List<Long> logicEnvironmentIds);
+    List<TestCaseExecutionInstance> distributeInstancesToEnvironments(
+            List<TestCaseExecutionInstance> instances, 
+            List<Long> logicEnvironmentIds, 
+            String network, 
+            List<String> manufacturer);
     
     /**
      * 调用执行机服务
@@ -48,4 +55,28 @@ public interface CollectTaskProcessService {
      * @return 是否调用成功
      */
     boolean callExecutorServices(List<TestCaseExecutionInstance> instances);
+    
+    /**
+     * 释放任务对应的UE锁
+     * 当任务完成时调用此方法，释放任务占用的UE锁，并处理UE队列中的任务
+     * 
+     * @param taskId 任务ID
+     */
+    void releaseUeLocksForTask(String taskId);
+    
+    /**
+     * 处理UE可用后的队列任务
+     * 当UE从使用中变为可用时，检查是否有排队任务需要执行
+     * 
+     * @param ueIds 更新的UE ID列表
+     */
+    void processQueuedTasksAfterUeAvailable(List<Integer> ueIds);
+    
+    /**
+     * 释放UE锁
+     * 当UE被手动释放时调用此方法，释放UE锁并处理队列中的任务
+     * 
+     * @param ueIds UE ID列表
+     */
+    void releaseUeLocks(List<Integer> ueIds);
 }

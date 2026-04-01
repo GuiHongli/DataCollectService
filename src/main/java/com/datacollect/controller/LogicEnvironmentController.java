@@ -8,7 +8,6 @@ import com.datacollect.entity.LogicEnvironmentUe;
 import com.datacollect.entity.dto.CreateLogicEnvironmentRequest;
 import com.datacollect.service.LogicEnvironmentService;
 import com.datacollect.service.LogicEnvironmentUeService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -23,15 +22,18 @@ import com.datacollect.service.UeService;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 import com.datacollect.entity.LogicEnvironmentNetwork;
-import com.datacollect.entity.LogicNetwork;
+import com.datacollect.entity.NetworkType;
 import com.datacollect.service.LogicEnvironmentNetworkService;
-import com.datacollect.service.LogicNetworkService;
+import com.datacollect.service.NetworkTypeService;
 
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/logic-environment")
 @Validated
 public class LogicEnvironmentController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LogicEnvironmentController.class);
 
     @Autowired
     private LogicEnvironmentService logicEnvironmentService;
@@ -46,7 +48,7 @@ public class LogicEnvironmentController {
     private LogicEnvironmentNetworkService logicEnvironmentNetworkService;
 
     @Autowired
-    private LogicNetworkService logicNetworkService;
+    private NetworkTypeService networkTypeService;
 
 
     @PostMapping
@@ -254,12 +256,12 @@ public class LogicEnvironmentController {
                     .map(LogicEnvironmentNetwork::getLogicNetworkId)
                     .collect(Collectors.toList());
                 
-                // 获取组网详细信息
-                QueryWrapper<LogicNetwork> networkQuery = new QueryWrapper<>();
+                // 获取组网详细信息（使用网络类型数据表）
+                QueryWrapper<NetworkType> networkQuery = new QueryWrapper<>();
                 networkQuery.in("id", networkIds);
-                List<LogicNetwork> networks = logicNetworkService.list(networkQuery);
+                List<NetworkType> networks = networkTypeService.list(networkQuery);
                 
-                for (LogicNetwork network : networks) {
+                for (NetworkType network : networks) {
                     LogicEnvironmentDTO.NetworkInfo networkInfo = new LogicEnvironmentDTO.NetworkInfo();
                     networkInfo.setId(network.getId());
                     networkInfo.setName(network.getName());

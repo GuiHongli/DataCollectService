@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -15,20 +17,24 @@ import org.springframework.stereotype.Component;
 
 import com.datacollect.entity.TestCase;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @Component
 public class ExcelParser {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExcelParser.class);
 
     private static final int COL_NAME = 0;
     private static final int COL_NUMBER = 1;
     private static final int COL_LOGIC_NETWORK = 2;
     private static final int COL_BUSINESS_CATEGORY = 3;
     private static final int COL_APP = 4;
-    private static final int COL_TEST_STEPS = 5;
-    private static final int COL_EXPECTED_RESULT = 6;
-    private static final int EMPTY_ROW_CHECK_COLUMNS = 7; // 与解析列保持一致
+    private static final int COL_APP_EN = 5;
+    private static final int COL_MODEL_SCENARIO = 6;
+    private static final int COL_PHONE_OS_TYPE = 7;
+    private static final int COL_TEST_STEPS = 8;
+    private static final int COL_EXPECTED_RESULT = 9;
+    private static final int EMPTY_ROW_CHECK_COLUMNS = 10; // 与解析列保持一致
 
     /**
      * 解析Excel文件中的测试用例数据
@@ -43,6 +49,7 @@ public class ExcelParser {
              Workbook workbook = new XSSFWorkbook(fis)) {
             
             Sheet sheet = workbook.getSheetAt(0); // 获取第一个工作表
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator(); // 创建公式计算器
             
             // 跳过表头行，从第二行开始读取数据
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
@@ -51,14 +58,14 @@ public class ExcelParser {
                     continue;
                 }
                 
-                TestCase testCase = parseRow(row, testCaseSetId);
+                TestCase testCase = parseRow(row, testCaseSetId, evaluator);
                 if (testCase != null) {
                     testCases.add(testCase);
                 }
             }
         }
         
-        log.info("Successfully parsed Excel file, found {} test cases", testCases.size());
+        LOGGER.info("Successfully parsed Excel file, found {} test cases", testCases.size());
         return testCases;
     }
     
@@ -66,15 +73,16 @@ public class ExcelParser {
      * 解析单行数据
      * @param row 行数据
      * @param testCaseSetId 用例集ID
+     * @param evaluator 公式计算器
      * @return 测试用例对象
      */
-    private TestCase parseRow(Row row, Long testCaseSetId) {
+    private TestCase parseRow(Row row, Long testCaseSetId, FormulaEvaluator evaluator) {
         try {
-            if (isEmptyRow(row)) {
+            if (isEmptyRow(row, evaluator)) {
                 return null;
             }
             
-            TestCase testCase = buildTestCaseFromRow(row, testCaseSetId);
+            TestCase testCase = buildTestCaseFromRow(row, testCaseSetId, evaluator);
             if (!validateRequiredFields(testCase, row)) {
                 return null;
             }
@@ -82,7 +90,7 @@ public class ExcelParser {
             return testCase;
             
         } catch (Exception e) {
-            log.error("Error parsing row {}: {}", row.getRowNum() + 1, e.getMessage());
+            LOGGER.error("Error parsing row {}: {}", row.getRowNum() + 1, e.getMessage());
             return null;
         }
     }
@@ -90,17 +98,20 @@ public class ExcelParser {
     /**
      * 根据行构建测试用例实体
      */
-    private TestCase buildTestCaseFromRow(Row row, Long testCaseSetId) {
+    private TestCase buildTestCaseFromRow(Row row, Long testCaseSetId, FormulaEvaluator evaluator) {
         TestCase testCase = new TestCase();
         testCase.setTestCaseSetId(testCaseSetId);
-        // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_测试步骤 用例_预期结果
-        testCase.setName(getCellValue(row.getCell(COL_NAME)));
-        testCase.setNumber(getCellValue(row.getCell(COL_NUMBER)));
-        testCase.setLogicNetwork(getCellValue(row.getCell(COL_LOGIC_NETWORK)));
-        testCase.setBusinessCategory(getCellValue(row.getCell(COL_BUSINESS_CATEGORY)));
-        testCase.setApp(getCellValue(row.getCell(COL_APP)));
-        testCase.setTestSteps(getCellValue(row.getCell(COL_TEST_STEPS)));
-        testCase.setExpectedResult(getCellValue(row.getCell(COL_EXPECTED_RESULT)));
+        // 列顺序：用例_名称 用例_编号 用例_逻辑组网 用例_业务大类 用例_App 用例_AppEn 用例_模型场景 用例_手机OS类 用例_操作步骤 用例_预期结果
+        testCase.setName(getCellValue(row.getCell(COL_NAME), evaluator));
+        testCase.setNumber(getCellValue(row.getCell(COL_NUMBER), evaluator));
+        testCase.setLogicNetwork(getCellValue(row.getCell(COL_LOGIC_NETWORK), evaluator));
+        testCase.setBusinessCategory(getCellValue(row.getCell(COL_BUSINESS_CATEGORY), evaluator));
+        testCase.setApp(getCellValue(row.getCell(COL_APP), evaluator));
+        testCase.setAppEn(getCellValue(row.getCell(COL_APP_EN), evaluator));
+        testCase.setModelScenario(getCellValue(row.getCell(COL_MODEL_SCENARIO), evaluator));
+        testCase.setPhoneOsType(getCellValue(row.getCell(COL_PHONE_OS_TYPE), evaluator));
+        testCase.setTestSteps(getCellValue(row.getCell(COL_TEST_STEPS), evaluator));
+        testCase.setExpectedResult(getCellValue(row.getCell(COL_EXPECTED_RESULT), evaluator));
         return testCase;
     }
 
@@ -109,22 +120,23 @@ public class ExcelParser {
      */
     private boolean validateRequiredFields(TestCase testCase, Row row) {
         if (testCase.getName() == null || testCase.getName().trim().isEmpty()) {
-            log.warn("Row {} test case name is empty, skipping this row", row.getRowNum() + 1);
+            LOGGER.warn("Row {} test case name is empty, skipping this row", row.getRowNum() + 1);
             return false;
         }
         if (testCase.getNumber() == null || testCase.getNumber().trim().isEmpty()) {
-            log.warn("Row {} test case number is empty, skipping this row", row.getRowNum() + 1);
+            LOGGER.warn("Row {} test case number is empty, skipping this row", row.getRowNum() + 1);
             return false;
         }
         return true;
     }
     
     /**
-     * 获取单元格值
+     * get单元格值
      * @param cell 单元格
+     * @param evaluator 公式计算器
      * @return 单元格值字符串
      */
-    private String getCellValue(Cell cell) {
+    private String getCellValue(Cell cell, FormulaEvaluator evaluator) {
         if (cell == null) {
             return null;
         }
@@ -140,11 +152,42 @@ public class ExcelParser {
                 return String.valueOf(cell.getBooleanCellValue());
             }
             case FORMULA: {
-                return cell.getCellFormula();
+                // 计算公式并get结果值
+                return getFormulaValue(cell, evaluator);
             }
             default: {
                 return null;
             }
+        }
+    }
+    
+    /**
+     * get公式单元格的计算结果
+     * @param cell 公式单元格
+     * @param evaluator 公式计算器
+     * @return 公式计算结果字符串
+     */
+    private String getFormulaValue(Cell cell, FormulaEvaluator evaluator) {
+        try {
+            CellType resultType = evaluator.evaluateFormulaCell(cell);
+            switch (resultType) {
+                case STRING: {
+                    return cell.getStringCellValue().trim();
+                }
+                case NUMERIC: {
+                    return formatNumericCellValue(cell);
+                }
+                case BOOLEAN: {
+                    return String.valueOf(cell.getBooleanCellValue());
+                }
+                default: {
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to evaluate formula in cell {}: {}, using formula text instead", 
+                cell.getAddress(), e.getMessage());
+            return cell.getCellFormula();
         }
     }
 
@@ -166,9 +209,10 @@ public class ExcelParser {
     /**
      * 检查是否为空行
      * @param row 行数据
+     * @param evaluator 公式计算器
      * @return 是否为空行
      */
-    private boolean isEmptyRow(Row row) {
+    private boolean isEmptyRow(Row row, FormulaEvaluator evaluator) {
         if (row == null) {
             return true;
         }
@@ -176,7 +220,7 @@ public class ExcelParser {
         for (int i = 0; i < EMPTY_ROW_CHECK_COLUMNS; i++) {
             Cell cell = row.getCell(i);
             if (cell != null) {
-                String value = getCellValue(cell);
+                String value = getCellValue(cell, evaluator);
                 if (value != null && !value.trim().isEmpty()) {
                     return false;
                 }
